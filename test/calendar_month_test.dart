@@ -158,6 +158,21 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('week separators stay visible', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MonthCalendar(focus: DateTime(2025, 9, 8), onDayTap: _ignoreTap),
+      ),
+    );
+    await tester.pump();
+
+    final rules = find.byKey(const ValueKey('week-rule'));
+    expect(rules, findsWidgets);
+    final size = tester.getSize(rules.first);
+    expect(size.height, greaterThan(0));
+    expect(size.width, greaterThan(20));
+  });
 }
 
 void _ignoreTap(DateTime day, Rect weekRect) {}

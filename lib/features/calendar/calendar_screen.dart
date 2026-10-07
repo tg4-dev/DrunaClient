@@ -49,9 +49,8 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   double _pullRange() {
-    final header = MediaQuery.paddingOf(context).top + monthTitleHeight;
-    final weekTop = _from?.top ?? header + 180;
-    return (weekTop - header).clamp(140.0, 640.0);
+    final travel = _from?.top ?? 280;
+    return travel.clamp(1.0, 1200.0);
   }
 
   void _onPullStart(DragStartDetails details) {
@@ -67,9 +66,16 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   void _onPullEnd(DragEndDetails details) {
+    _finishPull(details.primaryVelocity ?? 0);
+  }
+
+  void _onPullCancel() {
+    _finishPull(0);
+  }
+
+  void _finishPull(double velocity) {
     if (!_pulling) return;
     setState(() => _pulling = false);
-    final velocity = details.primaryVelocity ?? 0;
     if (velocity > 500 || _expand.value < 0.7) {
       _close();
       return;
@@ -124,24 +130,11 @@ class _CalendarScreenState extends State<CalendarScreen>
         animation: _expand,
         builder: (context, _) {
           final t = _expand.value;
-          final opened = day == null ? null : stripAt(stripIndexOfDay(day));
-          final bandPx = opened != null && _from != null && stripHasBand(opened)
-              ? _from!.height * monthBandRatio / (1 + monthBandRatio)
-              : 0.0;
           final layout = day != null && _from != null
               ? expandLayout(
                   t: t,
                   week: _from!,
-                  slot: day.weekday - 1,
-                  screenWidth: MediaQuery.sizeOf(context).width,
                   screenHeight: MediaQuery.sizeOf(context).height,
-                  headerBottom:
-                      MediaQuery.paddingOf(context).top + monthTitleHeight,
-                  pixelsPerHour: _dayMetrics.pixelsPerHour,
-                  contentTop: dayNumberTop(
-                    _from!.top + bandPx,
-                    band: opened != null && stripHasBand(opened),
-                  ),
                 )
               : null;
           return Stack(
@@ -151,10 +144,6 @@ class _CalendarScreenState extends State<CalendarScreen>
                 child: MonthCalendar(
                   key: _monthKey,
                   focus: DateTime.now(),
-                  openedStrip: day == null ? null : stripIndexOfDay(day),
-                  splitShiftUp: layout?.topShift ?? 0,
-                  splitShiftDown: layout?.bottomShift ?? 0,
-                  chromeOpacity: layout?.chromeOpacity ?? 1,
                   onDayTap: _open,
                 ),
               ),
@@ -173,6 +162,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                   onPullStart: _onPullStart,
                   onPullUpdate: _onPullUpdate,
                   onPullEnd: _onPullEnd,
+                  onPullCancel: _onPullCancel,
                 ),
             ],
           );
@@ -194,6 +184,7 @@ class _ExpandedDay extends StatelessWidget {
     required this.onPullStart,
     required this.onPullUpdate,
     required this.onPullEnd,
+    required this.onPullCancel,
   });
 
   final ExpandLayout layout;
@@ -206,103 +197,97 @@ class _ExpandedDay extends StatelessWidget {
   final GestureDragStartCallback onPullStart;
   final GestureDragUpdateCallback onPullUpdate;
   final GestureDragEndCallback onPullEnd;
+  final VoidCallback onPullCancel;
 
   @override
   Widget build(BuildContext context) {
-    final bandHeight = (layout.bottom - layout.top).clamp(0.0, double.infinity);
-    final monday = addCalendarDays(dateOnly(day), -layout.slot);
+    final sheetHeight = (layout.bottom - layout.top).clamp(
+      0.0,
+      double.infinity,
+    );
+    final headerHeight = MediaQuery.paddingOf(context).top + monthTitleHeight;
+    final gridHeight = (sheetHeight - headerHeight).clamp(0.0, double.infinity);
     return Stack(
       children: [
         Positioned(
           top: layout.top,
           left: 0,
           right: 0,
-          height: bandHeight,
-          child: const ColoredBox(color: Colors.black),
-        ),
-        Positioned(
-          top: layout.top,
-          left: 0,
-          right: 0,
-          height: bandHeight,
-          child: ClipRect(
-            child: IgnorePointer(
-              ignoring: layout.headerOpacity < 0.99,
-              child: Opacity(
-                opacity: layout.gridOpacity.clamp(0, 1),
-                child: Transform.translate(
-                  offset: Offset(layout.gridSlide, 0),
-                  child: DayTimeline(
-                    key: timelineKey,
-                    day: day,
-                    metrics: metrics,
-                    hourLabelOpacity: layout.hourLabelOpacity,
-                    onVisibleDay: onVisibleDay,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
+          height: sheetHeight,
           child: IgnorePointer(
+            ignoring: !pulling && layout.motion < 0.02,
             child: Opacity(
-              opacity: (1 - layout.headerOpacity).clamp(0, 1),
-              child: Stack(
-                children: [
-                  for (var column = 0; column < 7; column++)
-                    _rowDate(addCalendarDays(monday, column), column),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: IgnorePointer(
-            ignoring: !pulling && layout.headerOpacity < 0.5,
-            child: GestureDetector(
-              onVerticalDragStart: onPullStart,
-              onVerticalDragUpdate: onPullUpdate,
-              onVerticalDragEnd: onPullEnd,
-              child: Opacity(
-                opacity: layout.headerOpacity.clamp(0, 1),
-                child: SafeArea(
-                  bottom: false,
-                  child: SizedBox(
-                    height: monthTitleHeight,
-                    child: Stack(
-                      clipBehavior: Clip.hardEdge,
-                      children: [
-                        Positioned.fill(
-                          child: AnimatedBuilder(
-                            animation: metrics,
-                            builder: (context, _) =>
-                                _DayTitleTrack(metrics: metrics),
+              opacity: layout.veil.clamp(0, 1),
+              child: ColoredBox(
+                color: Colors.black,
+                child: ClipRect(
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: headerHeight,
+                        left: 0,
+                        right: 0,
+                        height: gridHeight,
+                        child: IgnorePointer(
+                          ignoring: pulling || layout.motion < 0.98,
+                          child: DayTimeline(
+                            key: timelineKey,
+                            day: day,
+                            metrics: metrics,
+                            onVisibleDay: onVisibleDay,
                           ),
                         ),
-                        Positioned(
-                          left: 0,
-                          bottom: 0,
-                          child: IconButton(
-                            onPressed: onClose,
-                            padding: EdgeInsets.zero,
-                            alignment: Alignment.bottomLeft,
-                            constraints: const BoxConstraints(
-                              minWidth: 44,
-                              minHeight: 36,
-                            ),
-                            icon: const Icon(
-                              Icons.chevron_left,
-                              color: Colors.white,
-                              size: 28,
+                      ),
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: headerHeight,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onVerticalDragStart: onPullStart,
+                          onVerticalDragUpdate: onPullUpdate,
+                          onVerticalDragEnd: onPullEnd,
+                          onVerticalDragCancel: onPullCancel,
+                          child: SafeArea(
+                            bottom: false,
+                            child: SizedBox(
+                              height: monthTitleHeight,
+                              child: Stack(
+                                clipBehavior: Clip.hardEdge,
+                                children: [
+                                  Positioned.fill(
+                                    child: AnimatedBuilder(
+                                      animation: metrics,
+                                      builder: (context, _) =>
+                                          _DayTitleTrack(metrics: metrics),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    left: 0,
+                                    bottom: 0,
+                                    child: IconButton(
+                                      onPressed: onClose,
+                                      padding: EdgeInsets.zero,
+                                      alignment: Alignment.bottomLeft,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 44,
+                                        minHeight: 36,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.chevron_left,
+                                        color: Colors.white,
+                                        size: 28,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -310,87 +295,6 @@ class _ExpandedDay extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _rowDate(DateTime date, int column) {
-    final selected = column == layout.slot;
-    final today = sameDay(date, DateTime.now());
-    final size = selected ? layout.selectedSize : layout.otherSize;
-    final startWeight = today ? FontWeight.w600 : FontWeight.w400;
-    final weight = selected
-        ? FontWeight.lerp(
-                startWeight,
-                FontWeight.w700,
-                layout.selectedWeight,
-              ) ??
-              FontWeight.w700
-        : FontWeight.w400;
-    final number = '${date.day}';
-    final numberWidth = _titleWidth(number, 17, startWeight, 0);
-    final x = layout.dateX(column, numberWidth);
-    final top = layout.dateTop(column, size);
-    final weekend = date.weekday >= DateTime.saturday;
-    final base = today
-        ? Colors.white
-        : weekend
-        ? const Color(0xFFD1D1D6)
-        : Colors.white;
-    final color = selected
-        ? Color.lerp(base, Colors.white, layout.settled) ?? Colors.white
-        : base;
-    final style = _dayTitleStyle(
-      size,
-      1,
-      weight,
-      selected ? -0.6 * layout.settled : 0,
-    ).copyWith(color: color);
-    return Positioned(
-      left: x,
-      top: top,
-      child: Opacity(
-        opacity: (selected ? 1.0 : layout.otherOpacity).clamp(0, 1),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            if (today && layout.todayOpacity > 0.02)
-              Positioned(
-                left: (numberWidth - 28) / 2,
-                top: (size - 28) / 2,
-                child: Opacity(
-                  opacity: layout.todayOpacity.clamp(0, 1),
-                  child: const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Color(0xFFFF3B30),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(text: number),
-                  if (selected)
-                    TextSpan(
-                      text: ' ${weekdayShort(date)}',
-                      style: TextStyle(
-                        color: color.withValues(
-                          alpha: color.a * layout.weekdayOpacity,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              style: style,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

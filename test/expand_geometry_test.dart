@@ -9,81 +9,35 @@ void main() {
   const width = 390.0;
   final week = Rect.fromLTWH(0, 220, width, 96);
 
-  ExpandLayout layout(double t) => expandLayout(
-    t: t,
-    week: week,
-    slot: 2,
-    screenWidth: width,
-    screenHeight: 844,
-    headerBottom: 120,
-    pixelsPerHour: 46,
-    contentTop: 236,
-  );
+  ExpandLayout layout(double t) =>
+      expandLayout(t: t, week: week, screenHeight: 844);
 
-  test('the date row rises together and the selected date arcs into place', () {
+  test('the day opens as one sheet from the tapped week', () {
     final start = layout(0);
-    final column = width / 7;
 
     expect(dayMidnightInset, 40);
-    expect(start.dateX(0, 0), column / 2);
-    expect(start.dateX(2, 0), 2.5 * column);
-    expect(start.dateX(6, 10), start.dateX(0, 10) + 6 * column);
-    expect(start.dayWidth, column);
-    expect(start.anchor, 2 * column);
-    expect(start.selectedSize, 17);
-    expect(start.otherSize, 17);
-    expect(start.otherOpacity, 1);
-    expect(
-      start.dateTop(2, start.selectedSize) + start.selectedSize,
-      start.dateTop(0, start.otherSize) + start.otherSize,
-    );
-    expect(start.gridSlide, width);
-    expect(start.chromeOpacity, 1);
-    expect(start.gridOpacity, 0);
-    expect(start.hourLabelOpacity, 0);
+    expect(start.top, week.top);
+    expect(start.bottom, week.bottom);
+    expect(start.veil, 0);
 
-    final rising = layout(0.3);
-    final along = rising.settled;
-    final cell = 2.5 * column;
-    final straight = cell + (dayTitleSlot - cell) * along;
+    final fading = layout(0.1);
 
-    expect(
-      (rising.dateX(2, 0) - cell).abs(),
-      lessThan((straight - cell).abs()),
-    );
-    expect(
-      rising.dateTop(0, 17) + 17,
-      rising.dateTop(2, rising.selectedSize) + rising.selectedSize,
-    );
+    expect(fading.top, closeTo(week.top * 0.9, 0.01));
+    expect(fading.veil, greaterThan(0));
+    expect(fading.veil, lessThan(1));
 
-    final settled = layout(0.6);
+    final mid = layout(0.5);
 
-    expect(settled.selectedSize, 32);
-    expect(settled.weekdayOpacity, 1);
-    expect(settled.otherOpacity, 0);
-    expect(settled.anchor, dayMidnightInset);
-    expect(settled.dateX(2, 12), dayTitleSlot);
+    expect(mid.top, week.top / 2);
+    expect(mid.bottom, closeTo((week.bottom + 844) / 2, 0.01));
+    expect(mid.veil, 1);
 
     final end = layout(1);
 
-    expect(end.anchor, dayMidnightInset);
-    expect(end.dayWidth, column);
-    expect(end.dateX(0, 0), column / 2);
-    expect(end.dateX(3, 0), closeTo(3.5 * column, 0.01));
-    expect(end.dateX(2, 12), dayTitleSlot);
+    expect(end.top, 0);
+    expect(end.bottom, 844);
+    expect(end.veil, 1);
     expect(dayTitleSlot, dayMidnightInset + dayTitleRide);
-    expect(end.selectedSize, 32);
-    expect(end.otherOpacity, 0);
-    expect(end.dateTop(2, end.selectedSize) + end.selectedSize, end.rowBottom);
-    expect(end.dateTop(0, end.otherSize) + end.otherSize, end.rowBottom);
-    expect(end.rowBottom, 120);
-    expect(end.gridSlide, 0);
-    expect(end.chromeOpacity, 0);
-    expect(end.hourLabelOpacity, 1);
-    expect(end.gridOpacity, 1);
-    expect(end.todayOpacity, 0);
-    expect(end.topShift, closeTo(220 - 120, 0.01));
-    expect(end.bottomShift, closeTo(844 - 316, 0.01));
   });
 
   test('a date title crosses midnight without jumping off its line', () {
@@ -152,11 +106,11 @@ void main() {
 
     final icon = find.byIcon(Icons.chevron_left);
     final gesture = await tester.startGesture(tester.getCenter(icon));
-    await gesture.moveBy(const Offset(0, 30));
+    await gesture.moveBy(const Offset(0, 24));
     await tester.pump();
-    await gesture.moveBy(const Offset(0, 40));
+    await gesture.moveBy(const Offset(0, 16));
     await tester.pump();
-    await gesture.moveBy(const Offset(0, -70));
+    await gesture.moveBy(const Offset(0, -40));
     await tester.pump();
     await gesture.up();
     await tester.pumpAndSettle();

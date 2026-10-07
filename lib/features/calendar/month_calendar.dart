@@ -4,22 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 class MonthCalendar extends StatefulWidget {
-  const MonthCalendar({
-    required this.onDayTap,
-    this.focus,
-    this.openedStrip,
-    this.splitShiftUp = 0,
-    this.splitShiftDown = 0,
-    this.chromeOpacity = 1,
-    super.key,
-  });
+  const MonthCalendar({required this.onDayTap, this.focus, super.key});
 
   final void Function(DateTime day, Rect weekRect) onDayTap;
   final DateTime? focus;
-  final int? openedStrip;
-  final double splitShiftUp;
-  final double splitShiftDown;
-  final double chromeOpacity;
 
   @override
   State<MonthCalendar> createState() => MonthCalendarState();
@@ -221,31 +209,25 @@ class MonthCalendarState extends State<MonthCalendar>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Opacity(
-              opacity: widget.chromeOpacity.clamp(0, 1),
-              child: SizedBox(
-                height: monthTitleHeight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      monthTitle(_visibleMonth),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.6,
-                      ),
+            SizedBox(
+              height: monthTitleHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    monthTitle(_visibleMonth),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
                     ),
                   ),
                 ),
               ),
             ),
-            Opacity(
-              opacity: widget.chromeOpacity.clamp(0, 1),
-              child: const _WeekdayHeader(),
-            ),
+            const _WeekdayHeader(),
             Expanded(
               child: Listener(
                 onPointerDown: _onPointerDown,
@@ -262,28 +244,14 @@ class MonthCalendarState extends State<MonthCalendar>
                     _MonthStripSliver(
                       rowHeight: _rowHeight,
                       delegate: SliverChildBuilderDelegate((context, index) {
-                        final opened = widget.openedStrip;
-                        final shift = opened == null
-                            ? 0.0
-                            : index < opened
-                            ? -widget.splitShiftUp
-                            : index > opened
-                            ? widget.splitShiftDown
-                            : 0.0;
                         final strip = stripAt(index);
-                        return Transform.translate(
-                          offset: Offset(0, shift),
-                          child: Opacity(
-                            opacity: opened == index ? 0 : 1,
-                            child: _WeekStrip(
-                              strip: strip,
-                              today: _today,
-                              onTap: (day) {
-                                final rect = rectForStrip(index);
-                                if (rect != null) widget.onDayTap(day, rect);
-                              },
-                            ),
-                          ),
+                        return _WeekStrip(
+                          strip: strip,
+                          today: _today,
+                          onTap: (day) {
+                            final rect = rectForStrip(index);
+                            if (rect != null) widget.onDayTap(day, rect);
+                          },
                         );
                       }, childCount: stripCount),
                     ),
@@ -405,14 +373,14 @@ class _StripRule extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
+      key: const ValueKey('week-rule'),
       height: 0.6,
       width: double.infinity,
-      child: Align(
+      child: FractionallySizedBox(
         alignment: Alignment.centerLeft,
-        child: FractionallySizedBox(
-          widthFactor: widthFactor.clamp(0, 1),
-          child: const ColoredBox(color: Color(0xFF3A3A3C)),
-        ),
+        widthFactor: widthFactor.clamp(0, 1),
+        heightFactor: 1,
+        child: const ColoredBox(color: Color(0xFF3A3A3C)),
       ),
     );
   }

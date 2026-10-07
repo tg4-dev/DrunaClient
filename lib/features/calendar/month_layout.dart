@@ -8,7 +8,6 @@ const weekdayHeaderHeight = 28.0;
 const monthBandRatio = 0.34;
 const plainDayPad = 16.0;
 const bandDayPad = 8.0;
-const dayNumberBox = 28.0;
 
 const monthNames = [
   'Январь',
@@ -159,11 +158,6 @@ int weekAtUnits(double units) {
     }
   }
   return low;
-}
-
-double dayNumberTop(double areaTop, {required bool band}) {
-  final pad = band ? bandDayPad : plainDayPad;
-  return areaTop + pad + (dayNumberBox - 17) / 2;
 }
 
 int get stripCount => weekCount + cutsBeforeWeek[weekCount];
