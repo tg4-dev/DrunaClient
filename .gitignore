@@ -47,3 +47,21 @@ app.*.map.json
 
 # Local release configuration (copy from production.example.json)
 /config/production.json
+
+# Cursor agent workspace and other local editor files
+.cursor/
+*.code-workspace
+
+# Local secrets and machine-specific env
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+
+# Tool output that is not application source
+coverage/
+
+# OS junk
+Thumbs.db

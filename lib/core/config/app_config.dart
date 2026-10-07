@@ -7,7 +7,7 @@ class AppConfig {
   const AppConfig.fromEnvironment()
     : apiBaseUrl = const String.fromEnvironment(
         'API_BASE_URL',
-        defaultValue: 'http://localhost:8000',
+        defaultValue: 'http://localhost:22000',
       ),
       environment = const String.fromEnvironment(
         'APP_ENV',

@@ -3,7 +3,7 @@ import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
 import 'package:druna_app/core/theme/druna_theme.dart';
 import 'package:druna_app/features/auth/auth_screen.dart';
-import 'package:druna_app/features/home/home_screen.dart';
+import 'package:druna_app/features/calendar/calendar_screen.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:druna_app/shared/ui/druna_widgets.dart';
 import 'package:flutter/material.dart';
@@ -56,11 +56,7 @@ class _DrunaAppState extends State<DrunaApp> {
       builder: (context, _) => switch (session.state) {
         SessionState.restoring => const _SplashScreen(),
         SessionState.signedOut => AuthScreen(session: session),
-        SessionState.signedIn => HomeScreen(
-          session: session,
-          repository: widget.repository,
-          config: widget.config,
-        ),
+        SessionState.signedIn => const CalendarScreen(),
       },
     ),
   );
