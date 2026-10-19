@@ -7,6 +7,7 @@ const timelineEventTop = 36.0;
 const timelineEventHeight = 58.0;
 const timelineEventGap = 8.0;
 const timelineTitlePadding = 12.0;
+const timelineEventRadius = Radius.circular(16);
 
 const timelineTitleStyle = TextStyle(
   color: Colors.white,
@@ -15,188 +16,212 @@ const timelineTitleStyle = TextStyle(
   height: 1.1,
 );
 
+double timelineLaneTop(int lane) =>
+    timelineEventTop + lane * (timelineEventHeight + timelineEventGap);
+
+/// One day's event bars. Titles are drawn by [DayTitleOverlay] above all days,
+/// so a bar crossing midnight reads as one event.
 class DayEventLayer extends StatelessWidget {
   const DayEventLayer({
     required this.day,
-    required this.dayIndex,
     required this.pixelsPerHour,
-    required this.viewportLeft,
     required this.events,
+    required this.lanes,
     this.hiddenEventId,
+    this.dimmedEventId,
     this.onEventTap,
+    this.onHoldStart,
+    this.onHoldMove,
+    this.onHoldEnd,
     super.key,
   });
 
   final DateTime day;
-  final int dayIndex;
   final double pixelsPerHour;
-  final double viewportLeft;
   final List<CalendarEvent> events;
+  final Map<String, int> lanes;
   final String? hiddenEventId;
+
+  /// The event being moved stays in place, faded, until it is dropped.
+  final String? dimmedEventId;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
+
+  /// A long press on a bar picks the event up to move it.
+  final void Function(CalendarEvent event, Offset global)? onHoldStart;
+  final ValueChanged<Offset>? onHoldMove;
+  final VoidCallback? onHoldEnd;
 
   @override
   Widget build(BuildContext context) {
-    final dayWidth = 24 * pixelsPerHour;
-    final slices = <_PlacedSlice>[];
-    final spans = <TimedSpan>[];
-    for (final event in events) {
-      if (event.id == hiddenEventId) continue;
-      final slice = sliceOnDay(event, day);
-      if (slice == null) continue;
-      slices.add(_PlacedSlice(event, slice));
-      spans.add(
-        TimedSpan(
-          id: event.id,
-          start: _atHour(day, slice.startHour),
-          end: _atHour(day, slice.endHour),
-        ),
-      );
-    }
-    final lanes = assignLanes(spans);
-    final laneOf = {for (final lane in lanes) lane.id: lane.lane};
     return Stack(
       children: [
-        for (final placed in slices)
-          _bar(
-            placed: placed,
-            lane: laneOf[placed.event.id] ?? 0,
-            pixels: pixelsPerHour,
-            dayWidth: dayWidth,
-          ),
+        for (final event in events)
+          if (event.id != hiddenEventId) ?_bar(event),
       ],
     );
   }
 
-  Widget _bar({
-    required _PlacedSlice placed,
-    required int lane,
-    required double pixels,
-    required double dayWidth,
-  }) {
-    final event = placed.event;
-    final slice = placed.slice;
-    final sliceLeft = dayIndex * dayWidth + slice.startHour * pixels;
-    final sliceRight = dayIndex * dayWidth + slice.endHour * pixels;
-    final bounds = _eventBounds(event, dayWidth);
-    final title = eventDisplayTitle(event);
-    final titleWidth = _titleWidth(title);
-    final titleOffset = stickyTitleOffset(
-      eventLeft: bounds.$1,
-      eventRight: bounds.$2,
-      viewportLeft: viewportLeft,
-      sliceLeft: sliceLeft,
-      sliceRight: sliceRight,
-      titleWidth: titleWidth,
-      padding: timelineTitlePadding,
+  Widget? _bar(CalendarEvent event) {
+    final slice = sliceOnDay(event, day);
+    if (slice == null) return null;
+    final radius = BorderRadius.horizontal(
+      left: slice.continuesBefore ? Radius.zero : timelineEventRadius,
+      right: slice.continuesAfter ? Radius.zero : timelineEventRadius,
     );
     return Positioned(
-      left: slice.startHour * pixels,
-      width: (slice.endHour - slice.startHour) * pixels,
-      top: timelineEventTop + lane * (timelineEventHeight + timelineEventGap),
+      key: ValueKey(event.id),
+      left: slice.startHour * pixelsPerHour,
+      width: (slice.endHour - slice.startHour) * pixelsPerHour,
+      top: timelineLaneTop(lanes[event.id] ?? 0),
       height: timelineEventHeight,
-      child: _TimelineBar(
-        event: event,
-        title: title,
-        titleOffset: titleOffset,
-        onTap: onEventTap,
+      child: Builder(
+        builder: (context) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onEventTap == null
+              ? null
+              : () {
+                  final box = context.findRenderObject() as RenderBox?;
+                  if (box == null || !box.hasSize) return;
+                  onEventTap!(event, box.localToGlobal(Offset.zero) & box.size);
+                },
+          onLongPressStart: onHoldStart == null
+              ? null
+              : (details) => onHoldStart!(event, details.globalPosition),
+          onLongPressMoveUpdate: onHoldMove == null
+              ? null
+              : (details) => onHoldMove!(details.globalPosition),
+          onLongPressEnd: onHoldEnd == null ? null : (_) => onHoldEnd!(),
+          onLongPressCancel: onHoldEnd,
+          child: AnimatedOpacity(
+            opacity: event.id == dimmedEventId ? 0.35 : 1,
+            duration: const Duration(milliseconds: 160),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: calendarEventColor,
+                borderRadius: radius,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
-
-  (double, double) _eventBounds(CalendarEvent event, double dayWidth) {
-    final firstIndex =
-        dayIndex + calendarDaysBetween(day, eventFirstDay(event));
-    final lastIndex = dayIndex + calendarDaysBetween(day, eventLastDay(event));
-    if (event.allDay) {
-      return (firstIndex * dayWidth, (lastIndex + 1) * dayWidth);
-    }
-    final firstSlice = sliceOnDay(event, eventFirstDay(event));
-    final lastSlice = sliceOnDay(event, eventLastDay(event));
-    final startHour = firstSlice?.startHour ?? 0;
-    final endHour = lastSlice?.endHour ?? 24;
-    return (
-      firstIndex * dayWidth + startHour * (dayWidth / 24),
-      lastIndex * dayWidth + endHour * (dayWidth / 24),
-    );
-  }
 }
 
-class _PlacedSlice {
-  const _PlacedSlice(this.event, this.slice);
-
-  final CalendarEvent event;
-  final EventDaySlice slice;
-}
-
-class _TimelineBar extends StatelessWidget {
-  const _TimelineBar({
-    required this.event,
-    required this.title,
-    required this.titleOffset,
-    this.onTap,
+/// Sticky titles for the events in view, in the list's scroll coordinates
+/// shifted by [scrollOffset].
+class DayTitleOverlay extends StatelessWidget {
+  const DayTitleOverlay({
+    required this.events,
+    required this.lanes,
+    required this.scrollOffset,
+    required this.pixelsPerHour,
+    required this.viewportWidth,
+    this.hiddenEventId,
+    this.dimmedEventId,
+    super.key,
   });
 
-  final CalendarEvent event;
-  final String title;
-  final double? titleOffset;
-  final void Function(CalendarEvent event, Rect rect)? onTap;
+  final List<CalendarEvent> events;
+  final Map<String, int> lanes;
+  final double scrollOffset;
+  final double pixelsPerHour;
+  final double viewportWidth;
+  final String? hiddenEventId;
+  final String? dimmedEventId;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap == null
-          ? null
-          : () {
-              final box = context.findRenderObject() as RenderBox?;
-              if (box == null || !box.hasSize) return;
-              onTap!(event, box.localToGlobal(Offset.zero) & box.size);
-            },
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: calendarEventColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: titleOffset == null
-              ? const SizedBox.expand()
-              : Stack(
+    final children = <Widget>[];
+    for (final event in events) {
+      if (event.id == hiddenEventId) continue;
+      final span = timelineSpan(event);
+      final left = timelineX(span.start, pixelsPerHour) - scrollOffset;
+      final right = timelineX(span.end, pixelsPerHour) - scrollOffset;
+      if (right <= 0 || left >= viewportWidth) continue;
+      final title = eventDisplayTitle(event);
+      final dates = eventSpansDays(event) ? eventDatesLabel(event) : null;
+      final x = stickyTitleX(
+        eventLeft: left,
+        eventRight: right,
+        viewportLeft: 0,
+        titleWidth:
+            _titleWidth(title, timelineTitleStyle) +
+            (dates == null
+                ? 0
+                : _datesGap + _titleWidth(dates, timelineDatesStyle)),
+        padding: timelineTitlePadding,
+      );
+      if (x == null) continue;
+      final width = right - timelineTitlePadding - x;
+      if (width <= 4) continue;
+      children.add(
+        Positioned(
+          key: ValueKey(event.id),
+          left: x,
+          width: width,
+          top: timelineLaneTop(lanes[event.id] ?? 0),
+          height: timelineEventHeight,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: AnimatedOpacity(
+              opacity: event.id == dimmedEventId ? 0.35 : 1,
+              duration: const Duration(milliseconds: 160),
+              child: Text.rich(
+                TextSpan(
+                  text: title,
                   children: [
-                    Positioned(
-                      left: titleOffset,
-                      top: 0,
-                      bottom: 0,
-                      right: 0,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: timelineTitleStyle,
-                        ),
-                      ),
-                    ),
+                    if (dates != null)
+                      TextSpan(text: '\u2002$dates', style: timelineDatesStyle),
                   ],
                 ),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: timelineTitleStyle,
+              ),
+            ),
+          ),
         ),
-      ),
-    );
+      );
+    }
+    return IgnorePointer(child: Stack(children: children));
   }
 }
 
-double _titleWidth(String text) {
-  final painter = TextPainter(
-    text: TextSpan(text: text, style: timelineTitleStyle),
-    textDirection: TextDirection.ltr,
-    maxLines: 1,
-  )..layout();
-  return painter.width;
+/// X of [time] on the timeline, in list coordinates.
+double timelineX(DateTime time, double pixelsPerHour) {
+  final dayIndex = calendarDaysBetween(dayTimelineOrigin, time);
+  final hours = time.hour + time.minute / 60.0 + time.second / 3600.0;
+  return (dayIndex * 24 + hours) * pixelsPerHour;
 }
 
-DateTime _atHour(DateTime day, double hour) {
-  final minutes = (hour * 60).round();
-  return DateTime(day.year, day.month, day.day, 0, minutes);
+/// Day zero of the timeline list.
+final dayTimelineOrigin = DateTime(1970, 1, 1);
+
+/// Dates after a multi-day event's title: dark on the event colour.
+const timelineDatesStyle = TextStyle(
+  color: Color(0x99000000),
+  fontSize: 15,
+  fontWeight: FontWeight.w600,
+  height: 1.1,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+
+/// An en space, as in the rich title.
+const _datesGap = 10.0;
+
+final _titleWidths = <(String, TextStyle), double>{};
+
+double _titleWidth(String text, TextStyle style) {
+  return _titleWidths.putIfAbsent((text, style), () {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  });
 }

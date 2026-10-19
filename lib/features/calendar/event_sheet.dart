@@ -1,663 +1,495 @@
-import 'dart:ui' show lerpDouble;
-
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/event_repeat_block.dart';
+import 'package:druna_app/features/calendar/event_time_block.dart';
+import 'package:druna_app/features/calendar/repeat_rule.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+/// Side margin of the sheet's card and blocks.
+const _sheetMargin = 16.0;
+const _blockGap = 12.0;
+const _cardRadius = Radius.circular(20);
+const _cardPadding = EdgeInsets.fromLTRB(18, 14, 18, 16);
+const _buttonInset = 44.0;
+const _buttonHeight = 44.0;
+const _buttonWidth = 80.0;
+const _iconSize = 24.0;
+const _buttonsLift = 19.0;
+
+/// Room under the stack for the ✕/✓ row floating above the keyboard.
+const _buttonsRoom = _buttonHeight + _buttonsLift + 12;
+const _scrim = Color(0xD9000000);
+
+const _enterDuration = Duration(milliseconds: 460);
+const _exitDuration = Duration(milliseconds: 220);
+
+/// The card's place on screen, under the status bar. It never moves with the
+/// blocks or the keyboard.
+const _cardTop = 48.0;
+
+/// Where each layer starts below its place when the sheet rises. The gaps
+/// between them start wide and close as the stack settles.
+const _riseCard = 36.0;
+const _riseBlocks = [150.0, 270.0];
+
+/// After a swipe the stack is gone within this, never longer.
+const _flingDuration = Duration(milliseconds: 140);
+const _returnDuration = Duration(milliseconds: 200);
+
+/// Pulling the stack this far down, or flinging it, saves and closes.
+const _dismissDistance = 110.0;
+const _dismissVelocity = 700.0;
+
+/// Card labels: dark on the event colour. Pure black on `#9A3040` reaches
+/// only about 2.9:1, so they stay heavy and near-black.
+const _cardLabel = TextStyle(
+  color: Color(0xD9000000),
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
+  letterSpacing: 0.1,
+);
+const _cardTitle = TextStyle(
+  color: Colors.white,
+  fontSize: 22,
+  fontWeight: FontWeight.w700,
+  letterSpacing: -0.3,
+);
+const _cardTime = TextStyle(
+  color: Colors.white,
+  fontSize: 20,
+  fontWeight: FontWeight.w500,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+
+/// The event editor: the event's card over its blocks over the keyboard,
+/// rising from the bottom. A swipe down saves at once and lets the calendar
+/// take touches while the stack finishes leaving.
 class EventDurationSheet extends StatefulWidget {
   const EventDurationSheet({
     required this.event,
     required this.onSave,
     required this.onCancel,
-    this.from,
+    this.onGone,
+    this.leaving = false,
     super.key,
   });
 
   final CalendarEvent event;
-  final Rect? from;
   final ValueChanged<CalendarEvent> onSave;
   final VoidCallback onCancel;
+
+  /// Called once the sheet has finished leaving and can be removed.
+  final VoidCallback? onGone;
+
+  /// Set by the parent after a swipe: the sheet ignores touches and only
+  /// plays out its exit.
+  final bool leaving;
 
   @override
   State<EventDurationSheet> createState() => _EventDurationSheetState();
 }
 
 class _EventDurationSheetState extends State<EventDurationSheet>
-    with SingleTickerProviderStateMixin {
-  final _stackKey = GlobalKey();
-  final _cardKey = GlobalKey();
+    with TickerProviderStateMixin {
   late final AnimationController _motion;
-  late final CurvedAnimation _curve;
-  late final CurvedAnimation _blocksFade;
-  late final Animation<Offset> _blocksSlide;
-  late final CurvedAnimation _cardFade;
+  late final AnimationController _settle;
+  late final CurvedAnimation _rise;
+  late final CurvedAnimation _fade;
+  final _cardKey = GlobalKey();
+
+  /// Measured after layout; the blocks start just under the card.
+  double _cardHeight = 92;
+  final _drag = ValueNotifier<double>(0);
   final _titleFocus = FocusNode();
-  final _clock = ValueNotifier<int>(0);
   late final TextEditingController _title;
-  late final FixedExtentScrollController _startHour;
-  late final FixedExtentScrollController _startMinute;
-  late final FixedExtentScrollController _endHour;
-  late final FixedExtentScrollController _endMinute;
-  late ClockTime _start;
-  late ClockTime _end;
-  var _allDay = false;
-  var _repeat = false;
-  var _syncing = false;
+  late DateTime _start;
+  late DateTime _end;
+  late bool _allDay;
+  RepeatRule? _repeat;
   var _closing = false;
-  Rect? _target;
+  double _settleFrom = 0;
 
   @override
   void initState() {
     super.initState();
     final event = widget.event;
     _allDay = event.allDay;
+    _repeat = event.repeat;
     if (event.allDay) {
-      _start = const ClockTime(16, 0);
-      _end = const ClockTime(17, 0);
+      final span = defaultEventSpan(eventFirstDay(event), DateTime.now());
+      _start = span.start;
+      _end = span.end;
     } else {
-      final resolved = resolveClock(
-        nearestQuarter(event.start),
-        nearestQuarter(event.end),
-      );
-      _start = resolved.start;
-      _end = resolved.end;
+      _start = nearestQuarter(event.start);
+      final end = nearestQuarter(event.end);
+      _end = end.isAfter(_start) ? end : _start.add(minimumEventLength);
     }
     _title = TextEditingController(text: event.title);
-    _startHour = FixedExtentScrollController(initialItem: _start.hour);
-    _startMinute = FixedExtentScrollController(
-      initialItem: _start.minute ~/ calendarMinuteStep,
-    );
-    _endHour = FixedExtentScrollController(initialItem: _end.hour);
-    _endMinute = FixedExtentScrollController(
-      initialItem: _end.minute ~/ calendarMinuteStep,
-    );
     _motion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: _enterDuration,
+      reverseDuration: _exitDuration,
     );
-    _curve = CurvedAnimation(parent: _motion, curve: Curves.easeOutCubic);
-    _blocksFade = CurvedAnimation(
+    _settle = AnimationController(vsync: this, duration: _returnDuration)
+      ..addListener(() {
+        final t = Curves.easeOutCubic.transform(_settle.value);
+        _drag.value = _settleFrom * (1 - t);
+      });
+    _rise = CurvedAnimation(
       parent: _motion,
-      curve: const Interval(0.22, 1, curve: Curves.easeOut),
+      curve: Curves.easeOutQuart,
+      reverseCurve: Curves.easeInCubic,
     );
-    _blocksSlide = Tween<Offset>(
-      begin: const Offset(0, 0.18),
-      end: Offset.zero,
-    ).animate(_curve);
-    _cardFade = CurvedAnimation(
+    _fade = CurvedAnimation(
       parent: _motion,
-      curve: const Interval(0.45, 1, curve: Curves.easeOut),
+      curve: const Interval(0, 0.55, curve: Curves.easeOut),
+      reverseCurve: Curves.easeIn,
     );
-    if (widget.from == null) {
-      _open();
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _capture());
-    }
-  }
-
-  Future<void> _open() async {
-    await _motion.forward();
-    if (mounted && !_closing) _titleFocus.requestFocus();
-  }
-
-  void _capture() {
-    if (!mounted) return;
-    final box = _cardKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    setState(() => _target = box.localToGlobal(Offset.zero) & box.size);
-    _open();
+    // The keyboard rises with the sheet instead of after it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _titleFocus.requestFocus();
+      _measureCard();
+      _motion.forward();
+    });
   }
 
   @override
   void dispose() {
-    _blocksFade.dispose();
-    _cardFade.dispose();
-    _curve.dispose();
+    _rise.dispose();
+    _fade.dispose();
     _motion.dispose();
+    _settle.dispose();
+    _drag.dispose();
     _titleFocus.dispose();
-    _clock.dispose();
     _title.dispose();
-    _startHour.dispose();
-    _startMinute.dispose();
-    _endHour.dispose();
-    _endMinute.dispose();
     super.dispose();
   }
 
-  void _onStartHour(int hour) =>
-      _apply(resolveClock(ClockTime(hour, _start.minute), _end));
+  void _setStart(int hour, int minute) {
+    final next = withStartClock(_start, _end, hour, minute);
+    setState(() {
+      _start = next.start;
+      _end = next.end;
+    });
+  }
 
-  void _onStartMinute(int index) => _apply(
-    resolveClock(ClockTime(_start.hour, index * calendarMinuteStep), _end),
+  void _setEnd(int hour, int minute) {
+    final next = withEndClock(_start, _end, hour, minute);
+    setState(() => _end = next.end);
+  }
+
+  CalendarEvent _draft() => applyEventDraft(
+    event: widget.event,
+    title: _title.text,
+    allDay: _allDay,
+    start: _start,
+    end: _end,
+    repeat: _repeat,
   );
 
-  void _onEndHour(int hour) =>
-      _apply(resolveClock(_start, ClockTime(hour, _end.minute)));
-
-  void _onEndMinute(int index) => _apply(
-    resolveClock(_start, ClockTime(_end.hour, index * calendarMinuteStep)),
-  );
-
-  void _apply(ResolvedClock resolved) {
-    if (_syncing || _closing) return;
-    _start = resolved.start;
-    _end = resolved.end;
-    _clock.value++;
-    _jump(_startHour, resolved.start.hour);
-    _jump(_startMinute, resolved.start.minute ~/ calendarMinuteStep);
-    _jump(_endHour, resolved.end.hour);
-    _jump(_endMinute, resolved.end.minute ~/ calendarMinuteStep);
-  }
-
-  void _jump(FixedExtentScrollController controller, int index) {
-    if (!controller.hasClients || controller.selectedItem == index) return;
-    _syncing = true;
-    controller.jumpToItem(index);
-    _syncing = false;
-  }
-
-  void _save() {
-    final updated = applyEventDraft(
-      event: widget.event,
-      title: _title.text,
-      allDay: _allDay,
-      start: _start,
-      end: _end,
-    );
-    _dismiss(() => widget.onSave(updated));
-  }
-
-  Future<void> _dismiss(VoidCallback action) async {
+  /// Button exits play first, then report; the sheet still owns the screen.
+  Future<void> _close(VoidCallback action) async {
     if (_closing) return;
     _closing = true;
     _titleFocus.unfocus();
     await _motion.reverse();
     if (!mounted) return;
     action();
+    widget.onGone?.call();
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    if (_closing) return;
+    _settle.stop();
+    final next = _drag.value + (details.primaryDelta ?? 0);
+    // Upward pulls resist; the stack only leaves downward.
+    _drag.value = next < 0 ? next * 0.25 : next;
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    if (_closing) return;
+    final velocity = details.primaryVelocity ?? 0;
+    if (_drag.value > _dismissDistance || velocity > _dismissVelocity) {
+      _swipeAway(velocity);
+      return;
+    }
+    _settleFrom = _drag.value;
+    _settle.forward(from: 0);
+  }
+
+  /// Saves the moment the finger lifts, then finishes the slide out within
+  /// [_flingDuration] while the calendar already takes touches.
+  void _swipeAway(double velocity) {
+    _closing = true;
+    _titleFocus.unfocus();
+    widget.onSave(_draft());
+    final height = MediaQuery.sizeOf(context).height;
+    final from = _drag.value;
+    final exit = AnimationController(vsync: this, duration: _flingDuration);
+    final curve = CurvedAnimation(parent: exit, curve: Curves.easeOutCubic);
+    exit.addListener(() {
+      _drag.value = from + (height - from) * curve.value;
+    });
+    exit.forward().whenComplete(() {
+      curve.dispose();
+      exit.dispose();
+      if (mounted) widget.onGone?.call();
+    });
+  }
+
+  void _measureCard() {
+    final box = _cardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || box.size.height == _cardHeight) return;
+    setState(() => _cardHeight = box.size.height);
+  }
+
+  /// [child] fading in and rising from [distance] below its place.
+  Widget _rising(double distance, Widget child) {
+    return FadeTransition(
+      opacity: _fade,
+      child: AnimatedBuilder(
+        animation: _rise,
+        child: child,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, distance * (1 - _rise.value)),
+          child: child,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final keyboard = media.viewInsets.bottom;
-    return Material(
-      type: MaterialType.transparency,
-      child: Stack(
-        key: _stackKey,
-        children: [
-          FadeTransition(
-            opacity: _motion,
-            child: const ColoredBox(
-              color: Color(0x8C000000),
-              child: SizedBox.expand(),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: keyboard,
-            child: SafeArea(
-              bottom: keyboard == 0,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final wheels = (constraints.maxHeight - 280 - 72).clamp(
-                      96.0,
-                      168.0,
-                    );
-                    return Column(
-                      children: [
-                        FadeTransition(
-                          opacity: _cardFade,
-                          child: KeyedSubtree(key: _cardKey, child: _card()),
-                        ),
-                        const SizedBox(height: 10),
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              FadeTransition(
-                                opacity: _blocksFade,
-                                child: SlideTransition(
-                                  position: _blocksSlide,
-                                  child: ListView(
-                                    padding: const EdgeInsets.only(bottom: 72),
-                                    children: [
-                                      _durationBlock(wheels),
-                                      const SizedBox(height: 10),
-                                      _repeatBlock(),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: 8,
-                                child: FadeTransition(
-                                  opacity: _blocksFade,
-                                  child: _buttons(),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-          AnimatedBuilder(
-            animation: _motion,
-            builder: (context, _) => _flyer(),
-          ),
-        ],
+    final bottomInset = keyboard > 0 ? keyboard : media.padding.bottom;
+    final top = media.padding.top + _cardTop;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _measureCard();
+    });
+    // The blocks scroll under the card; only the card can be pulled down.
+    final blocks = ListView(
+      padding: EdgeInsets.fromLTRB(
+        _sheetMargin,
+        _cardHeight + _blockGap,
+        _sheetMargin,
+        _buttonsRoom,
       ),
-    );
-  }
-
-  Widget _flyer() {
-    final from = widget.from;
-    final target = _target;
-    if (from == null || target == null || _motion.value >= 0.995) {
-      return const SizedBox.shrink();
-    }
-    final box = _stackKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return const SizedBox.shrink();
-    final t = Curves.easeOutCubic.transform(_motion.value);
-    final rect = Rect.lerp(_local(box, from), _local(box, target), t)!;
-    return Positioned(
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      height: rect.height,
-      child: IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: calendarEventColor,
-            borderRadius: BorderRadius.circular(lerpDouble(6, 20, t)!),
+      children: [
+        _rising(
+          _riseBlocks[0],
+          EventTimeBlock(
+            start: _start,
+            end: _end,
+            allDay: _allDay,
+            onAllDay: (value) => setState(() => _allDay = value),
+            onStart: _setStart,
+            onEnd: _setEnd,
           ),
         ),
-      ),
+        const SizedBox(height: _blockGap),
+        _rising(
+          _riseBlocks[1],
+          EventRepeatBlock(
+            rule: _repeat,
+            day: eventFirstDay(widget.event),
+            onChanged: (rule) => setState(() => _repeat = rule),
+          ),
+        ),
+      ],
     );
-  }
-
-  Rect _local(RenderBox box, Rect global) =>
-      box.globalToLocal(global.topLeft) & global.size;
-
-  Widget _card() {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: calendarEventColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
-        child: Column(
-          children: [
-            Row(
+    final card = Positioned(
+      top: top,
+      left: _sheetMargin,
+      right: _sheetMargin,
+      child: _rising(_riseCard, KeyedSubtree(key: _cardKey, child: _card())),
+    );
+    return IgnorePointer(
+      ignoring: widget.leaving,
+      child: Material(
+        type: MaterialType.transparency,
+        child: ValueListenableBuilder<double>(
+          valueListenable: _drag,
+          builder: (context, drag, _) {
+            // Pulling down fades the sheet towards the calendar behind it.
+            final release = (1 - drag.clamp(0, 400) / 400).toDouble();
+            return Stack(
               children: [
-                const Text(
-                  'Мои события',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  eventDateLabel(eventFirstDay(widget.event)),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: CupertinoTextField(
-                    controller: _title,
-                    focusNode: _titleFocus,
-                    autofocus: false,
-                    padding: EdgeInsets.zero,
-                    decoration: const BoxDecoration(),
-                    cursorColor: const Color(0xFF0A84FF),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    placeholder: 'Название',
-                    placeholderStyle: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
+                FadeTransition(
+                  opacity: _motion,
+                  child: Opacity(
+                    opacity: release,
+                    child: const ColoredBox(
+                      color: _scrim,
+                      child: SizedBox.expand(),
                     ),
                   ),
                 ),
-                if (!_allDay) ...[
-                  const SizedBox(width: 12),
-                  ListenableBuilder(
-                    listenable: _clock,
-                    builder: (context, _) => Text(
-                      clockRangeLabel(_start, _end),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                Positioned(
+                  top: top,
+                  left: 0,
+                  right: 0,
+                  bottom: bottomInset,
+                  child: Transform.translate(
+                    offset: Offset(0, drag),
+                    child: Opacity(
+                      opacity: release,
+                      child: ClipRect(child: blocks),
                     ),
                   ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _durationBlock(double wheelHeight) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFF2C2C2E),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 12, 8),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Весь день',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w500,
-                  ),
                 ),
-                const Spacer(),
-                CupertinoSwitch(
-                  value: _allDay,
-                  activeTrackColor: const Color(0xFF34C759),
-                  onChanged: (value) => setState(() => _allDay = value),
-                ),
-              ],
-            ),
-            AnimatedCrossFade(
-              firstChild: _wheels(wheelHeight),
-              secondChild: const SizedBox(width: double.infinity),
-              crossFadeState: _allDay
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 200),
-              sizeCurve: Curves.easeOutCubic,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _wheels(double height) {
-    return SizedBox(
-      height: height,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _WheelColumn(
-              label: 'Начало',
-              hour: _startHour,
-              minute: _startMinute,
-              onHour: _onStartHour,
-              onMinute: _onStartMinute,
-            ),
-          ),
-          SizedBox(
-            width: 108,
-            child: Column(
-              children: [
-                const Text(
-                  '',
-                  style: TextStyle(
-                    color: Color(0xFF8E8E93),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Expanded(
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 2),
-                        child: ColoredBox(
-                          color: Colors.white,
-                          child: SizedBox(height: 1.5, width: double.infinity),
-                        ),
-                      ),
-                      ListenableBuilder(
-                        listenable: _clock,
-                        builder: (context, _) => Padding(
-                          padding: const EdgeInsets.only(bottom: 28),
-                          child: Text(
-                            durationLabel(_start, _end),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              height: 1,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: bottomInset,
+                  height: 120,
+                  child: IgnorePointer(
+                    child: FadeTransition(
+                      opacity: _fade,
+                      child: Opacity(
+                        opacity: release,
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0x00000000), Color(0xCC000000)],
                             ),
                           ),
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+                ),
+                Transform.translate(
+                  offset: Offset(0, drag),
+                  child: Stack(children: [card]),
+                ),
+                Positioned(
+                  left: _buttonInset,
+                  right: _buttonInset,
+                  bottom: bottomInset + _buttonsLift,
+                  child: Opacity(
+                    opacity: release,
+                    child: FadeTransition(opacity: _fade, child: _buttons()),
                   ),
                 ),
               ],
-            ),
-          ),
-          Expanded(
-            child: _WheelColumn(
-              label: 'Конец',
-              hour: _endHour,
-              minute: _endMinute,
-              onHour: _onEndHour,
-              onMinute: _onEndMinute,
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _repeatBlock() {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFF2C2C2E),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
-        child: Row(
-          children: [
-            const Text(
-              'Повтор',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w500,
+  Widget _card() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragUpdate: _onDragUpdate,
+      onVerticalDragEnd: _onDragEnd,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: calendarEventColor,
+          borderRadius: BorderRadius.all(_cardRadius),
+        ),
+        child: Padding(
+          padding: _cardPadding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Text('Мои события', style: _cardLabel),
+                  const Spacer(),
+                  Text(eventDateLabel(_start), style: _cardLabel),
+                ],
               ),
-            ),
-            const Spacer(),
-            CupertinoSwitch(
-              value: _repeat,
-              activeTrackColor: const Color(0xFF34C759),
-              onChanged: (value) => setState(() => _repeat = value),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: CupertinoTextField(
+                      controller: _title,
+                      focusNode: _titleFocus,
+                      padding: EdgeInsets.zero,
+                      decoration: const BoxDecoration(),
+                      cursorColor: SheetStyle.accent,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: _cardTitle,
+                      placeholder: 'Название',
+                      placeholderStyle: _cardTitle,
+                    ),
+                  ),
+                  AnimatedSwitcher(
+                    duration: SheetStyle.fade,
+                    child: _allDay
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            key: const ValueKey('card-time'),
+                            padding: const EdgeInsets.only(left: 12),
+                            child: Text(
+                              clockRangeLabel(_start, _end),
+                              style: _cardTime,
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buttons() {
+    // Fixed padding around the icon gives the pill its width; the native
+    // button centres its child only when the child spans the pill.
+    const padding = EdgeInsets.symmetric(
+      horizontal: (_buttonWidth - _iconSize) / 2,
+    );
+    final radius = BorderRadius.circular(_buttonHeight / 2);
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _SheetButton(
-          color: const Color(0xFF8E8E93),
-          icon: Icons.close,
-          onTap: () => _dismiss(widget.onCancel),
-        ),
-        const SizedBox(width: 64),
-        _SheetButton(
-          color: const Color(0xFF0A84FF),
-          icon: Icons.check,
-          onTap: _save,
-        ),
-      ],
-    );
-  }
-}
-
-class _WheelColumn extends StatelessWidget {
-  const _WheelColumn({
-    required this.label,
-    required this.hour,
-    required this.minute,
-    required this.onHour,
-    required this.onMinute,
-  });
-
-  final String label;
-  final FixedExtentScrollController hour;
-  final FixedExtentScrollController minute;
-  final ValueChanged<int> onHour;
-  final ValueChanged<int> onMinute;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF8E8E93),
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+        Semantics(
+          label: 'Отмена',
+          button: true,
+          child: AdaptiveButton.icon(
+            key: const ValueKey('sheet-cancel'),
+            onPressed: () => _close(widget.onCancel),
+            icon: Icons.close_rounded,
+            iconColor: Colors.white,
+            color: SheetStyle.muted,
+            style: AdaptiveButtonStyle.glass,
+            size: AdaptiveButtonSize.large,
+            padding: padding,
+            borderRadius: radius,
+            useSmoothRectangleBorder: false,
           ),
         ),
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                child: _Drum(
-                  controller: hour,
-                  count: 24,
-                  label: (index) => index.toString().padLeft(2, '0'),
-                  onChanged: onHour,
-                ),
-              ),
-              Expanded(
-                child: _Drum(
-                  controller: minute,
-                  count: 4,
-                  label: (index) =>
-                      (index * calendarMinuteStep).toString().padLeft(2, '0'),
-                  onChanged: onMinute,
-                ),
-              ),
-            ],
+        Semantics(
+          label: 'Сохранить',
+          button: true,
+          child: AdaptiveButton.icon(
+            key: const ValueKey('sheet-save'),
+            onPressed: () {
+              final draft = _draft();
+              _close(() => widget.onSave(draft));
+            },
+            icon: Icons.check_rounded,
+            iconColor: Colors.white,
+            color: SheetStyle.accent,
+            style: AdaptiveButtonStyle.prominentGlass,
+            size: AdaptiveButtonSize.large,
+            padding: padding,
+            borderRadius: radius,
+            useSmoothRectangleBorder: false,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _Drum extends StatelessWidget {
-  const _Drum({
-    required this.controller,
-    required this.count,
-    required this.label,
-    required this.onChanged,
-  });
-
-  final FixedExtentScrollController controller;
-  final int count;
-  final String Function(int index) label;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoPicker(
-      scrollController: controller,
-      itemExtent: 32,
-      diameterRatio: 1.15,
-      magnification: 1.2,
-      squeeze: 1.05,
-      useMagnifier: true,
-      looping: true,
-      selectionOverlay: const CupertinoPickerDefaultSelectionOverlay(
-        background: Colors.transparent,
-      ),
-      onSelectedItemChanged: onChanged,
-      children: [
-        for (var index = 0; index < count; index++)
-          Center(
-            child: Text(
-              label(index),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _SheetButton extends StatelessWidget {
-  const _SheetButton({
-    required this.color,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final Color color;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: SizedBox(
-          width: 58,
-          height: 44,
-          child: Icon(icon, color: Colors.white, size: 26),
-        ),
-      ),
     );
   }
 }

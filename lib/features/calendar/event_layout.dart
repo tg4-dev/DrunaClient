@@ -117,10 +117,20 @@ class ColumnLayout {
 }
 
 class MonthWeekLayout {
-  const MonthWeekLayout({required this.spans, required this.columns});
+  const MonthWeekLayout({
+    required this.spans,
+    required this.columns,
+    required this.barCapacity,
+  });
 
   final List<SpanPlacement> spans;
   final List<ColumnLayout> columns;
+
+  /// Bars in lanes below this are drawn. When anything overflows, the last
+  /// lane is kept for "+N" so no bar can cover it.
+  final int barCapacity;
+
+  bool showsSpan(SpanPlacement span) => span.lane < barCapacity;
 }
 
 MonthWeekLayout layoutWeek({
@@ -180,8 +190,20 @@ MonthWeekLayout layoutWeek({
     );
   }
 
+  var overflows = placed.any((span) => span.lane >= capacity);
+  for (
+    var column = visibleStart;
+    column <= visibleEnd && !overflows;
+    column++
+  ) {
+    final bars = placed.where((span) => span.covers(column)).length;
+    overflows = bars + timedByColumn[column].length > capacity;
+  }
+  final barCapacity = overflows ? capacity - 1 : capacity;
+
   return MonthWeekLayout(
     spans: placed,
+    barCapacity: barCapacity,
     columns: [
       for (var column = 0; column < 7; column++)
         _columnLayout(
@@ -190,99 +212,68 @@ MonthWeekLayout layoutWeek({
           spans: placed,
           timed: timedByColumn[column],
           capacity: capacity,
+          barCapacity: barCapacity,
         ),
     ],
   );
 }
 
-class TimedSpan {
-  const TimedSpan({required this.id, required this.start, required this.end});
-
-  final String id;
-  final DateTime start;
-  final DateTime end;
-}
-
-class LaneAssignment {
-  const LaneAssignment(this.id, this.lane);
-
-  final String id;
-  final int lane;
-}
-
-List<LaneAssignment> assignLanes(List<TimedSpan> items) {
-  final order = [for (var index = 0; index < items.length; index++) index]
-    ..sort((a, b) {
-      final byStart = items[a].start.compareTo(items[b].start);
-      if (byStart != 0) return byStart;
-      final byEnd = items[a].end.compareTo(items[b].end);
-      if (byEnd != 0) return byEnd;
-      return items[a].id.compareTo(items[b].id);
-    });
-  final laneOf = List<int>.filled(items.length, 0);
-  final laneEnds = <DateTime>[];
-  for (final index in order) {
-    final item = items[index];
-    var lane = 0;
-    for (; lane < laneEnds.length; lane++) {
-      if (!laneEnds[lane].isAfter(item.start)) break;
-    }
-    if (lane == laneEnds.length) {
-      laneEnds.add(item.end);
-    } else {
-      laneEnds[lane] = item.end;
-    }
-    laneOf[index] = lane;
-  }
-  return [
-    for (var index = 0; index < items.length; index++)
-      LaneAssignment(items[index].id, laneOf[index]),
-  ];
-}
-
 class EventDaySlice {
-  const EventDaySlice(this.startHour, this.endHour);
+  const EventDaySlice(
+    this.startHour,
+    this.endHour, {
+    this.continuesBefore = false,
+    this.continuesAfter = false,
+  });
 
   final double startHour;
   final double endHour;
+
+  /// The event goes on into the previous or the next day.
+  final bool continuesBefore;
+  final bool continuesAfter;
 }
 
 EventDaySlice? sliceOnDay(CalendarEvent event, DateTime day) {
   final date = dateOnly(day);
   if (!eventOccursOn(event, date)) return null;
-  if (event.allDay) return const EventDaySlice(0, 24);
   final next = addCalendarDays(date, 1);
-  final dayEnd = DateTime(next.year, next.month, next.day);
+  if (event.allDay) {
+    return EventDaySlice(
+      0,
+      24,
+      continuesBefore: eventFirstDay(event).isBefore(date),
+      continuesAfter: eventLastDay(event).isAfter(date),
+    );
+  }
   final start = event.start.isBefore(date) ? date : event.start;
-  final end = event.end.isAfter(dayEnd) ? dayEnd : event.end;
+  final end = event.end.isAfter(next) ? next : event.end;
   if (!end.isAfter(start)) return null;
-  return EventDaySlice(_hourOn(start, date), _hourOn(end, date));
+  return EventDaySlice(
+    _hourOn(start, date),
+    _hourOn(end, date),
+    continuesBefore: event.start.isBefore(date),
+    continuesAfter: event.end.isAfter(next),
+  );
 }
 
-/// X of the title inside [sliceLeft, sliceRight), or null when another slice
-/// owns the sticky point.
-double? stickyTitleOffset({
+/// X of an event title that sticks to the viewport's left edge while the
+/// event scrolls past, but never leaves the event. Null once the event is
+/// off screen to the left.
+double? stickyTitleX({
   required double eventLeft,
   required double eventRight,
   required double viewportLeft,
-  required double sliceLeft,
-  required double sliceRight,
   required double titleWidth,
   required double padding,
 }) {
-  if (sliceRight <= sliceLeft || eventRight <= eventLeft) return null;
+  if (eventRight <= eventLeft) return null;
   final visibleLeft = math.max(eventLeft, viewportLeft);
   if (visibleLeft >= eventRight) return null;
-  var anchor = visibleLeft + padding;
   final minAnchor = eventLeft + padding;
   final maxAnchor = eventRight - padding - titleWidth;
-  if (maxAnchor >= minAnchor) {
-    anchor = anchor.clamp(minAnchor, maxAnchor);
-  } else {
-    anchor = minAnchor;
-  }
-  if (anchor < sliceLeft || anchor >= sliceRight) return null;
-  return anchor - sliceLeft;
+  if (maxAnchor < minAnchor) return minAnchor;
+  return (visibleLeft + padding).clamp(minAnchor, maxAnchor);
 }
 
 class _Segment {
@@ -344,23 +335,23 @@ ColumnLayout _columnLayout({
   required List<SpanPlacement> spans,
   required List<CalendarEvent> timed,
   required int capacity,
+  required int barCapacity,
 }) {
   if (!visible) {
     return const ColumnLayout(chips: [], overflow: 0, overflowLane: null);
   }
   final used = <int>{
     for (final span in spans)
-      if (span.covers(column) && span.lane < capacity) span.lane,
+      if (span.covers(column) && span.lane < barCapacity) span.lane,
   };
   final hiddenSpans = spans
-      .where((span) => span.covers(column) && span.lane >= capacity)
+      .where((span) => span.covers(column) && span.lane >= barCapacity)
       .length;
   final free = [
     for (var lane = 0; lane < capacity; lane++)
       if (!used.contains(lane)) lane,
   ];
-  final extras = hiddenSpans + timed.length;
-  if (extras <= free.length) {
+  if (hiddenSpans == 0 && timed.length <= free.length) {
     return ColumnLayout(
       chips: [
         for (var index = 0; index < timed.length; index++)
@@ -370,6 +361,9 @@ ColumnLayout _columnLayout({
       overflowLane: null,
     );
   }
+  // Bars stay below [barCapacity], so the last lane is free for "+N" whenever
+  // something is hidden. A one-lane row has room for "+N" alone.
+  final extras = hiddenSpans + timed.length;
   if (free.isEmpty) {
     return ColumnLayout(chips: const [], overflow: extras, overflowLane: null);
   }

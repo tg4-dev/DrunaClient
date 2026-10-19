@@ -4,72 +4,68 @@ import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('duration label stays on one line', () {
-    expect(
-      durationLabel(const ClockTime(10, 0), const ClockTime(10, 15)),
-      '15 мин.',
-    );
-    expect(
-      durationLabel(const ClockTime(10, 0), const ClockTime(11, 0)),
-      '1ч.',
-    );
-    expect(
-      durationLabel(const ClockTime(10, 0), const ClockTime(11, 15)),
-      '1ч. 15 мин.',
-    );
-    expect(
-      durationLabel(const ClockTime(12, 0), const ClockTime(16, 0)),
-      '4ч.',
-    );
-    expect(
-      durationLabel(const ClockTime(0, 0), const ClockTime(4, 45)),
-      '4ч. 45 мин.',
-    );
+  DateTime at(int day, int hour, [int minute = 0]) =>
+      DateTime(2026, 10, day, hour, minute);
+
+  test('the duration label declines hours and minutes', () {
+    expect(durationLabel(at(14, 10), at(14, 10, 15)), '15 минут');
+    expect(durationLabel(at(14, 10), at(14, 10, 1)), '1 минута');
+    expect(durationLabel(at(14, 10), at(14, 11)), '1 час');
+    expect(durationLabel(at(14, 12), at(14, 16)), '4 часа');
+    expect(durationLabel(at(14, 10), at(14, 15)), '5 часов');
+    expect(durationLabel(at(14, 0), at(14, 4, 45)), '4 ч 45 мин');
+    expect(durationLabel(at(14, 22), at(15, 2)), '4 часа');
   });
 
-  test('an earlier end pulls the start back by one hour', () {
-    final resolved = resolveClock(
-      const ClockTime(18, 0),
-      const ClockTime(16, 30),
-    );
-
-    expect(resolved.start, const ClockTime(15, 30));
-    expect(resolved.end, const ClockTime(16, 30));
+  test('a new start keeps the length', () {
+    final next = withStartClock(at(14, 16), at(14, 20), 18, 30);
+    expect(next.start, at(14, 18, 30));
+    expect(next.end, at(14, 22, 30));
   });
 
-  test('an end before 01:00 stays on the same day', () {
-    for (final minute in [0, 15, 30, 45]) {
-      final resolved = resolveClock(
-        const ClockTime(12, 0),
-        ClockTime(0, minute),
-      );
-      expect(resolved.start, const ClockTime(0, 0));
-      expect(resolved.end, const ClockTime(1, 0));
-    }
-  });
+  test('an end before the start rolls to the next day', () {
+    final next = withEndClock(at(14, 22), at(14, 23), 2, 0);
+    expect(next.start, at(14, 22));
+    expect(next.end, at(15, 2));
 
-  test('a later end keeps both clocks', () {
-    final resolved = resolveClock(
-      const ClockTime(16, 0),
-      const ClockTime(20, 0),
-    );
+    final later = withEndClock(at(14, 16), at(14, 17), 20, 0);
+    expect(later.end, at(14, 20));
 
-    expect(resolved.start, const ClockTime(16, 0));
-    expect(resolved.end, const ClockTime(20, 0));
+    final equal = withEndClock(at(14, 16), at(14, 17), 16, 0);
+    expect(equal.end, at(15, 16));
   });
 
   test('a new event is one hour on the quarter hour', () {
-    final morning = defaultEventClock(DateTime(2026, 10, 14, 10, 7));
-    expect(morning.start, const ClockTime(10, 0));
-    expect(morning.end, const ClockTime(11, 0));
+    final day = DateTime(2026, 10, 14);
+    final morning = defaultEventSpan(day, at(14, 10, 7));
+    expect(morning.start, at(14, 10));
+    expect(morning.end, at(14, 11));
 
-    final eight = defaultEventClock(DateTime(2026, 10, 14, 10, 8));
-    expect(eight.start, const ClockTime(10, 15));
-    expect(eight.end, const ClockTime(11, 15));
+    final eight = defaultEventSpan(day, at(14, 10, 8));
+    expect(eight.start, at(14, 10, 15));
+    expect(eight.end, at(14, 11, 15));
 
-    final late = defaultEventClock(DateTime(2026, 10, 14, 23, 50));
-    expect(late.start, const ClockTime(22, 0));
-    expect(late.end, const ClockTime(23, 0));
+    final late = defaultEventSpan(day, at(14, 23, 50));
+    expect(late.start, at(14, 22));
+    expect(late.end, at(14, 23));
+  });
+
+  test('an inverted or empty timed span grows to the minimum length', () {
+    final inverted = normalizeEvent(
+      CalendarEvent(id: 'a', title: '', start: at(14, 14), end: at(14, 13)),
+    );
+    expect(inverted.end, at(14, 14, 15));
+
+    final empty = normalizeEvent(
+      CalendarEvent(id: 'b', title: '', start: at(14, 14), end: at(14, 14)),
+    );
+    expect(empty.end, at(14, 14, 15));
+
+    final index = CalendarEventIndex([
+      CalendarEvent(id: 'a', title: '', start: at(14, 14), end: at(14, 13)),
+    ]);
+    expect(index.onDay(DateTime(2026, 10, 14)).map((event) => event.id), ['a']);
+    expect(sliceOnDay(index.events.single, DateTime(2026, 10, 14)), isNotNull);
   });
 
   test('moving an event keeps the time of day and the span', () {
@@ -77,66 +73,89 @@ void main() {
       id: 'trip',
       title: 'Поездка',
       allDay: true,
-      start: DateTime(2026, 10, 14, 10, 15),
+      start: DateTime(2026, 10, 14),
       end: DateTime(2026, 10, 18),
     );
 
     final moved = moveEventToDay(event, DateTime(2026, 10, 16));
 
-    expect(moved.start, DateTime(2026, 10, 16, 10, 15));
+    expect(moved.start, DateTime(2026, 10, 16));
     expect(moved.end, DateTime(2026, 10, 20));
     expect(moveEventToDay(event, DateTime(2026, 10, 14)).start, event.start);
   });
 
-  test(
-    'saving all-day keeps a multi-day span and a timed draft collapses it',
-    () {
-      final trip = CalendarEvent(
-        id: 'trip',
-        title: 'Поездка',
-        allDay: true,
-        start: DateTime(2026, 10, 14),
-        end: DateTime(2026, 10, 18),
-      );
+  group('saving the sheet', () {
+    final trip = CalendarEvent(
+      id: 'trip',
+      title: 'Поездка',
+      allDay: true,
+      start: DateTime(2026, 10, 14),
+      end: DateTime(2026, 10, 18),
+    );
+
+    test('all-day keeps a multi-day span', () {
       final renamed = applyEventDraft(
         event: trip,
-        title: 'Дом',
+        title: ' Дом ',
         allDay: true,
-        start: const ClockTime(9, 0),
-        end: const ClockTime(10, 0),
+        start: at(14, 9),
+        end: at(14, 10),
       );
       expect(renamed.title, 'Дом');
+      expect(renamed.start, trip.start);
       expect(renamed.end, trip.end);
+    });
 
-      final timed = CalendarEvent(
-        id: 'meet',
-        title: 'Встреча',
-        start: DateTime(2026, 10, 14, 16, 0),
-        end: DateTime(2026, 10, 14, 18, 0),
+    test('a timed event turned all-day covers its days', () {
+      final night = CalendarEvent(
+        id: 'night',
+        title: 'Ночь',
+        start: at(14, 22),
+        end: at(15, 2),
       );
       final allDay = applyEventDraft(
-        event: timed,
-        title: 'Выходной',
+        event: night,
+        title: 'Ночь',
         allDay: true,
-        start: const ClockTime(16, 0),
-        end: const ClockTime(18, 0),
+        start: night.start,
+        end: night.end,
       );
       expect(allDay.allDay, isTrue);
       expect(allDay.start, DateTime(2026, 10, 14));
-      expect(allDay.end, DateTime(2026, 10, 14));
+      expect(allDay.end, DateTime(2026, 10, 15));
+    });
 
+    test('an overnight event keeps the next day', () {
+      final night = CalendarEvent(
+        id: 'night',
+        title: 'Ночь',
+        start: at(14, 22),
+        end: at(15, 2),
+      );
+      final saved = applyEventDraft(
+        event: night,
+        title: 'Ночь',
+        allDay: false,
+        start: night.start,
+        end: night.end,
+      );
+      expect(saved.start, at(14, 22));
+      expect(saved.end, at(15, 2));
+    });
+
+    test('a timed draft of an all-day event uses the draft times', () {
       final back = applyEventDraft(
         event: trip,
         title: 'Поездка',
         allDay: false,
-        start: const ClockTime(18, 0),
-        end: const ClockTime(16, 0),
+        start: at(14, 16),
+        end: at(14, 18),
       );
       expect(back.allDay, isFalse);
-      expect(back.start, DateTime(2026, 10, 14, 15, 0));
-      expect(back.end, DateTime(2026, 10, 14, 16, 0));
-    },
-  );
+      expect(back.start, at(14, 16));
+      expect(back.end, at(14, 18));
+    });
+  });
 
   test('month densities follow the row heights', () {
     expect(densityForRowHeight(monthRowMin).bars, isTrue);
@@ -163,8 +182,8 @@ void main() {
         CalendarEvent(
           id: 'e$index',
           title: 'Дело $index',
-          start: DateTime(day.year, day.month, day.day, 8 + index),
-          end: DateTime(day.year, day.month, day.day, 9 + index),
+          start: at(14, 8 + index),
+          end: at(14, 9 + index),
         ),
     ];
 
@@ -184,20 +203,61 @@ void main() {
     ]);
   });
 
+  CalendarEvent bar(String id, int firstDay, int lastDay) => CalendarEvent(
+    id: id,
+    title: id,
+    allDay: true,
+    start: DateTime(2026, 10, firstDay),
+    end: DateTime(2026, 10, lastDay),
+  );
+
+  test('+N keeps a lane of its own when bars fill a day', () {
+    final days = daysOfWeek(weekIndexOf(DateTime(2026, 10, 12)));
+    final layout = layoutWeek(
+      events: [bar('a', 12, 14), bar('b', 12, 14), bar('c', 12, 14)],
+      days: days,
+      visibleStart: 0,
+      visibleEnd: 6,
+      capacity: 2,
+    );
+
+    expect(layout.barCapacity, 1);
+    final monday = layout.columns[0];
+    expect(monday.overflow, 2);
+    expect(monday.overflowLane, 1);
+    expect(
+      layout.spans.where(layout.showsSpan).map((span) => span.lane),
+      everyElement(lessThan(monday.overflowLane!)),
+    );
+  });
+
+  test('a hidden bar is counted even when its day has a free lane', () {
+    final days = daysOfWeek(weekIndexOf(DateTime(2026, 10, 12)));
+    // Mon–Wed, Mon–Tue and Tue–Wed: the third needs a third lane on Tuesday.
+    final layout = layoutWeek(
+      events: [bar('c', 12, 14), bar('a', 12, 13), bar('b', 13, 14)],
+      days: days,
+      visibleStart: 0,
+      visibleEnd: 6,
+      capacity: 2,
+    );
+
+    final hidden = layout.spans.where((span) => !layout.showsSpan(span));
+    expect(hidden, isNotEmpty);
+    for (final span in hidden) {
+      for (var column = span.startColumn; column <= span.endColumn; column++) {
+        expect(layout.columns[column].overflow, greaterThan(0));
+      }
+    }
+  });
+
   test('a multi-day bar is clipped to each week', () {
     final firstMonday = DateTime(2026, 10, 12);
     expect(firstMonday.weekday, DateTime.monday);
-    final trip = CalendarEvent(
-      id: 'trip',
-      title: 'Поездка',
-      allDay: true,
-      start: DateTime(2026, 10, 14),
-      end: DateTime(2026, 10, 20),
-    );
-    final firstDays = daysOfWeek(weekIndexOf(firstMonday));
+    final trip = bar('trip', 14, 20);
     final first = layoutWeek(
       events: [trip],
-      days: firstDays,
+      days: daysOfWeek(weekIndexOf(firstMonday)),
       visibleStart: 0,
       visibleEnd: 6,
       capacity: 3,
@@ -209,10 +269,9 @@ void main() {
     expect(first.spans.single.continuesAfter, isTrue);
     expect(first.spans.single.lane, 0);
 
-    final nextMonday = DateTime(2026, 10, 19);
     final second = layoutWeek(
       events: [trip],
-      days: daysOfWeek(weekIndexOf(nextMonday)),
+      days: daysOfWeek(weekIndexOf(DateTime(2026, 10, 19))),
       visibleStart: 0,
       visibleEnd: 6,
       capacity: 3,
@@ -223,77 +282,88 @@ void main() {
     expect(second.spans.single.continuesAfter, isFalse);
   });
 
-  test(
-    'overlapping intervals take different lanes and a touching one reuses',
-    () {
-      final day = DateTime(2026, 10, 14);
-      TimedSpan span(String id, int startHour, int endHour) => TimedSpan(
-        id: id,
-        start: DateTime(day.year, day.month, day.day, startHour),
-        end: DateTime(day.year, day.month, day.day, endHour),
-      );
+  test('overlapping events take different rows and a touching one reuses', () {
+    final index = CalendarEventIndex([
+      CalendarEvent(id: 'a', title: '', start: at(14, 10), end: at(14, 12)),
+      CalendarEvent(id: 'b', title: '', start: at(14, 11), end: at(14, 13)),
+      CalendarEvent(id: 'c', title: '', start: at(14, 12), end: at(14, 14)),
+    ]);
 
-      final lanes = assignLanes([
-        span('a', 10, 12),
-        span('b', 11, 13),
-        span('c', 12, 14),
-      ]);
+    final lanes = index.lanesAround(DateTime(2026, 10, 14));
+    expect([lanes['a'], lanes['b'], lanes['c']], [0, 1, 0]);
+  });
 
-      expect(lanes.map((lane) => lane.lane), [0, 1, 0]);
-    },
-  );
+  test('an overnight event keeps its row on both days', () {
+    final index = CalendarEventIndex([
+      CalendarEvent(id: 'c', title: '', start: at(14, 20), end: at(14, 23)),
+      CalendarEvent(id: 'a', title: '', start: at(14, 22), end: at(15, 2)),
+    ]);
 
-  test('the sticky title stays inside the visible slice', () {
+    final first = index.lanesAround(DateTime(2026, 10, 14));
+    final second = index.lanesAround(DateTime(2026, 10, 15));
+    expect(first['a'], 1);
+    expect(second['a'], first['a']);
+  });
+
+  test('a slice knows whether the event goes on past midnight', () {
+    final night = CalendarEvent(
+      id: 'night',
+      title: '',
+      start: at(14, 22),
+      end: at(15, 2),
+    );
+    final first = sliceOnDay(night, DateTime(2026, 10, 14))!;
+    expect(first.continuesBefore, isFalse);
+    expect(first.continuesAfter, isTrue);
+    final second = sliceOnDay(night, DateTime(2026, 10, 15))!;
+    expect(second.continuesBefore, isTrue);
+    expect(second.continuesAfter, isFalse);
+    expect(second.endHour, 2);
+  });
+
+  test('the sticky title stays inside its event', () {
     const padding = 8.0;
     const titleWidth = 40.0;
 
     expect(
-      stickyTitleOffset(
+      stickyTitleX(
         eventLeft: 100,
         eventRight: 400,
         viewportLeft: 200,
-        sliceLeft: 100,
-        sliceRight: 250,
+        titleWidth: titleWidth,
+        padding: padding,
+      ),
+      208,
+    );
+    expect(
+      stickyTitleX(
+        eventLeft: 100,
+        eventRight: 400,
+        viewportLeft: 380,
+        titleWidth: titleWidth,
+        padding: padding,
+      ),
+      352,
+    );
+    expect(
+      stickyTitleX(
+        eventLeft: 100,
+        eventRight: 400,
+        viewportLeft: 0,
         titleWidth: titleWidth,
         padding: padding,
       ),
       108,
     );
     expect(
-      stickyTitleOffset(
+      stickyTitleX(
         eventLeft: 100,
         eventRight: 400,
-        viewportLeft: 200,
-        sliceLeft: 250,
-        sliceRight: 400,
+        viewportLeft: 400,
         titleWidth: titleWidth,
         padding: padding,
       ),
       isNull,
-    );
-    expect(
-      stickyTitleOffset(
-        eventLeft: 100,
-        eventRight: 400,
-        viewportLeft: 300,
-        sliceLeft: 250,
-        sliceRight: 400,
-        titleWidth: titleWidth,
-        padding: padding,
-      ),
-      58,
-    );
-    expect(
-      stickyTitleOffset(
-        eventLeft: 100,
-        eventRight: 400,
-        viewportLeft: 0,
-        sliceLeft: 100,
-        sliceRight: 400,
-        titleWidth: titleWidth,
-        padding: padding,
-      ),
-      padding,
     );
   });
 

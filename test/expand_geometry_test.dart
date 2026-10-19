@@ -128,4 +128,40 @@ void main() {
     expect(find.byIcon(Icons.chevron_left), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('after a pull closes the day, the month takes touches at once', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: CalendarScreen()));
+    await tester.pump();
+
+    final today = DateTime.now();
+    await tester.tap(
+      find.byKey(ValueKey('day-${today.year}-${today.month}-${today.day}')),
+    );
+    await tester.pumpAndSettle();
+
+    final icon = find.byIcon(Icons.chevron_left);
+    final close = await tester.startGesture(tester.getCenter(icon));
+    await close.moveBy(const Offset(0, 30));
+    await tester.pump();
+    await close.moveBy(const Offset(0, 120));
+    await tester.pump();
+    await close.up();
+    await tester.pump();
+
+    // One frame after the finger lifts: the month is no longer blocked.
+    final month = find.ancestor(
+      of: find.byType(MonthCalendar),
+      matching: find.byType(IgnorePointer),
+    );
+    expect(
+      tester.widgetList<IgnorePointer>(month).any((widget) => widget.ignoring),
+      isFalse,
+    );
+
+    await tester.pump(const Duration(milliseconds: 170));
+    expect(find.byIcon(Icons.chevron_left), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

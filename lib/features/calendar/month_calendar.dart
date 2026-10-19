@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -25,6 +28,9 @@ class MonthCalendar extends StatefulWidget {
   final String? hiddenEventId;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
   final void Function(DateTime day, Rect chipRect)? onCreate;
+
+  /// [day] is the event's new first day: the drop day shifted back by how far
+  /// into the event it was grabbed.
   final void Function(CalendarEvent event, DateTime day)? onMove;
 
   @override
@@ -32,7 +38,7 @@ class MonthCalendar extends StatefulWidget {
 }
 
 class MonthCalendarState extends State<MonthCalendar>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _listKey = GlobalKey();
   late final ScrollController _scroll;
   late final AnimationController _rowSnap;
@@ -52,9 +58,23 @@ class MonthCalendarState extends State<MonthCalendar>
   var _snapping = false;
   var _holding = false;
   int? _holdPointer;
-  String? _holdEventId;
-  Offset? _holdLocal;
+  CalendarEvent? _holdEvent;
+  DateTime? _holdGrabDay;
+  final _holdLocal = ValueNotifier<Offset?>(null);
+  String _chipTitle = 'Название';
+
+  /// The drag chip fades in on hold and out on release instead of popping.
+  late final AnimationController _chipFade = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 160),
+  );
   DateTime? _hoverDay;
+
+  /// The days the held event would land on, tinted in every row they cross.
+  final _dropRange = ValueNotifier<DropRange?>(null);
+  late CalendarEventIndex _index;
+  late final AppLifecycleListener _lifecycle;
+  Timer? _midnight;
 
   double get _rowHeight => _rows.value;
 
@@ -67,6 +87,9 @@ class MonthCalendarState extends State<MonthCalendar>
   void initState() {
     super.initState();
     _today = dateOnly(DateTime.now());
+    _index = CalendarEventIndex(widget.events);
+    _lifecycle = AppLifecycleListener(onResume: _refreshToday);
+    _scheduleMidnight();
     final focus = dateOnly(widget.focus ?? _today);
     final index = stripIndexOfDay(focus);
     _visibleMonth = monthOfStrip(stripAt(index));
@@ -80,11 +103,41 @@ class MonthCalendarState extends State<MonthCalendar>
   }
 
   @override
+  void didUpdateWidget(covariant MonthCalendar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.events, widget.events)) {
+      _index = CalendarEventIndex(widget.events);
+    }
+  }
+
+  @override
   void dispose() {
+    _midnight?.cancel();
+    _lifecycle.dispose();
     _scroll.dispose();
     _rowSnap.dispose();
     _rows.dispose();
+    _chipFade.dispose();
+    _holdLocal.dispose();
+    _dropRange.dispose();
     super.dispose();
+  }
+
+  void _scheduleMidnight() {
+    _midnight?.cancel();
+    final now = DateTime.now();
+    final next = addCalendarDays(now, 1);
+    _midnight = Timer(
+      next.difference(now) + const Duration(seconds: 1),
+      _refreshToday,
+    );
+  }
+
+  void _refreshToday() {
+    _scheduleMidnight();
+    final today = dateOnly(DateTime.now());
+    if (!mounted || today == _today) return;
+    setState(() => _today = today);
   }
 
   double get scrollOffset => _scroll.hasClients ? _scroll.offset : 0;
@@ -256,40 +309,57 @@ class MonthCalendarState extends State<MonthCalendar>
   void _beginHold(CalendarEvent? event, Offset global) {
     if (_holding || _pointers.length != 1) return;
     _holdPointer = _pointers.keys.single;
+    final day = _dayAtGlobal(global);
+    _holdLocal.value = _localOf(global);
+    _chipTitle = event == null ? 'Название' : eventDisplayTitle(event);
+    _chipFade.forward();
     setState(() {
       _holding = true;
-      _holdEventId = event?.id;
-      _holdLocal = _localOf(global);
-      _hoverDay = _dayAtGlobal(global);
+      _holdEvent = event;
+      _holdGrabDay = day;
     });
+    _hover(day);
   }
 
   void _updateHold(Offset global) {
-    setState(() {
-      _holdLocal = _localOf(global);
-      _hoverDay = _dayAtGlobal(global);
-    });
+    _holdLocal.value = _localOf(global);
+    _hover(_dayAtGlobal(global));
+  }
+
+  void _hover(DateTime? day) {
+    _hoverDay = day;
+    final event = _holdEvent;
+    final grab = _holdGrabDay;
+    if (day == null) {
+      _dropRange.value = null;
+    } else if (event == null || grab == null) {
+      _dropRange.value = DropRange(day, day, moving: false);
+    } else {
+      final shift = calendarDaysBetween(grab, day);
+      _dropRange.value = DropRange(
+        addCalendarDays(eventFirstDay(event), shift),
+        addCalendarDays(eventLastDay(event), shift),
+        moving: true,
+      );
+    }
   }
 
   void _finishHold() {
     final day = _hoverDay;
-    final eventId = _holdEventId;
-    final creating = eventId == null;
+    final event = _holdEvent;
+    final grab = _holdGrabDay;
     _clearHold();
     if (day == null) return;
-    if (creating) {
+    if (event == null) {
       widget.onCreate?.call(
         day,
         _rectForDaySlot(day) ?? const Rect.fromLTWH(24, 120, 80, 18),
       );
       return;
     }
-    CalendarEvent? event;
-    for (final item in widget.events) {
-      if (item.id == eventId) event = item;
-    }
-    if (event == null || sameDay(eventFirstDay(event), day)) return;
-    widget.onMove?.call(event, day);
+    final shift = grab == null ? 0 : calendarDaysBetween(grab, day);
+    if (shift == 0) return;
+    widget.onMove?.call(event, addCalendarDays(eventFirstDay(event), shift));
   }
 
   void _cancelHold() {
@@ -298,11 +368,15 @@ class MonthCalendarState extends State<MonthCalendar>
   }
 
   void _clearHold() {
+    _hoverDay = null;
+    _dropRange.value = null;
+    _chipFade.reverse().then((_) {
+      if (mounted && !_holding) _holdLocal.value = null;
+    });
     setState(() {
       _holding = false;
-      _holdEventId = null;
-      _holdLocal = null;
-      _hoverDay = null;
+      _holdEvent = null;
+      _holdGrabDay = null;
       _holdPointer = null;
     });
   }
@@ -374,16 +448,9 @@ class MonthCalendarState extends State<MonthCalendar>
     );
   }
 
-  Widget _dragChip() {
-    final local = _holdLocal;
+  Widget _dragChip(Offset? local) {
     if (local == null) return const SizedBox.shrink();
-    var title = 'Название';
-    final id = _holdEventId;
-    if (id != null) {
-      for (final event in widget.events) {
-        if (event.id == id) title = eventDisplayTitle(event);
-      }
-    }
+    final title = _chipTitle;
     const width = 132.0;
     const height = 28.0;
     return Positioned(
@@ -393,10 +460,7 @@ class MonthCalendarState extends State<MonthCalendar>
       height: height,
       child: IgnorePointer(
         child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: calendarEventColor,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: liftedEventDecoration(BorderRadius.circular(10)),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Align(
@@ -475,10 +539,10 @@ class MonthCalendarState extends State<MonthCalendar>
                                 return _WeekStrip(
                                   strip: strip,
                                   today: _today,
-                                  events: widget.events,
-                                  hiddenEventId:
-                                      _holdEventId ?? widget.hiddenEventId,
-                                  hoverDay: _hoverDay,
+                                  index: _index,
+                                  hiddenEventId: widget.hiddenEventId,
+                                  dimmedEventId: _holdEvent?.id,
+                                  hoverDay: _dropRange,
                                   onEventTap: widget.onEventTap,
                                   onHoldStart: _beginHold,
                                   onTap: (day) {
@@ -500,7 +564,20 @@ class MonthCalendarState extends State<MonthCalendar>
             ),
           ),
         ),
-        if (_holding) _dragChip(),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: FadeTransition(
+              opacity: _chipFade,
+              child: ValueListenableBuilder<Offset?>(
+                valueListenable: _holdLocal,
+                builder: (context, local, _) => Stack(
+                  clipBehavior: Clip.none,
+                  children: [_dragChip(local)],
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -517,7 +594,7 @@ class _WeekdayHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      key: ValueKey('weekday-header'),
+      key: const ValueKey('weekday-header'),
       height: weekdayHeaderHeight,
       child: Row(
         children: [
@@ -526,7 +603,7 @@ class _WeekdayHeader extends StatelessWidget {
               child: Center(
                 child: Text(
                   label,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Color(0xFF8E8E93),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -545,8 +622,9 @@ class _WeekStrip extends StatelessWidget {
     required this.strip,
     required this.today,
     required this.onTap,
-    required this.events,
+    required this.index,
     this.hiddenEventId,
+    this.dimmedEventId,
     this.hoverDay,
     this.onEventTap,
     this.onHoldStart,
@@ -555,9 +633,10 @@ class _WeekStrip extends StatelessWidget {
   final MonthStrip strip;
   final DateTime today;
   final ValueChanged<DateTime> onTap;
-  final List<CalendarEvent> events;
+  final CalendarEventIndex index;
   final String? hiddenEventId;
-  final DateTime? hoverDay;
+  final String? dimmedEventId;
+  final ValueListenable<DropRange?>? hoverDay;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
   final void Function(CalendarEvent? event, Offset global)? onHoldStart;
 
@@ -594,8 +673,9 @@ class _WeekStrip extends StatelessWidget {
                   strip: strip,
                   rowKey: rowKey,
                   today: today,
-                  events: events,
+                  index: index,
                   hiddenEventId: hiddenEventId,
+                  dimmedEventId: dimmedEventId,
                   hoverDay: hoverDay,
                   onDayTap: onTap,
                   onEventTap: onEventTap,

@@ -1,6 +1,5 @@
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/day_timeline.dart';
-import 'package:druna_app/features/calendar/event_sheet.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
@@ -215,6 +214,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a multi-day event moves by the days it was dragged', (
+    tester,
+  ) async {
+    DateTime? movedDay;
+    final trip = CalendarEvent(
+      id: 'trip',
+      title: 'Поездка',
+      allDay: true,
+      start: DateTime(2026, 10, 14),
+      end: DateTime(2026, 10, 17),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MonthCalendar(
+          focus: DateTime(2026, 10, 14),
+          events: [trip],
+          onDayTap: _ignoreTap,
+          onMove: (event, day) => movedDay = day,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Grab the bar over Friday, its third day, and drop it on Saturday.
+    final friday = tester.getCenter(
+      find.byKey(const ValueKey('day-2026-10-16')),
+    );
+    final barY = tester.getCenter(find.text('Поездка')).dy;
+    final saturday = tester.getCenter(
+      find.byKey(const ValueKey('day-2026-10-17')),
+    );
+    final gesture = await tester.startGesture(Offset(friday.dx, barY));
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(Offset(saturday.dx - friday.dx, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    expect(movedDay, DateTime(2026, 10, 15));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('holding an empty day creates an event there', (tester) async {
     DateTime? created;
     await tester.pumpWidget(
@@ -236,39 +277,6 @@ void main() {
     await tester.pump();
 
     expect(created, DateTime(2026, 10, 16));
-  });
-
-  testWidgets('the duration sheet shows the gap between the wheels', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: EventDurationSheet(
-          event: CalendarEvent(
-            id: 'meet',
-            title: 'Встреча',
-            start: DateTime(2026, 10, 7, 16),
-            end: DateTime(2026, 10, 7, 20),
-          ),
-          onSave: (_) {},
-          onCancel: () {},
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(find.text('Весь день'), findsOneWidget);
-    expect(find.text('4ч.'), findsOneWidget);
-    expect(find.text('Повтор'), findsOneWidget);
-    expect(find.text('16:00–20:00'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    tester.view.viewInsets = const FakeViewPadding(bottom: 336);
-    addTearDown(tester.view.resetViewInsets);
-    await tester.pump();
-    expect(find.text('16:00–20:00'), findsOneWidget);
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('demo events fit in the month and on the timeline', (

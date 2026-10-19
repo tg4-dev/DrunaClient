@@ -6,6 +6,9 @@ const dayTitleSlot = dayMidnightInset + dayTitleRide;
 const expandOpenDuration = Duration(milliseconds: 360);
 const expandAlignDuration = Duration(milliseconds: 180);
 
+/// The sheet settles to full opacity early so the rest is just the move.
+const expandVeilCurve = Interval(0, 0.28, curve: Curves.easeOutCubic);
+
 class ExpandLayout {
   const ExpandLayout({
     required this.motion,
@@ -35,19 +38,8 @@ ExpandLayout expandLayout({
     motion: motion,
     top: _lerp(week.top, 0, motion),
     bottom: _lerp(week.bottom, screenHeight, motion),
-    veil: _phase(motion, 0, 0.28),
+    veil: expandVeilCurve.transform(motion),
   );
 }
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
-
-double _phase(
-  double t,
-  double begin,
-  double end, [
-  Curve curve = Curves.easeOutCubic,
-]) {
-  if (t <= begin) return 0;
-  if (t >= end) return 1;
-  return curve.transform((t - begin) / (end - begin));
-}
