@@ -7,6 +7,7 @@ import 'package:druna_app/features/calendar/calendar_screen.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:druna_app/shared/ui/druna_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 class DrunaApp extends StatefulWidget {
   const DrunaApp({
@@ -43,6 +44,9 @@ class _DrunaAppState extends State<DrunaApp> {
     title: 'Druna',
     debugShowCheckedModeBanner: false,
     theme: buildDrunaTheme(),
+    locale: const Locale('ru'),
+    supportedLocales: const [Locale('ru')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(
         textScaler: MediaQuery.textScalerOf(

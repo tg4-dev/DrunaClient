@@ -1,7 +1,9 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:druna_app/core/theme/druna_theme.dart';
 import 'package:druna_app/features/events/event_editor_screen.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
+import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/druna_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -292,8 +294,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   }
 
   Future<void> _freeTime() async {
-    final date = await showDatePicker(
-      context: context,
+    final date = await pickDate(
+      context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
       lastDate: DateTime.now().add(const Duration(days: 365)),
@@ -349,17 +351,14 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   }
 
   Future<void> _confirmTime() async {
-    final date = await showDatePicker(
-      context: context,
+    final date = await pickDate(
+      context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
+    final time = await pickTime(context, initialTime: TimeOfDay.now());
     if (time == null) return;
     final value = DateTime(
       date.year,
@@ -378,31 +377,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
   Future<void> _groupAction(String action) async {
     final deleting = action == 'delete';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(deleting ? 'Удалить группу?' : 'Выйти из группы?'),
-        content: Text(
-          deleting
-              ? 'Группа и её события будут удалены для всех участников.'
-              : 'Вернуться можно будет только по новому приглашению.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              deleting ? 'Удалить' : 'Выйти',
-              style: const TextStyle(color: DrunaColors.coral),
-            ),
-          ),
-        ],
-      ),
+    final confirmed = await confirmAction(
+      context,
+      title: deleting ? 'Удалить группу?' : 'Выйти из группы?',
+      message: deleting
+          ? 'Группа и её события будут удалены для всех участников.'
+          : 'Вернуться можно будет только по новому приглашению.',
+      confirmLabel: deleting ? 'Удалить' : 'Выйти',
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       if (deleting) {
         await widget.repository.deleteGroup(widget.groupId);
@@ -425,12 +409,24 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           onPressed: _group == null ? null : _addMember,
           icon: const Icon(Icons.person_add_alt_1_rounded),
         ),
-        PopupMenuButton<String>(
-          onSelected: _groupAction,
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'leave', child: Text('Выйти из группы')),
-            PopupMenuItem(value: 'delete', child: Text('Удалить группу')),
+        AdaptivePopupMenuButton.icon<String>(
+          icon: PlatformInfo.isIOS26OrHigher()
+              ? 'ellipsis.circle'
+              : Icons.more_vert_rounded,
+          items: const [
+            AdaptivePopupMenuItem(
+              label: 'Выйти из группы',
+              value: 'leave',
+              isDestructive: true,
+            ),
+            AdaptivePopupMenuItem(
+              label: 'Удалить группу',
+              value: 'delete',
+              isDestructive: true,
+            ),
           ],
+          onSelected: (_, item) => _groupAction(item.value!),
+          buttonStyle: PopupButtonStyle.plain,
         ),
       ],
     ),

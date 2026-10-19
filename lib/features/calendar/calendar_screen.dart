@@ -1,5 +1,7 @@
+import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/day_timeline.dart';
 import 'package:druna_app/features/calendar/day_title_layout.dart';
+import 'package:druna_app/features/calendar/event_sheet.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
@@ -18,15 +20,20 @@ class _CalendarScreenState extends State<CalendarScreen>
   final _timelineKey = GlobalKey<DayTimelineState>();
   final _dayMetrics = DayScrollMetrics();
   late final AnimationController _expand;
+  late List<CalendarEvent> _events;
   DateTime? _day;
   Rect? _from;
   double? _monthOffset;
   int? _openedStrip;
   var _pulling = false;
+  CalendarEvent? _editor;
+  Rect? _editorFrom;
+  var _editorIsNew = false;
 
   @override
   void initState() {
     super.initState();
+    _events = demoCalendarEvents(DateTime.now());
     _expand = AnimationController(vsync: this, duration: expandOpenDuration);
   }
 
@@ -93,6 +100,60 @@ class _CalendarScreenState extends State<CalendarScreen>
     return Duration(milliseconds: milliseconds.clamp(1, 360));
   }
 
+  void _createEvent(DateTime day, Rect rect) {
+    final event = createEventOnDay(
+      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      day: day,
+      now: DateTime.now(),
+    );
+    setState(() => _events = [..._events, event]);
+    _openEditor(event, rect, isNew: true);
+  }
+
+  void _moveEvent(CalendarEvent event, DateTime day) {
+    setState(() {
+      _events = [
+        for (final item in _events)
+          if (item.id == event.id) moveEventToDay(item, day) else item,
+      ];
+    });
+  }
+
+  void _openEditor(CalendarEvent event, Rect? from, {required bool isNew}) {
+    setState(() {
+      _editor = event;
+      _editorFrom = from;
+      _editorIsNew = isNew;
+    });
+  }
+
+  void _saveEditor(CalendarEvent updated) {
+    setState(() {
+      _events = [
+        for (final item in _events)
+          if (item.id == updated.id) updated else item,
+      ];
+      _editor = null;
+      _editorFrom = null;
+      _editorIsNew = false;
+    });
+  }
+
+  void _cancelEditor() {
+    final editor = _editor;
+    setState(() {
+      if (_editorIsNew && editor != null) {
+        _events = [
+          for (final item in _events)
+            if (item.id != editor.id) item,
+        ];
+      }
+      _editor = null;
+      _editorFrom = null;
+      _editorIsNew = false;
+    });
+  }
+
   Future<void> _close() async {
     if (!mounted) return;
     final day = _day;
@@ -144,25 +205,42 @@ class _CalendarScreenState extends State<CalendarScreen>
                 child: MonthCalendar(
                   key: _monthKey,
                   focus: DateTime.now(),
+                  events: _events,
                   onDayTap: _open,
+                  onEventTap: (event, rect) =>
+                      _openEditor(event, rect, isNew: false),
+                  onCreate: _createEvent,
+                  onMove: _moveEvent,
                 ),
               ),
               if (day != null && _from != null)
                 _ExpandedDay(
                   layout: layout!,
                   day: day,
+                  events: _events,
                   timelineKey: _timelineKey,
                   metrics: _dayMetrics,
                   onVisibleDay: (next) {
                     if (_day == next) return;
                     setState(() => _day = next);
                   },
+                  onEventTap: (event, rect) =>
+                      _openEditor(event, rect, isNew: false),
                   onClose: _close,
                   pulling: _pulling,
                   onPullStart: _onPullStart,
                   onPullUpdate: _onPullUpdate,
                   onPullEnd: _onPullEnd,
                   onPullCancel: _onPullCancel,
+                ),
+              if (_editor != null)
+                Positioned.fill(
+                  child: EventDurationSheet(
+                    event: _editor!,
+                    from: _editorFrom,
+                    onSave: _saveEditor,
+                    onCancel: _cancelEditor,
+                  ),
                 ),
             ],
           );
@@ -176,9 +254,11 @@ class _ExpandedDay extends StatelessWidget {
   const _ExpandedDay({
     required this.layout,
     required this.day,
+    required this.events,
     required this.timelineKey,
     required this.metrics,
     required this.onVisibleDay,
+    required this.onEventTap,
     required this.onClose,
     required this.pulling,
     required this.onPullStart,
@@ -189,9 +269,11 @@ class _ExpandedDay extends StatelessWidget {
 
   final ExpandLayout layout;
   final DateTime day;
+  final List<CalendarEvent> events;
   final GlobalKey<DayTimelineState> timelineKey;
   final DayScrollMetrics metrics;
   final ValueChanged<DateTime> onVisibleDay;
+  final void Function(CalendarEvent event, Rect rect) onEventTap;
   final VoidCallback onClose;
   final bool pulling;
   final GestureDragStartCallback onPullStart;
@@ -234,7 +316,9 @@ class _ExpandedDay extends StatelessWidget {
                             key: timelineKey,
                             day: day,
                             metrics: metrics,
+                            events: events,
                             onVisibleDay: onVisibleDay,
+                            onEventTap: onEventTap,
                           ),
                         ),
                       ),

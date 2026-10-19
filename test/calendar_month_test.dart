@@ -1,3 +1,6 @@
+import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/day_timeline.dart';
+import 'package:druna_app/features/calendar/event_sheet.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
@@ -172,6 +175,134 @@ void main() {
     final size = tester.getSize(rules.first);
     expect(size.height, greaterThan(0));
     expect(size.width, greaterThan(20));
+  });
+
+  testWidgets('holding an event drops it on another day', (tester) async {
+    CalendarEvent? moved;
+    DateTime? movedDay;
+    final event = CalendarEvent(
+      id: 'druna',
+      title: 'Друна',
+      start: DateTime(2026, 10, 14, 10),
+      end: DateTime(2026, 10, 14, 12),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MonthCalendar(
+          focus: DateTime(2026, 10, 14),
+          events: [event],
+          onDayTap: _ignoreTap,
+          onMove: (event, day) {
+            moved = event;
+            movedDay = day;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Друна')),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(const Offset(120, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    expect(moved?.id, 'druna');
+    expect(movedDay, DateTime(2026, 10, 15));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('holding an empty day creates an event there', (tester) async {
+    DateTime? created;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MonthCalendar(
+          focus: DateTime(2026, 10, 14),
+          onDayTap: _ignoreTap,
+          onCreate: (day, rect) => created = day,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('day-2026-10-16'))),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.up();
+    await tester.pump();
+
+    expect(created, DateTime(2026, 10, 16));
+  });
+
+  testWidgets('the duration sheet shows the gap between the wheels', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventDurationSheet(
+          event: CalendarEvent(
+            id: 'meet',
+            title: 'Встреча',
+            start: DateTime(2026, 10, 7, 16),
+            end: DateTime(2026, 10, 7, 20),
+          ),
+          onSave: (_) {},
+          onCancel: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Весь день'), findsOneWidget);
+    expect(find.text('4ч.'), findsOneWidget);
+    expect(find.text('Повтор'), findsOneWidget);
+    expect(find.text('16:00–20:00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 336);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+    expect(find.text('16:00–20:00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('demo events fit in the month and on the timeline', (
+    tester,
+  ) async {
+    final day = DateTime(2026, 10, 14);
+    final events = demoCalendarEvents(day);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MonthCalendar(focus: day, events: events, onDayTap: _ignoreTap),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Друна'), findsOneWidget);
+    expect(find.text('Поездка'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    final metrics = DayScrollMetrics();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DayTimeline(
+          day: day,
+          metrics: metrics,
+          events: events,
+          onVisibleDay: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Друна'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    metrics.dispose();
   });
 }
 

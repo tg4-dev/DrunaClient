@@ -1,6 +1,7 @@
 import 'package:druna_app/core/theme/druna_theme.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
+import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/druna_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -46,8 +47,8 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
   }
 
   Future<void> _pickDate() async {
-    final date = await showDatePicker(
-      context: context,
+    final date = await pickDate(
+      context,
       initialDate: _start,
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
       lastDate: DateTime.now().add(const Duration(days: 730)),
@@ -68,8 +69,8 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
 
   Future<void> _pickTime({required bool end}) async {
     final current = end ? _end : _start;
-    final time = await showTimePicker(
-      context: context,
+    final time = await pickTime(
+      context,
       initialTime: TimeOfDay.fromDateTime(current),
     );
     if (time == null) return;
@@ -319,27 +320,14 @@ Future<bool?> openEventDetails(
           label: 'Удалить',
           secondary: true,
           onPressed: () async {
-            final confirmed = await showDialog<bool>(
-              context: sheetContext,
-              builder: (context) => AlertDialog(
-                title: const Text('Удалить встречу?'),
-                content: const Text('Это действие нельзя отменить.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Отмена'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text(
-                      'Удалить',
-                      style: TextStyle(color: DrunaColors.coral),
-                    ),
-                  ),
-                ],
-              ),
+            final confirmed = await confirmAction(
+              sheetContext,
+              title: 'Удалить встречу?',
+              message: 'Это действие нельзя отменить.',
+              confirmLabel: 'Удалить',
+              destructive: true,
             );
-            if (confirmed != true) return;
+            if (!confirmed) return;
             try {
               await repository.deleteEvent(event.id, groupId: groupId);
               if (sheetContext.mounted) Navigator.of(sheetContext).pop(true);

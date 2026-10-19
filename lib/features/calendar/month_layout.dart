@@ -1,13 +1,11 @@
-const monthRowLevels = [52.0, 96.0, 140.0];
-const monthRowMin = 52.0;
-const monthRowMax = 140.0;
+const monthRowLevels = [100.0, 148.0, 230.0, 340.0, 520.0];
+const monthRowMin = 100.0;
+const monthRowMax = 520.0;
 const monthTitleHeight = 58.0;
 const weekdayHeaderHeight = 28.0;
 
 /// Extra height of a month-start row, as a fraction of the regular row.
 const monthBandRatio = 0.34;
-const plainDayPad = 16.0;
-const bandDayPad = 8.0;
 
 const monthNames = [
   'Январь',

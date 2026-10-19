@@ -2,6 +2,7 @@ import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/theme/druna_theme.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
+import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/druna_widgets.dart';
 import 'package:flutter/material.dart';
 
@@ -179,26 +180,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label: 'Выйти',
             secondary: true,
             onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Выйти из аккаунта?'),
-                  content: const Text(
+              final confirmed = await confirmAction(
+                context,
+                title: 'Выйти из аккаунта?',
+                message:
                     'Токены и приватные данные этой сессии будут удалены с устройства.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Отмена'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Выйти'),
-                    ),
-                  ],
-                ),
+                confirmLabel: 'Выйти',
               );
-              if (confirmed == true) {
+              if (confirmed) {
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
                 await widget.session.logout();

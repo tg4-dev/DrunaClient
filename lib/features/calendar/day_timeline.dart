@@ -1,3 +1,5 @@
+import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/day_events.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
@@ -33,6 +35,9 @@ class DayTimeline extends StatefulWidget {
     required this.onVisibleDay,
     this.metrics,
     this.hourLabelOpacity = 1,
+    this.events = const [],
+    this.hiddenEventId,
+    this.onEventTap,
     super.key,
   });
 
@@ -40,6 +45,9 @@ class DayTimeline extends StatefulWidget {
   final ValueChanged<DateTime> onVisibleDay;
   final DayScrollMetrics? metrics;
   final double hourLabelOpacity;
+  final List<CalendarEvent> events;
+  final String? hiddenEventId;
+  final void Function(CalendarEvent event, Rect rect)? onEventTap;
 
   @override
   State<DayTimeline> createState() => DayTimelineState();
@@ -71,8 +79,10 @@ class DayTimelineState extends State<DayTimeline>
     super.initState();
     final index = calendarDaysBetween(dayTimelineOrigin, dateOnly(widget.day));
     final origin = index * 24 * _pixels - dayMidnightInset;
-    _scroll = ScrollController(initialScrollOffset: origin < 0 ? 0 : origin)
+    final initial = origin < 0 ? 0.0 : origin;
+    _scroll = ScrollController(initialScrollOffset: initial)
       ..addListener(_publish);
+    widget.metrics?.update(initial, _pixels);
     _reportedDay = dateOnly(widget.day);
     _snap = AnimationController(
       vsync: this,
@@ -235,7 +245,20 @@ class DayTimelineState extends State<DayTimeline>
               pixelsPerHour: _pixels,
               hourLabelOpacity: widget.hourLabelOpacity,
             ),
-            child: const SizedBox.expand(),
+            child: widget.metrics == null
+                ? const SizedBox.expand()
+                : AnimatedBuilder(
+                    animation: widget.metrics!,
+                    builder: (context, _) => DayEventLayer(
+                      day: addCalendarDays(dayTimelineOrigin, index),
+                      dayIndex: index,
+                      pixelsPerHour: widget.metrics!.pixelsPerHour,
+                      viewportLeft: widget.metrics!.offset,
+                      events: widget.events,
+                      hiddenEventId: widget.hiddenEventId,
+                      onEventTap: widget.onEventTap,
+                    ),
+                  ),
           ),
         ),
       ),

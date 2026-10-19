@@ -1,13 +1,31 @@
+import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/event_layout.dart';
+import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 class MonthCalendar extends StatefulWidget {
-  const MonthCalendar({required this.onDayTap, this.focus, super.key});
+  const MonthCalendar({
+    required this.onDayTap,
+    this.focus,
+    this.events = const [],
+    this.hiddenEventId,
+    this.onEventTap,
+    this.onCreate,
+    this.onMove,
+    super.key,
+  });
 
   final void Function(DateTime day, Rect weekRect) onDayTap;
   final DateTime? focus;
+  final List<CalendarEvent> events;
+  final String? hiddenEventId;
+  final void Function(CalendarEvent event, Rect rect)? onEventTap;
+  final void Function(DateTime day, Rect chipRect)? onCreate;
+  final void Function(CalendarEvent event, DateTime day)? onMove;
 
   @override
   State<MonthCalendar> createState() => MonthCalendarState();
@@ -20,7 +38,7 @@ class MonthCalendarState extends State<MonthCalendar>
   late final AnimationController _rowSnap;
   late DateTime _visibleMonth;
   late DateTime _today;
-  double _rowHeight = monthRowLevels[1];
+  late final ValueNotifier<double> _rows = ValueNotifier(monthRowLevels[1]);
   double _pinchStartHeight = monthRowLevels[1];
   double _pinchStartOffset = 0;
   double _pinchStartFocal = 0;
@@ -32,6 +50,18 @@ class MonthCalendarState extends State<MonthCalendar>
   final _pointers = <int, Offset>{};
   double? _pinchStartDistance;
   var _snapping = false;
+  var _holding = false;
+  int? _holdPointer;
+  String? _holdEventId;
+  Offset? _holdLocal;
+  DateTime? _hoverDay;
+
+  double get _rowHeight => _rows.value;
+
+  set _rowHeight(double value) {
+    if (_rows.value == value) return;
+    _rows.value = value;
+  }
 
   @override
   void initState() {
@@ -53,6 +83,7 @@ class MonthCalendarState extends State<MonthCalendar>
   void dispose() {
     _scroll.dispose();
     _rowSnap.dispose();
+    _rows.dispose();
     super.dispose();
   }
 
@@ -134,6 +165,7 @@ class MonthCalendarState extends State<MonthCalendar>
 
   void _onPointerDown(PointerDownEvent event) {
     _pointers[event.pointer] = event.position;
+    if (_pointers.length >= 2) _cancelHold();
     if (_pointers.length != 2) return;
     _rowSnap.stop();
     _snapping = false;
@@ -148,27 +180,48 @@ class MonthCalendarState extends State<MonthCalendar>
   void _onPointerMove(PointerMoveEvent event) {
     if (!_pointers.containsKey(event.pointer)) return;
     _pointers[event.pointer] = event.position;
+    if (_holding && event.pointer == _holdPointer) {
+      _updateHold(event.position);
+    }
     final start = _pinchStartDistance;
-    if (_pointers.length < 2 || start == null || start == 0) return;
+    if (_holding || _pointers.length < 2 || start == null || start == 0) {
+      return;
+    }
     final scale = _pointerDistance() / start;
-    final next = (_pinchStartHeight * scale)
+    var next = (_pinchStartHeight * scale)
         .clamp(monthRowMin, monthRowMax)
         .toDouble();
     final focal = _focalInList() ?? _pinchStartFocal;
     _lastFocal = focal;
+    final previous = _rowHeight;
+    var didSnap = false;
+    if (previous > monthBarSnapThreshold && next <= monthBarSnapThreshold) {
+      next = monthRowMin;
+      didSnap = true;
+    }
     final anchored = zoomedOffset(
       offset: _pinchStartOffset,
       focal: _pinchStartFocal,
       oldExtent: _pinchStartHeight,
       newExtent: next,
     );
-    setState(() => _rowHeight = next);
-    _jump(anchored + _pinchStartFocal - focal);
+    final jumped = anchored + _pinchStartFocal - focal;
+    _rowHeight = next;
+    _jump(jumped);
+    if (!didSnap) return;
+    HapticFeedback.lightImpact();
+    _pinchStartHeight = next;
+    _pinchStartDistance = _pointerDistance();
+    _pinchStartOffset = jumped;
+    _pinchStartFocal = focal;
+    _lastFocal = focal;
   }
 
   void _onPointerUp(PointerEvent event) {
+    final finishHold = _holding && event.pointer == _holdPointer;
     final wasPinch = _pointers.length >= 2;
     _pointers.remove(event.pointer);
+    if (finishHold && _pointers.isEmpty) _finishHold();
     if (!wasPinch || _pointers.length >= 2) return;
     _pinchStartDistance = null;
     _snapFrom = _rowHeight;
@@ -190,7 +243,7 @@ class MonthCalendarState extends State<MonthCalendar>
       oldExtent: _snapFrom,
       newExtent: next,
     );
-    setState(() => _rowHeight = next);
+    _rowHeight = next;
     _jump(offset);
     if (_rowSnap.isCompleted) _snapping = false;
   }
@@ -200,69 +253,261 @@ class MonthCalendarState extends State<MonthCalendar>
     return (points[0] - points[1]).distance;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Colors.black,
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: monthTitleHeight,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    monthTitle(_visibleMonth),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.6,
-                    ),
-                  ),
+  void _beginHold(CalendarEvent? event, Offset global) {
+    if (_holding || _pointers.length != 1) return;
+    _holdPointer = _pointers.keys.single;
+    setState(() {
+      _holding = true;
+      _holdEventId = event?.id;
+      _holdLocal = _localOf(global);
+      _hoverDay = _dayAtGlobal(global);
+    });
+  }
+
+  void _updateHold(Offset global) {
+    setState(() {
+      _holdLocal = _localOf(global);
+      _hoverDay = _dayAtGlobal(global);
+    });
+  }
+
+  void _finishHold() {
+    final day = _hoverDay;
+    final eventId = _holdEventId;
+    final creating = eventId == null;
+    _clearHold();
+    if (day == null) return;
+    if (creating) {
+      widget.onCreate?.call(
+        day,
+        _rectForDaySlot(day) ?? const Rect.fromLTWH(24, 120, 80, 18),
+      );
+      return;
+    }
+    CalendarEvent? event;
+    for (final item in widget.events) {
+      if (item.id == eventId) event = item;
+    }
+    if (event == null || sameDay(eventFirstDay(event), day)) return;
+    widget.onMove?.call(event, day);
+  }
+
+  void _cancelHold() {
+    if (!_holding) return;
+    _clearHold();
+  }
+
+  void _clearHold() {
+    setState(() {
+      _holding = false;
+      _holdEventId = null;
+      _holdLocal = null;
+      _hoverDay = null;
+      _holdPointer = null;
+    });
+  }
+
+  Offset? _localOf(Offset global) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.globalToLocal(global);
+  }
+
+  DateTime? _dayAtGlobal(Offset global) {
+    final box = _listKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !_scroll.hasClients) return null;
+    final local = box.globalToLocal(global);
+    if (local.dx < 0 ||
+        local.dy < 0 ||
+        local.dx >= box.size.width ||
+        local.dy >= box.size.height) {
+      return null;
+    }
+    final contentY = _scroll.offset + local.dy;
+    if (_rowHeight <= 0) return null;
+    var index = stripIndexForScrollUnits(contentY / _rowHeight);
+    var strip = stripAt(index);
+    var top = stripUnits(index) * _rowHeight;
+    var extent = stripExtentUnits(strip) * _rowHeight;
+    if (contentY >= top + extent && index + 1 < stripCount) {
+      index += 1;
+      strip = stripAt(index);
+      top = stripUnits(index) * _rowHeight;
+      extent = stripExtentUnits(strip) * _rowHeight;
+    }
+    if (contentY < top || contentY >= top + extent) return null;
+    final band = stripHasBand(strip)
+        ? extent * monthBandRatio / (1 + monthBandRatio)
+        : 0.0;
+    if (contentY < top + band) return null;
+    final days = daysOfWeek(strip.weekIndex);
+    final first = days.indexWhere((day) => day.day == 1);
+    final column = (local.dx / (box.size.width / 7)).floor();
+    if (column < 0 || column > 6) return null;
+    if (!columnVisible(kind: strip.kind, firstOfMonth: first, column: column)) {
+      return null;
+    }
+    return days[column];
+  }
+
+  Rect? _rectForDaySlot(DateTime day) {
+    final box = _listKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !_scroll.hasClients) return null;
+    final index = stripIndexOfDay(day);
+    final strip = stripAt(index);
+    final origin = box.localToGlobal(Offset.zero);
+    final top = origin.dy + stripUnits(index) * _rowHeight - _scroll.offset;
+    final extent = stripExtentUnits(strip) * _rowHeight;
+    final band = stripHasBand(strip)
+        ? extent * monthBandRatio / (1 + monthBandRatio)
+        : 0.0;
+    final days = daysOfWeek(strip.weekIndex);
+    final column = days.indexWhere((item) => sameDay(item, day));
+    if (column < 0) return null;
+    final columnWidth = box.size.width / 7;
+    final density = densityForRowHeight(_rowHeight);
+    return Rect.fromLTWH(
+      origin.dx + column * columnWidth + 2,
+      top + band + monthEventHeader,
+      columnWidth - 4,
+      density.itemHeight,
+    );
+  }
+
+  Widget _dragChip() {
+    final local = _holdLocal;
+    if (local == null) return const SizedBox.shrink();
+    var title = 'Название';
+    final id = _holdEventId;
+    if (id != null) {
+      for (final event in widget.events) {
+        if (event.id == id) title = eventDisplayTitle(event);
+      }
+    }
+    const width = 132.0;
+    const height = 28.0;
+    return Positioned(
+      left: local.dx - width / 2,
+      top: local.dy - height - 24,
+      width: width,
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: calendarEventColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            const _WeekdayHeader(),
-            Expanded(
-              child: Listener(
-                onPointerDown: _onPointerDown,
-                onPointerMove: _onPointerMove,
-                onPointerUp: _onPointerUp,
-                onPointerCancel: _onPointerUp,
-                child: CustomScrollView(
-                  key: _listKey,
-                  controller: _scroll,
-                  physics: _pointers.length >= 2
-                      ? const NeverScrollableScrollPhysics()
-                      : const BouncingScrollPhysics(),
-                  slivers: [
-                    _MonthStripSliver(
-                      rowHeight: _rowHeight,
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final strip = stripAt(index);
-                        return _WeekStrip(
-                          strip: strip,
-                          today: _today,
-                          onTap: (day) {
-                            final rect = rectForStrip(index);
-                            if (rect != null) widget.onDayTap(day, rect);
-                          },
-                        );
-                      }, childCount: stripCount),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ColoredBox(
+          color: Colors.black,
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: monthTitleHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        monthTitle(_visibleMonth),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.6,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const _WeekdayHeader(),
+                Expanded(
+                  child: Listener(
+                    onPointerDown: _onPointerDown,
+                    onPointerMove: _onPointerMove,
+                    onPointerUp: _onPointerUp,
+                    onPointerCancel: _onPointerCancel,
+                    child: AnimatedBuilder(
+                      animation: _rows,
+                      builder: (context, _) {
+                        return CustomScrollView(
+                          key: _listKey,
+                          controller: _scroll,
+                          physics: _pointers.length >= 2 || _holding
+                              ? const NeverScrollableScrollPhysics()
+                              : const BouncingScrollPhysics(),
+                          slivers: [
+                            _MonthStripSliver(
+                              rowHeight: _rowHeight,
+                              delegate: SliverChildBuilderDelegate((
+                                context,
+                                index,
+                              ) {
+                                final strip = stripAt(index);
+                                return _WeekStrip(
+                                  strip: strip,
+                                  today: _today,
+                                  events: widget.events,
+                                  hiddenEventId:
+                                      _holdEventId ?? widget.hiddenEventId,
+                                  hoverDay: _hoverDay,
+                                  onEventTap: widget.onEventTap,
+                                  onHoldStart: _beginHold,
+                                  onTap: (day) {
+                                    final rect = rectForStrip(index);
+                                    if (rect != null) {
+                                      widget.onDayTap(day, rect);
+                                    }
+                                  },
+                                );
+                              }, childCount: stripCount),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_holding) _dragChip(),
+      ],
+    );
+  }
+
+  void _onPointerCancel(PointerEvent event) {
+    if (_holding && event.pointer == _holdPointer) _cancelHold();
+    _onPointerUp(event);
   }
 }
 
@@ -300,11 +545,21 @@ class _WeekStrip extends StatelessWidget {
     required this.strip,
     required this.today,
     required this.onTap,
+    required this.events,
+    this.hiddenEventId,
+    this.hoverDay,
+    this.onEventTap,
+    this.onHoldStart,
   });
 
   final MonthStrip strip;
   final DateTime today;
   final ValueChanged<DateTime> onTap;
+  final List<CalendarEvent> events;
+  final String? hiddenEventId;
+  final DateTime? hoverDay;
+  final void Function(CalendarEvent event, Rect rect)? onEventTap;
+  final void Function(CalendarEvent? event, Offset global)? onHoldStart;
 
   @override
   Widget build(BuildContext context) {
@@ -312,55 +567,45 @@ class _WeekStrip extends StatelessWidget {
     final firstOfMonth = days.indexWhere((day) => day.day == 1);
     final rowKey = stripKeyId(strip);
     final band = stripHasBand(strip);
-    return LayoutBuilder(
-      key: ValueKey(rowKey),
-      builder: (context, constraints) {
-        final bandHeight = band
-            ? constraints.maxHeight * monthBandRatio / (1 + monthBandRatio)
-            : 0.0;
-        return Column(
-          children: [
-            if (band)
-              _MonthBand(
-                key: ValueKey('$rowKey-band'),
-                label: monthShort(days[firstOfMonth]),
-                slot: firstOfMonth < 0 ? 0 : firstOfMonth,
-                height: bandHeight,
-              )
-            else
-              _StripRule(
-                widthFactor: strip.kind == MonthStripKind.tail
-                    ? (firstOfMonth > 0 ? firstOfMonth / 7 : 1)
-                    : 1,
+    return RepaintBoundary(
+      child: LayoutBuilder(
+        key: ValueKey(rowKey),
+        builder: (context, constraints) {
+          final bandHeight = band
+              ? constraints.maxHeight * monthBandRatio / (1 + monthBandRatio)
+              : 0.0;
+          return Column(
+            children: [
+              if (band)
+                _MonthBand(
+                  key: ValueKey('$rowKey-band'),
+                  label: monthShort(days[firstOfMonth]),
+                  slot: firstOfMonth < 0 ? 0 : firstOfMonth,
+                  height: bandHeight,
+                )
+              else
+                _StripRule(
+                  widthFactor: strip.kind == MonthStripKind.tail
+                      ? (firstOfMonth > 0 ? firstOfMonth / 7 : 1)
+                      : 1,
+                ),
+              Expanded(
+                child: MonthWeekGrid(
+                  strip: strip,
+                  rowKey: rowKey,
+                  today: today,
+                  events: events,
+                  hiddenEventId: hiddenEventId,
+                  hoverDay: hoverDay,
+                  onDayTap: onTap,
+                  onEventTap: onEventTap,
+                  onHoldStart: onHoldStart,
+                ),
               ),
-            Expanded(
-              child: Row(
-                children: [
-                  for (var slot = 0; slot < 7; slot++)
-                    Expanded(child: _slot(days, slot, firstOfMonth, rowKey)),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _slot(List<DateTime> days, int slot, int firstOfMonth, String rowKey) {
-    final showDay = switch (strip.kind) {
-      MonthStripKind.tail => firstOfMonth > 0 && slot < firstOfMonth,
-      MonthStripKind.fresh => firstOfMonth >= 0 && slot >= firstOfMonth,
-      MonthStripKind.full => true,
-    };
-    if (!showDay) return const SizedBox.expand();
-    final day = days[slot];
-    return _DayCell(
-      key: ValueKey('$rowKey-$slot'),
-      day: day,
-      today: sameDay(day, today),
-      band: stripHasBand(strip),
-      onTap: () => onTap(day),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -432,61 +677,6 @@ class _MonthBand extends StatelessWidget {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _DayCell extends StatelessWidget {
-  const _DayCell({
-    required this.day,
-    required this.today,
-    required this.onTap,
-    required this.band,
-    super.key,
-  });
-
-  final DateTime day;
-  final bool today;
-  final VoidCallback onTap;
-  final bool band;
-
-  @override
-  Widget build(BuildContext context) {
-    final weekend = day.weekday >= DateTime.saturday;
-    final color = today
-        ? Colors.white
-        : weekend
-        ? const Color(0xFFD1D1D6)
-        : Colors.white;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: EdgeInsets.only(top: band ? bandDayPad : plainDayPad),
-          child: Container(
-            width: 28,
-            height: 28,
-            alignment: Alignment.center,
-            decoration: today
-                ? const BoxDecoration(
-                    color: Color(0xFFFF3B30),
-                    shape: BoxShape.circle,
-                  )
-                : null,
-            child: Text(
-              '${day.day}',
-              key: ValueKey('day-${day.year}-${day.month}-${day.day}'),
-              style: TextStyle(
-                color: color,
-                fontSize: 17,
-                fontWeight: today ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
