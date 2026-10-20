@@ -1,3 +1,4 @@
+import 'package:druna_app/app/app_settings.dart';
 import 'package:druna_app/app/druna_app.dart';
 import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/config/app_config.dart';
@@ -16,6 +17,11 @@ Future<void> main() async {
   final repository = DrunaRepository(api);
 
   runApp(
-    DrunaApp(repository: repository, tokenStore: tokenStore, config: config),
+    DrunaApp(
+      repository: repository,
+      tokenStore: tokenStore,
+      config: config,
+      settingsStorage: PreferencesSettingsStorage(),
+    ),
   );
 }
