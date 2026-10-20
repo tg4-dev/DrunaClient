@@ -1,4 +1,8 @@
+import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,6 +57,7 @@ class AppSettings extends ChangeNotifier {
   static const _demoOfflineKey = 'settings.demo_offline';
   static const _demoSchedulesKey = 'settings.demo_schedules';
   static const _slowMotionKey = 'settings.slow_motion';
+  static const _ownColorKey = 'settings.own_color';
 
   /// How much slower every animation runs with [slowMotion].
   static const slowMotionFactor = 5.0;
@@ -67,6 +72,7 @@ class AppSettings extends ChangeNotifier {
   bool _demoOffline = false;
   bool _demoSchedules;
   bool _slowMotion = false;
+  int? _ownColorSlot;
   bool _disposed = false;
 
   /// Friends come from [DemoFriendsSource] instead of the server.
@@ -82,6 +88,18 @@ class AppSettings extends ChangeNotifier {
   /// Every animation runs [slowMotionFactor] times slower.
   bool get slowMotion => _slowMotion;
 
+  /// The colour the user picked for themselves, as a slot of
+  /// [avatarPalette]; null — the one their id gives. Kept on this device
+  /// only: the server has no field for it yet.
+  int? get ownColorSlot => _ownColorSlot;
+
+  set ownColorSlot(int? slot) {
+    final valid = slot != null && slot >= 0 && slot < avatarPalette.length;
+    _ownColorSlot = valid ? slot : null;
+    notifyListeners();
+    _storage.setString(_ownColorKey, valid ? '$slot' : '');
+  }
+
   Future<void> load() async {
     if (allowDemo) {
       _demoFriends = await _storage.getBool(_demoFriendsKey) ?? _demoFriends;
@@ -90,6 +108,10 @@ class AppSettings extends ChangeNotifier {
           await _storage.getBool(_demoSchedulesKey) ?? _demoSchedules;
     }
     _slowMotion = await _storage.getBool(_slowMotionKey) ?? false;
+    final slot = int.tryParse(await _storage.getString(_ownColorKey) ?? '');
+    _ownColorSlot = slot != null && slot >= 0 && slot < avatarPalette.length
+        ? slot
+        : null;
     if (_disposed) return;
     _applySlowMotion();
     notifyListeners();
@@ -127,4 +149,13 @@ class AppSettings extends ChangeNotifier {
   void _applySlowMotion() {
     timeDilation = _slowMotion ? slowMotionFactor : 1;
   }
+}
+
+/// The user's colour: the one they picked, else the one their id gives,
+/// else the calendar's default until the profile has loaded.
+Color ownColorFor(AppSettings settings, UserProfile? profile) {
+  final slot = settings.ownColorSlot;
+  if (slot != null) return avatarPalette[slot];
+  if (profile == null) return calendarEventColor;
+  return avatarColorFor(id: profile.id, username: profile.username);
 }

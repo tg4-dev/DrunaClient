@@ -9,7 +9,6 @@ import 'package:druna_app/features/friends/friends_page.dart';
 import 'package:druna_app/features/friends/friends_source.dart';
 import 'package:druna_app/features/friends/friends_store.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
-import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 
 /// The signed-in app: one horizontal plane with four stops.
@@ -92,11 +91,7 @@ class _HomePagerState extends State<HomePager> {
   /// The profile arrives after sign-in; it sets the colour of my events.
   void _onSession() => setState(() {});
 
-  Color get _ownColor {
-    final profile = widget.session.profile;
-    if (profile == null) return calendarEventColor;
-    return avatarColorFor(id: profile.id, username: profile.username);
-  }
+  Color get _ownColor => ownColorFor(widget.settings, widget.session.profile);
 
   @override
   void dispose() {

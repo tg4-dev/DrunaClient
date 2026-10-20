@@ -43,6 +43,8 @@ void main() {
     for (var i = 1; i < band.stops.length; i++) {
       expect(band.stops[i], greaterThanOrEqualTo(band.stops[i - 1]));
     }
+    // Plain RGB in between: no invented middle colours.
+    expect(band.colors, [_pink, _pink, _green, _green]);
     // Pink centre at a quarter of the band, green at three quarters.
     expect(band.stops[1], closeTo(0.25, 0.02));
     expect(band.stops[band.stops.length - 2], closeTo(0.75, 0.02));

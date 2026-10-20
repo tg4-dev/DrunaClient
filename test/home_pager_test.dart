@@ -5,10 +5,12 @@ import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
+import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/calendar_screen.dart';
 import 'package:druna_app/features/friends/friends_page.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -155,6 +157,21 @@ void main() {
     // Still friends' calendar: neither my calendar nor the friends page.
     expect(tester.getRect(alinaFinder()).left, lessThan(200));
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
+  });
+
+  testWidgets('picking my colour in settings repaints my events', (
+    tester,
+  ) async {
+    final settings = await pumpPager(tester);
+    await tester.tap(find.byKey(const ValueKey('settings-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('own-color-10')));
+    await tester.pumpAndSettle();
+    expect(settings.ownColorSlot, 10);
+
+    final calendar = tester.element(find.byType(CalendarScreen));
+    expect(OwnEventColor.of(calendar), avatarPalette[10]);
   });
 
   testWidgets('an open day keeps horizontal swipes for itself', (tester) async {

@@ -1,6 +1,8 @@
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/day_timeline.dart';
+import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
+import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
 import 'package:flutter/material.dart';
@@ -425,6 +427,103 @@ void main() {
       expect(fades.every((opacity) => opacity.opacity == 1), isTrue);
     });
 
+    test('friends’ chips stop at the middle density', () {
+      expect(friendDensityFor(detailDensity), titleDensity);
+      expect(friendDensityFor(titleDensity), titleDensity);
+      expect(friendDensityFor(barDensity), barDensity);
+    });
+
+    testWidgets('mid-swipe, every chip stays inside its own week', (
+      tester,
+    ) async {
+      final mode = ValueNotifier<double>(0);
+      addTearDown(mode.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MonthCalendar(
+              focus: today,
+              events: [mine],
+              friendEvents: [busy],
+              mode: mode,
+              onDayTap: (_, _) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final chips = find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).borderRadius != null,
+      );
+      for (final t in [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]) {
+        mode.value = t;
+        await tester.pump();
+        for (final chip in chips.evaluate()) {
+          final week = find.ancestor(
+            of: find.byWidget(chip.widget),
+            matching: find.byType(MonthWeekGrid),
+          );
+          if (week.evaluate().isEmpty) continue;
+          final box = tester.getRect(find.byWidget(chip.widget).first);
+          final bounds = tester.getRect(week.first);
+          expect(box.top, greaterThanOrEqualTo(bounds.top - 0.5), reason: '$t');
+          expect(
+            box.bottom,
+            lessThanOrEqualTo(bounds.bottom + 0.5),
+            reason: '$t',
+          );
+        }
+      }
+    });
+
+    testWidgets('folded chips lie on their own line', (tester) async {
+      final mode = ValueNotifier<double>(0.999);
+      addTearDown(mode.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MonthCalendar(
+              focus: today,
+              events: [mine],
+              friendEvents: [busy],
+              mode: mode,
+              onDayTap: (_, _) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Rect weekOf(Finder finder) => tester.getRect(
+        find.ancestor(of: finder, matching: find.byType(MonthWeekGrid)).first,
+      );
+
+      // Nearly in friends' mode: my chip is folded under the top line.
+      final myChip = find.text('Моё');
+      expect(
+        tester.getRect(myChip).top - weekOf(myChip).top,
+        lessThan(chipFoldGap + 4),
+      );
+
+      // Nearly in my mode: friends' chips sit on the bottom line.
+      mode.value = 0.001;
+      await tester.pump();
+      final theirs = find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).color == friendColour,
+      );
+      final rect = tester.getRect(theirs.first);
+      expect(
+        weekOf(theirs.first).bottom - rect.bottom,
+        lessThan(chipFoldGap + 1),
+      );
+    });
+
     testWidgets('today is a white disc with a dark number', (tester) async {
       await pumpMonth(tester, 0);
       final number = tester.widget<Text>(
@@ -480,11 +579,14 @@ void main() {
       expect(textShown(tester, 'Моё'), isFalse);
       expect(chipColours(tester), contains(friendColour));
 
-      // My chip is beyond the line and takes no taps.
+      // My chip lies folded on the top line: a tap there brings my events
+      // back instead of opening the chip.
       await tester.tap(find.text('Моё'), warnIfMissed: false);
+      expect(tapped, isEmpty);
 
+      final before = shown;
       await tester.tap(find.bySemanticsLabel('Показать мои события').first);
-      expect(shown, 1);
+      expect(shown, before + 1);
       expect(tapped, isEmpty);
     });
   });

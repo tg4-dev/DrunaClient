@@ -1,8 +1,8 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/event_repeat_block.dart';
 import 'package:druna_app/features/calendar/event_time_block.dart';
 import 'package:druna_app/features/calendar/repeat_rule.dart';
+import 'package:druna_app/shared/ui/action_pill.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -12,13 +12,11 @@ const _blockGap = 12.0;
 const _cardRadius = Radius.circular(20);
 const _cardPadding = EdgeInsets.fromLTRB(18, 14, 18, 16);
 const _buttonInset = 44.0;
-const _buttonHeight = 44.0;
-const _buttonWidth = 80.0;
-const _iconSize = 24.0;
+final _buttonHeight = ActionPillSize.large.height;
 const _buttonsLift = 19.0;
 
 /// Room under the stack for the ✕/✓ row floating above the keyboard.
-const _buttonsRoom = _buttonHeight + _buttonsLift + 12;
+final _buttonsRoom = _buttonHeight + _buttonsLift + 12;
 const _scrim = Color(0xD9000000);
 
 const _enterDuration = Duration(milliseconds: 460);
@@ -450,49 +448,24 @@ class _EventDurationSheetState extends State<EventDurationSheet>
   }
 
   Widget _buttons() {
-    // Fixed padding around the icon gives the pill its width; the native
-    // button centres its child only when the child spans the pill.
-    const padding = EdgeInsets.symmetric(
-      horizontal: (_buttonWidth - _iconSize) / 2,
-    );
-    final radius = BorderRadius.circular(_buttonHeight / 2);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Semantics(
+        ActionPill(
+          key: const ValueKey('sheet-cancel'),
+          icon: Icons.close_rounded,
           label: 'Отмена',
-          button: true,
-          child: AdaptiveButton.icon(
-            key: const ValueKey('sheet-cancel'),
-            onPressed: () => _close(widget.onCancel),
-            icon: Icons.close_rounded,
-            iconColor: Colors.white,
-            color: SheetStyle.muted,
-            style: AdaptiveButtonStyle.glass,
-            size: AdaptiveButtonSize.large,
-            padding: padding,
-            borderRadius: radius,
-            useSmoothRectangleBorder: false,
-          ),
+          kind: ActionPillKind.cancel,
+          onPressed: () => _close(widget.onCancel),
         ),
-        Semantics(
+        ActionPill(
+          key: const ValueKey('sheet-save'),
+          icon: Icons.check_rounded,
           label: 'Сохранить',
-          button: true,
-          child: AdaptiveButton.icon(
-            key: const ValueKey('sheet-save'),
-            onPressed: () {
-              final draft = _draft();
-              _close(() => widget.onSave(draft));
-            },
-            icon: Icons.check_rounded,
-            iconColor: Colors.white,
-            color: SheetStyle.accent,
-            style: AdaptiveButtonStyle.prominentGlass,
-            size: AdaptiveButtonSize.large,
-            padding: padding,
-            borderRadius: radius,
-            useSmoothRectangleBorder: false,
-          ),
+          onPressed: () {
+            final draft = _draft();
+            _close(() => widget.onSave(draft));
+          },
         ),
       ],
     );

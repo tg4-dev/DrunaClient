@@ -100,8 +100,8 @@ lib/
   features/settings/ страница «Настройки» с параметрами для тестирования
   models/          доменные модели и DTO mapping
   repositories/    типизированные операции DrunaServer
-  shared/ui/       PersonAvatar, блоки страниц, нативные диалоги, старые
-                   виджеты входа
+  shared/ui/       PersonAvatar, ActionPill (кнопка-капля), блоки страниц,
+                   нативные диалоги, старые виджеты входа
 test/              unit- и widget-тесты
 config/            development и production example build config
 context/           исходное ТЗ, API guide и архив прототипа v18
@@ -191,7 +191,7 @@ flutter run \
   `1246EEFE-E718-4DE2-AE96-2DE0DD2EF254`;
 - debug-сборка iOS Simulator успешно собрана, установлена и запущена;
 - `flutter analyze` проходит без замечаний;
-- `flutter test` проходит (на 2026-10-20 — 133 теста).
+- `flutter test` проходит (на 2026-10-20 — 141 тест).
 
 Android SDK и Chrome в этом окружении не установлены. Android-сборка не была
 проверена. Запуск на физическом iPhone и release signing также не проверялись.
@@ -227,6 +227,8 @@ flutter build ios \
   решений (§13). Значения, не сверенные с Figma, помечайте 🟡.
 - Людей везде показывайте через `PersonAvatar`: цвет из палитры и первая
   буква имени, фото нет.
+- Любое действие да/нет, отмена/подтверждение — только `ActionPill`
+  (`lib/shared/ui/action_pill.dart`), large или compact.
 - Новые главные разделы добавляйте страницами в `HomePager`, а не через
   `Navigator.push` с главной.
 - Сетевые вызовы добавляйте в `DrunaRepository`, а общий transport/session код —

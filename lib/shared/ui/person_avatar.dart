@@ -63,6 +63,7 @@ class PersonAvatar extends StatelessWidget {
     required this.name,
     this.username = '',
     this.size = 48,
+    this.color,
     super.key,
   });
 
@@ -71,9 +72,12 @@ class PersonAvatar extends StatelessWidget {
   final String username;
   final double size;
 
+  /// A colour the person picked; without it the palette decides by id.
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
-    final color = avatarColorFor(id: id, username: username);
+    final color = this.color ?? avatarColorFor(id: id, username: username);
     final label = name.trim().isNotEmpty ? name.trim() : username;
     return Semantics(
       label: 'Аватар $label',

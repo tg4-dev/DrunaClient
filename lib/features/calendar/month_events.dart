@@ -111,22 +111,28 @@ class MonthWeekGrid extends StatelessWidget {
         final capacity = monthEventCapacity(size.height, density);
         final visible = _visibleRange(strip.kind, firstOfMonth);
         final columnWidth = size.width / 7;
-        _WeekLayer layerOf(CalendarEventIndex source, String? hidden) =>
-            _WeekLayer.build(
-              index: source,
-              strip: strip,
-              days: days,
-              visible: visible,
-              capacity: capacity,
-              hiddenEventId: hidden,
-              density: density,
-              columnWidth: columnWidth,
-            );
+        // Friends' busy time has no titles: it never grows past the middle
+        // density, however far the month is zoomed in.
+        final friendDensity = friendDensityFor(density);
+        final friendCapacity = monthEventCapacity(size.height, friendDensity);
+        _WeekLayer layerOf(
+          CalendarEventIndex source,
+          String? hidden,
+          int capacity,
+        ) => _WeekLayer.build(
+          index: source,
+          strip: strip,
+          days: days,
+          visible: visible,
+          capacity: capacity,
+          hiddenEventId: hidden,
+          columnWidth: columnWidth,
+        );
         final own = OwnEventColor.of(context);
-        final mine = layerOf(index, hiddenEventId);
+        final mine = layerOf(index, hiddenEventId, capacity);
         final friends = friendIndex == null
             ? null
-            : layerOf(friendIndex!, null);
+            : layerOf(friendIndex!, null, friendCapacity);
         final mineBands = buildSolidBands(mine.bandChips, own);
         final friendBands = friends == null
             ? const <WeekBand>[]
@@ -136,6 +142,8 @@ class MonthWeekGrid extends StatelessWidget {
           layer: mine,
           days: days,
           density: density,
+          mode: mode,
+          rowHeight: size.height,
           columnWidth: columnWidth,
           dimmedEventId: dimmedEventId,
           onDayTap: onDayTap,
@@ -146,7 +154,9 @@ class MonthWeekGrid extends StatelessWidget {
             ? null
             : _FriendChips(
                 layer: friends,
-                density: density,
+                density: friendDensity,
+                mode: mode,
+                rowHeight: size.height,
                 columnWidth: columnWidth,
               );
         return Stack(
@@ -193,27 +203,24 @@ class MonthWeekGrid extends StatelessWidget {
                     children: [
                       // Both layers stay mounted at every mode, so friends'
                       // chips keep their state and never replay their
-                      // entrance after a swipe.
+                      // entrance after a swipe. Folded away, a layer is
+                      // not painted; each chip moves on its own
+                      // ([_ChipMotion]), clipped to the week.
                       Positioned.fill(
                         child: IgnorePointer(
                           ignoring: friendsShown,
-                          child: _IntoLine(
-                            away: t,
-                            // Up through the top line, past the lowest chip.
-                            distance: -mine.bottom(density),
-                            child: mineChips,
+                          child: Opacity(
+                            opacity: t >= 1 ? 0 : 1,
+                            child: ClipRect(child: mineChips),
                           ),
                         ),
                       ),
                       if (friendChips != null)
                         Positioned.fill(
                           child: IgnorePointer(
-                            child: _IntoLine(
-                              away: 1 - t,
-                              // Down through the bottom line, past the top
-                              // chip.
-                              distance: size.height - monthEventHeader,
-                              child: friendChips,
+                            child: Opacity(
+                              opacity: t <= 0 ? 0 : 1,
+                              child: ClipRect(child: friendChips),
                             ),
                           ),
                         ),
@@ -284,7 +291,7 @@ class MonthWeekGrid extends StatelessWidget {
       child: Align(
         alignment: Alignment.topCenter,
         child: Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: dayNumberTop),
           child: _DayNumber(day: day, today: sameDay(day, today)),
         ),
       ),
@@ -354,7 +361,6 @@ class _WeekLayer {
     required (int, int) visible,
     required int capacity,
     required String? hiddenEventId,
-    required EventDensity density,
     required double columnWidth,
   }) {
     final shown = [
@@ -439,25 +445,29 @@ class _WeekLayer {
   /// Where each event of the week sits along it, for the band.
   final List<BandChip> bandChips;
 
-  /// The bottom of the lowest chip or "+N", from the top of the week.
-  double bottom(EventDensity density) {
-    var lanes = 0;
+  /// Lanes in use, chips and "+N" together: the unfolding order counts
+  /// them.
+  int get lanes {
+    var count = 0;
     for (final item in placed) {
-      if (item.lane + 1 > lanes) lanes = item.lane + 1;
+      if (item.lane + 1 > count) count = item.lane + 1;
     }
     for (final (_, lane, _) in overflow) {
-      if (lane + 1 > lanes) lanes = lane + 1;
+      if (lane + 1 > count) count = lane + 1;
     }
-    return monthEventHeader + lanes * density.slot + 2;
+    return count;
   }
 }
 
-/// The user's chips: tappable, draggable, with "+N" opening the day.
+/// The user's chips: tappable, draggable, with "+N" opening the day. They
+/// fold up under the top line of the week while friends are shown.
 class _MineChips extends StatelessWidget {
   const _MineChips({
     required this.layer,
     required this.days,
     required this.density,
+    required this.mode,
+    required this.rowHeight,
     required this.columnWidth,
     required this.onDayTap,
     this.dimmedEventId,
@@ -468,6 +478,8 @@ class _MineChips extends StatelessWidget {
   final _WeekLayer layer;
   final List<DateTime> days;
   final EventDensity density;
+  final ValueListenable<double> mode;
+  final double rowHeight;
   final double columnWidth;
   final ValueChanged<DateTime> onDayTap;
   final String? dimmedEventId;
@@ -476,40 +488,159 @@ class _MineChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.hardEdge,
-      children: [
-        for (final item in layer.placed)
-          Positioned(
-            left: item.left(columnWidth),
-            width: item.right(columnWidth) - item.left(columnWidth),
-            top: monthEventHeader + item.lane * density.slot,
-            height: density.itemHeight,
-            child: _MonthEventBlock(
-              event: item.event,
-              dimmed: item.event.id == dimmedEventId,
-              density: density,
-              continuesBefore: item.continuesBefore,
-              continuesAfter: item.continuesAfter,
-              onTap: onEventTap,
-              onHoldStart: onHoldStart,
-            ),
-          ),
-        for (final (column, lane, count) in layer.overflow)
-          Positioned(
-            left: column * columnWidth + 4,
-            width: columnWidth - 6,
-            top: monthEventHeader + lane * density.slot,
-            height: density.itemHeight,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onDayTap(days[column]),
-              child: _OverflowLabel(count),
-            ),
-          ),
-      ],
+    final lanes = layer.lanes;
+    return _AnimatedDensity(
+      density: density,
+      builder: (context, d) {
+        Widget moving(int lane, Widget child) => _ChipMotion(
+          mode: mode,
+          awayAt: (t) => t,
+          lane: lane,
+          lanes: lanes,
+          homeTop: monthEventHeader + lane * d.slot,
+          foldTop: chipFoldGap,
+          child: child,
+        );
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (final item in layer.placed)
+              Positioned(
+                left: item.left(columnWidth),
+                width: item.right(columnWidth) - item.left(columnWidth),
+                top: monthEventHeader + item.lane * d.slot,
+                height: d.itemHeight,
+                child: moving(
+                  item.lane,
+                  _MonthEventBlock(
+                    event: item.event,
+                    dimmed: item.event.id == dimmedEventId,
+                    density: d,
+                    continuesBefore: item.continuesBefore,
+                    continuesAfter: item.continuesAfter,
+                    onTap: onEventTap,
+                    onHoldStart: onHoldStart,
+                  ),
+                ),
+              ),
+            for (final (column, lane, count) in layer.overflow)
+              Positioned(
+                left: column * columnWidth + 4,
+                width: columnWidth - 6,
+                top: monthEventHeader + lane * d.slot,
+                height: d.itemHeight,
+                child: moving(
+                  lane,
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onDayTap(days[column]),
+                    child: _OverflowLabel(count),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
+}
+
+/// Gap between a week line and a chip folded against it.
+const chipFoldGap = 2.0;
+
+/// How much later each lower lane starts to unfold, as a share of the way.
+const chipUnfoldStagger = 0.12;
+
+/// One chip on its way between its place and its week line, following the
+/// mode. Folded, all chips of a day lie in one stack against the line; they
+/// unfold lane by lane, the first lane first, and are born from the line
+/// with a short fade. Only a transform and an opacity change per frame.
+class _ChipMotion extends StatelessWidget {
+  const _ChipMotion({
+    required this.mode,
+    required this.awayAt,
+    required this.lane,
+    required this.lanes,
+    required this.homeTop,
+    required this.foldTop,
+    required this.child,
+  });
+
+  final ValueListenable<double> mode;
+
+  /// The mode turned into how far this layer is folded: 0 in place, 1 gone.
+  final double Function(double mode) awayAt;
+  final int lane;
+  final int lanes;
+  final double homeTop;
+  final double foldTop;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<double>(
+      valueListenable: mode,
+      child: child,
+      builder: (context, t, child) {
+        final progress = chipUnfoldProgress(
+          away: awayAt(t),
+          lane: lane,
+          lanes: lanes,
+        );
+        // Same tree at every progress: a chip that lands must keep its
+        // state, or friends' chips would replay their entrance.
+        final travel = Curves.easeOutCubic.transform(progress);
+        return Opacity(
+          opacity: _smooth(0, 0.3, progress),
+          child: Transform.translate(
+            offset: Offset(0, (foldTop - homeTop) * (1 - travel)),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// How far a chip in [lane] has unfolded, 0 folded to 1 in place, when its
+/// layer is [away] from being shown. Lower lanes start a little later.
+double chipUnfoldProgress({
+  required double away,
+  required int lane,
+  required int lanes,
+}) {
+  final spread = chipUnfoldStagger * (lanes > 1 ? lanes - 1 : 0);
+  final shown = 1 - away.clamp(0.0, 1.0);
+  return (shown * (1 + spread) - chipUnfoldStagger * lane).clamp(0.0, 1.0);
+}
+
+/// Chip sizes glide when the month crosses into another density, instead of
+/// jumping. Pinching moves the rows, not the density, so it never lags.
+class _AnimatedDensity extends StatelessWidget {
+  const _AnimatedDensity({required this.density, required this.builder});
+
+  final EventDensity density;
+  final Widget Function(BuildContext context, EventDensity density) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return TweenAnimationBuilder<EventDensity>(
+      tween: _DensityTween(end: density),
+      duration: reduce ? Duration.zero : chipResizeDuration,
+      curve: Curves.easeOutCubic,
+      builder: (context, value, _) => builder(context, value),
+    );
+  }
+}
+
+const chipResizeDuration = Duration(milliseconds: 160);
+
+class _DensityTween extends Tween<EventDensity> {
+  _DensityTween({super.end});
+
+  @override
+  EventDensity lerp(double t) => EventDensity.lerp(begin ?? end!, end!, t);
 }
 
 class _OverflowLabel extends StatelessWidget {
@@ -546,11 +677,15 @@ class _FriendChips extends StatefulWidget {
   const _FriendChips({
     required this.layer,
     required this.density,
+    required this.mode,
+    required this.rowHeight,
     required this.columnWidth,
   });
 
   final _WeekLayer layer;
   final EventDensity density;
+  final ValueListenable<double> mode;
+  final double rowHeight;
   final double columnWidth;
 
   @override
@@ -590,28 +725,49 @@ class _FriendChipsState extends State<_FriendChips> {
   Widget build(BuildContext context) {
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final current = {for (final item in widget.layer.placed) item.event.id};
-    return Stack(
-      clipBehavior: Clip.hardEdge,
-      children: [
-        for (final item in _leaving.values)
-          if (!current.contains(item.event.id))
-            _chip(item, leaving: true, reduce: reduce),
-        for (final item in widget.layer.placed)
-          _chip(item, leaving: false, reduce: reduce),
-        for (final (column, lane, count) in widget.layer.overflow)
-          Positioned(
-            left: column * widget.columnWidth + 4,
-            width: widget.columnWidth - 6,
-            top: monthEventHeader + lane * widget.density.slot,
-            height: widget.density.itemHeight,
-            child: _OverflowLabel(count),
-          ),
-      ],
+    final lanes = widget.layer.lanes;
+    return _AnimatedDensity(
+      density: widget.density,
+      builder: (context, d) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final item in _leaving.values)
+            if (!current.contains(item.event.id))
+              _chip(item, d, lanes, leaving: true, reduce: reduce),
+          for (final item in widget.layer.placed)
+            _chip(item, d, lanes, leaving: false, reduce: reduce),
+          for (final (column, lane, count) in widget.layer.overflow)
+            Positioned(
+              left: column * widget.columnWidth + 4,
+              width: widget.columnWidth - 6,
+              top: monthEventHeader + lane * d.slot,
+              height: d.itemHeight,
+              child: _motion(lane, lanes, d, _OverflowLabel(count)),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _chip(_Placed item, {required bool leaving, required bool reduce}) {
-    final density = widget.density;
+  /// Friends' chips fold down onto the bottom line of the week.
+  Widget _motion(int lane, int lanes, EventDensity d, Widget child) =>
+      _ChipMotion(
+        mode: widget.mode,
+        awayAt: (t) => 1 - t,
+        lane: lane,
+        lanes: lanes,
+        homeTop: monthEventHeader + lane * d.slot,
+        foldTop: widget.rowHeight - d.itemHeight - chipFoldGap,
+        child: child,
+      );
+
+  Widget _chip(
+    _Placed item,
+    EventDensity density,
+    int lanes, {
+    required bool leaving,
+    required bool reduce,
+  }) {
     final left = item.left(widget.columnWidth);
     final width = item.right(widget.columnWidth) - left;
     return TweenAnimationBuilder<double>(
@@ -624,7 +780,7 @@ class _FriendChipsState extends State<_FriendChips> {
         width: width,
         top: monthEventHeader + lane * density.slot,
         height: density.itemHeight,
-        child: child!,
+        child: _motion(item.lane, lanes, density, child!),
       ),
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: leaving ? 1 : 0, end: leaving ? 0 : 1),
@@ -649,38 +805,6 @@ class _FriendChipsState extends State<_FriendChips> {
           continuesAfter: item.continuesAfter,
           showTitle: false,
         ),
-      ),
-    );
-  }
-}
-
-/// A layer on its way out flies through its week line and is cut off by
-/// it, the way it came back: chips leave across the line, never fade or
-/// squash. Follows the finger; one transform per week. The tree is the same
-/// at every [away], so stateful chips below keep their state.
-class _IntoLine extends StatelessWidget {
-  const _IntoLine({
-    required this.away,
-    required this.distance,
-    required this.child,
-  });
-
-  /// 0 — in place, 1 — fully past the line.
-  final double away;
-
-  /// How far the layer travels to clear the line; negative is up.
-  final double distance;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final travel = Curves.easeInCubic.transform(away.clamp(0.0, 1.0));
-    return Opacity(
-      // Fully past the line: skip painting, keep the state.
-      opacity: away >= 1 ? 0 : 1,
-      child: Transform.translate(
-        offset: Offset(0, distance * travel),
-        child: child,
       ),
     );
   }
@@ -781,8 +905,8 @@ class _DayNumber extends StatelessWidget {
         ? const Color(0xFFD1D1D6)
         : Colors.white;
     return Container(
-      width: 28,
-      height: 28,
+      width: dayNumberSize,
+      height: dayNumberSize,
       alignment: Alignment.center,
       decoration: today
           ? const BoxDecoration(color: Colors.white, shape: BoxShape.circle)

@@ -8,7 +8,11 @@ final monthBarSnapThreshold = (monthRowLevels[0] + monthRowLevels[1]) / 2;
 
 final monthDetailThreshold = (monthRowLevels[1] + monthRowLevels[2]) / 2;
 
-const monthEventHeader = 34.0;
+/// The day number's circle sits [dayNumberTop] below the week line and the
+/// first chip as far below the circle: equal space on both sides of "today".
+const dayNumberTop = 6.0;
+const dayNumberSize = 28.0;
+const monthEventHeader = dayNumberTop * 2 + dayNumberSize;
 
 /// Gap between the last chip and the week divider.
 const monthEventBottomPad = 12.0;
@@ -29,6 +33,29 @@ class EventDensity {
   bool get showTitle => !bars;
 
   double get slot => itemHeight + gap;
+
+  /// Sizes in between, for a chip gliding to a new density; the flags are
+  /// [b]'s, so text never shows on a half-grown bar for long.
+  static EventDensity lerp(EventDensity a, EventDensity b, double t) {
+    if (t >= 1 || a == b) return b;
+    return EventDensity(
+      bars: b.bars,
+      showTime: b.showTime,
+      itemHeight: a.itemHeight + (b.itemHeight - a.itemHeight) * t,
+      gap: a.gap + (b.gap - a.gap) * t,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is EventDensity &&
+      other.bars == bars &&
+      other.showTime == showTime &&
+      other.itemHeight == itemHeight &&
+      other.gap == gap;
+
+  @override
+  int get hashCode => Object.hash(bars, showTime, itemHeight, gap);
 }
 
 const barDensity = EventDensity(
@@ -51,6 +78,10 @@ const detailDensity = EventDensity(
   itemHeight: 32,
   gap: 3,
 );
+
+/// Friends' chips carry no titles, so they stop at the middle density.
+EventDensity friendDensityFor(EventDensity density) =>
+    density.itemHeight > titleDensity.itemHeight ? titleDensity : density;
 
 EventDensity densityForRowHeight(double height) {
   if (height <= monthBarSnapThreshold) return barDensity;

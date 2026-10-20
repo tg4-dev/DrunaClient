@@ -64,7 +64,7 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              _AccountSection(session: session),
+              _AccountSection(session: session, settings: settings),
               const SizedBox(height: 12),
               _ServerSection(session: session, config: config),
               if (settings.allowDemo) ...[
@@ -75,7 +75,7 @@ class SettingsPage extends StatelessWidget {
                   children: [
                     _SwitchRow(
                       title: 'Демо-друзья',
-                      subtitle: '2 друга и заявка, без сервера',
+                      subtitle: '12 друзей и заявка, без сервера',
                       value: settings.demoFriends,
                       onChanged: (value) => settings.demoFriends = value,
                     ),
@@ -147,9 +147,10 @@ String _errorText(Object error) =>
     error is ApiException ? error.message : 'Не получилось';
 
 class _AccountSection extends StatelessWidget {
-  const _AccountSection({required this.session});
+  const _AccountSection({required this.session, required this.settings});
 
   final SessionController session;
+  final AppSettings settings;
 
   Future<void> _logout(BuildContext context) async {
     final confirmed = await confirmAction(
@@ -165,6 +166,7 @@ class _AccountSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final profile = session.profile;
+    final own = ownColorFor(settings, profile);
     return BlockSection(
       icon: CupertinoIcons.person_crop_circle_fill,
       title: 'Аккаунт',
@@ -190,6 +192,7 @@ class _AccountSection extends StatelessWidget {
                   id: profile.id,
                   name: profile.name,
                   username: profile.username,
+                  color: own,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -221,6 +224,11 @@ class _AccountSection extends StatelessWidget {
               ],
             ),
           ),
+        _ColorPicker(
+          selected: settings.ownColorSlot,
+          current: own,
+          onPick: (slot) => settings.ownColorSlot = slot,
+        ),
         _ActionRow(
           title: 'Выйти',
           color: SheetStyle.today,
@@ -447,6 +455,95 @@ class _SwitchRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The user's colour: the sixteen of the palette in two rows, the current
+/// one ringed like a picked friend. Repaints the calendar at once.
+class _ColorPicker extends StatelessWidget {
+  const _ColorPicker({
+    required this.selected,
+    required this.current,
+    required this.onPick,
+  });
+
+  /// The picked slot; null while the colour follows the avatar.
+  final int? selected;
+  final Color current;
+  final ValueChanged<int?> onPick;
+
+  static const _dot = 32.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 8, 8, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Мой цвет', style: _title),
+          const Text('Им рисуются мои события и аватар', style: _subtitle),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cell = constraints.maxWidth / 8;
+              return Wrap(
+                children: [
+                  for (var slot = 0; slot < avatarPalette.length; slot++)
+                    SizedBox(
+                      width: cell,
+                      height: cell.clamp(44.0, 56.0),
+                      child: Semantics(
+                        button: true,
+                        selected: avatarPalette[slot] == current,
+                        label: 'Цвет ${slot + 1}',
+                        excludeSemantics: true,
+                        child: GestureDetector(
+                          key: ValueKey('own-color-$slot'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            onPick(slot);
+                          },
+                          child: Center(child: _swatch(avatarPalette[slot])),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          // Dimmed by the row itself while the colour already follows it.
+          _ActionRow(
+            title: 'Как у аватара',
+            subtitle: 'Цвет, который даёт мой аккаунт',
+            onTap: selected == null ? null : () => onPick(null),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _swatch(Color color) {
+    final picked = color == current;
+    return AnimatedContainer(
+      duration: SheetStyle.fade,
+      width: _dot + 8,
+      height: _dot + 8,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: picked
+              ? Color.lerp(color, Colors.white, 0.55)!
+              : Colors.transparent,
+          width: 3,
+        ),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }

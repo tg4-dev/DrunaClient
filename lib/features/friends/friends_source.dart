@@ -40,8 +40,9 @@ class ServerFriendsSource implements FriendsSource {
   Future<void> remove(String username) => _repository.deleteFriend(username);
 }
 
-/// In-memory friends for trying the page without a server: two friends, one
-/// incoming request and a few people to find by username.
+/// In-memory friends for trying the page without a server: twelve friends
+/// (enough to overflow the friend bar), one incoming request and a few
+/// people to find by username.
 class DemoFriendsSource implements FriendsSource {
   DemoFriendsSource({this.delay = const Duration(milliseconds: 300)});
 
@@ -53,6 +54,21 @@ class DemoFriendsSource implements FriendsSource {
   final _friends = <FriendInfo>[
     const FriendInfo(id: 101, name: 'Алина Смирнова', username: 'alina'),
     const FriendInfo(id: 102, name: 'Марк Ли', username: 'mark'),
+    // Ten more, to see the friend bar and the month overflow.
+    const FriendInfo(id: 107, name: 'Ольга Петрова', username: 'olga'),
+    const FriendInfo(id: 108, name: 'Дима Соколов', username: 'dima'),
+    const FriendInfo(id: 109, name: 'Катя Лебедева', username: 'katya'),
+    const FriendInfo(id: 110, name: 'Артём Ковалёв', username: 'artem'),
+    const FriendInfo(id: 111, name: 'Соня', username: 'sonya'),
+    const FriendInfo(id: 112, name: 'Илья Морозов', username: 'ilya'),
+    const FriendInfo(id: 113, name: 'Вика Новикова', username: 'vika'),
+    const FriendInfo(
+      id: 114,
+      name: 'Константин Константинопольский',
+      username: 'konstantin_konstantinopolsky',
+    ),
+    const FriendInfo(id: 115, name: 'Юля Фёдорова', username: 'yulia'),
+    const FriendInfo(id: 116, name: 'Гоша', username: 'gosha'),
   ];
   final _incoming = <FriendInfo>[
     const FriendInfo(id: 103, name: 'Ника Орлова', username: 'nika'),

@@ -4,6 +4,7 @@ import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friends_source.dart';
 import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/action_pill.dart';
 import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/page_parts.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
@@ -14,8 +15,6 @@ import 'package:flutter/material.dart';
 /// [SheetStyle], so the page reads as the same family as the event sheet.
 abstract final class FriendsStyle {
   static const avatar = 48.0;
-  static const button = 44.0;
-  static const success = Color(0xFF34C759);
   static const searchDebounce = Duration(milliseconds: 350);
 
   /// A row folds away this fast after ✓, ✕ or delete.
@@ -351,10 +350,11 @@ class _FriendsPageState extends State<FriendsPage> {
                   motion: _motion,
                   child: _PersonRow(
                     person: friend,
-                    trailing: _RoundButton(
-                      icon: CupertinoIcons.xmark,
+                    trailing: ActionPill(
+                      icon: Icons.close_rounded,
                       label: 'Удалить ${_displayName(friend)} из друзей',
-                      iconColor: SheetStyle.muted,
+                      kind: ActionPillKind.cancel,
+                      size: ActionPillSize.compact,
                       onPressed: _busy.contains(friend.username)
                           ? null
                           : () => _remove(friend),
@@ -502,10 +502,11 @@ class _SearchResults extends StatelessWidget {
                 ? const _Status('Заявка отправлена')
                 : isIncoming(person)
                 ? const _Status('Ждёт ответа')
-                : _RoundButton(
-                    icon: CupertinoIcons.plus,
+                : ActionPill(
+                    icon: Icons.add_rounded,
                     label: 'Добавить ${_displayName(person)} в друзья',
-                    color: SheetStyle.accent,
+                    kind: ActionPillKind.add,
+                    size: ActionPillSize.compact,
                     onPressed: busy.contains(person.username)
                         ? null
                         : () => onAdd(person),
@@ -583,66 +584,21 @@ class _RequestButtons extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _RoundButton(
-          icon: CupertinoIcons.xmark,
+        ActionPill(
+          icon: Icons.close_rounded,
           label: 'Отклонить заявку от $name',
-          color: SheetStyle.chip,
+          kind: ActionPillKind.cancel,
+          size: ActionPillSize.compact,
           onPressed: enabled ? onReject : null,
         ),
-        const SizedBox(width: 10),
-        _RoundButton(
-          icon: CupertinoIcons.checkmark_alt,
+        const SizedBox(width: 8),
+        ActionPill(
+          icon: Icons.check_rounded,
           label: 'Принять заявку от $name',
-          color: FriendsStyle.success,
-          // Black on green: white would be about 2.2:1.
-          iconColor: Colors.black,
+          size: ActionPillSize.compact,
           onPressed: enabled ? onAccept : null,
         ),
       ],
-    );
-  }
-}
-
-/// A 44 pt circle with an icon. Without [color] only the icon is drawn.
-class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.color,
-    this.iconColor = Colors.white,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-  final Color? color;
-  final Color iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: label,
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: AnimatedOpacity(
-          duration: FriendsStyle.fade,
-          opacity: enabled ? 1 : 0.4,
-          child: Container(
-            width: FriendsStyle.button,
-            height: FriendsStyle.button,
-            decoration: color == null
-                ? null
-                : BoxDecoration(color: color, shape: BoxShape.circle),
-            child: Icon(icon, color: iconColor, size: 22),
-          ),
-        ),
-      ),
     );
   }
 }

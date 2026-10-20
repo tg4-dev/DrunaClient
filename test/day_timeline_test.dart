@@ -221,6 +221,39 @@ void main() {
     expect(end, at(10));
   });
 
+  testWidgets('zoomed out to 4 h, drawing snaps to whole hours', (
+    tester,
+  ) async {
+    DateTime? start;
+    DateTime? end;
+    final metrics = DayScrollMetrics()..pixelsPerHour = 18;
+    addTearDown(metrics.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DayTimeline(
+          day: day,
+          events: const [],
+          metrics: metrics,
+          onVisibleDay: (_) {},
+          onCreateRange: (s, e) {
+            start = s;
+            end = e;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    final offset = timelineX(at(timelineMorningHour), 18) - dayMidnightInset;
+    double x(DateTime time) => timelineX(time, 18) - offset;
+
+    // From 09:20 across 2 h 10 min: whole hours only, never a half.
+    await holdAndDrag(tester, Offset(x(at(9, 20)), y), 18 * 130 / 60);
+
+    expect(start!.minute, 0);
+    expect(end!.minute, 0);
+    expect(end!.difference(start!).inHours, greaterThanOrEqualTo(2));
+  });
+
   testWidgets('a multi-day event shows its dates after the title', (
     tester,
   ) async {

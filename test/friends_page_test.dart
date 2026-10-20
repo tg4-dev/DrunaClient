@@ -16,7 +16,7 @@ void main() {
 
     expect(find.text('Алина Смирнова'), findsOneWidget);
     expect(find.text('Марк Ли'), findsOneWidget);
-    expect(find.text('2 друга'), findsOneWidget);
+    expect(find.text('12 друзей'), findsOneWidget);
     expect(find.text('Заявки'), findsOneWidget);
     expect(find.text('Ника Орлова'), findsOneWidget);
   });
@@ -27,7 +27,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Принять заявку от Ника Орлова'));
     await tester.pumpAndSettle();
 
-    expect(find.text('3 друга'), findsOneWidget);
+    expect(find.text('13 друзей'), findsOneWidget);
     expect(find.text('Заявки'), findsNothing);
     expect(find.text('Ника Орлова'), findsOneWidget);
   });
@@ -38,7 +38,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Отклонить заявку от Ника Орлова'));
     await tester.pumpAndSettle();
 
-    expect(find.text('2 друга'), findsOneWidget);
+    expect(find.text('12 друзей'), findsOneWidget);
     expect(find.text('Ника Орлова'), findsNothing);
   });
 

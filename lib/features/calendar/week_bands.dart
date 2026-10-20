@@ -1,4 +1,3 @@
-import 'package:druna_app/shared/ui/color_mix.dart';
 import 'package:flutter/painting.dart';
 
 /// One event's place along a week, in grid x.
@@ -43,14 +42,12 @@ const bandJoinGap = 6.0;
 /// Colour points closer than this share of a day merge into one.
 const bandMinColorSpacing = 0.5;
 
-/// Blended stops between two colour points, so the change reads as smooth.
-const bandBlendSteps = 3;
-
 /// Busy time of a week as bands, the way the hidden layer of the month is
 /// drawn: consecutive days run together; along a band, each event puts its
-/// colour at its centre and neighbouring colours blend in OKLCH. Points
-/// closer than half a day merge, the longer event winning, so a busy day
-/// shows at most about two colours rather than a muddle.
+/// colour at its centre and the gradient blends neighbours in plain RGB.
+/// (OKLab/OKLCH invent a third hue — yellow and blue meet as green — which
+/// reads as someone else.) Points closer than half a day merge, the longer
+/// event winning, so a busy day shows at most about two colours.
 List<WeekBand> buildWeekBands(
   List<BandChip> chips, {
   required double columnWidth,
@@ -101,22 +98,12 @@ WeekBand _band(List<BandChip> run, double minSpacing) {
       stops: const [0, 1],
     );
   }
-  final colors = <Color>[points.first.color];
-  final stops = <double>[0];
-  for (var i = 0; i < points.length; i++) {
-    final point = points[i];
-    colors.add(point.color);
-    stops.add(at(point.center));
-    if (i == points.length - 1) break;
-    final next = points[i + 1];
-    for (var k = 1; k <= bandBlendSteps; k++) {
-      final t = k / (bandBlendSteps + 1);
-      colors.add(mixOklch(point.color, next.color, t));
-      stops.add(at(point.center + (next.center - point.center) * t));
-    }
-  }
-  colors.add(points.last.color);
-  stops.add(1);
+  final colors = <Color>[
+    points.first.color,
+    for (final point in points) point.color,
+    points.last.color,
+  ];
+  final stops = <double>[0, for (final point in points) at(point.center), 1];
   return WeekBand(left: left, right: right, colors: colors, stops: stops);
 }
 

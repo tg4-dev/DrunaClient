@@ -19,19 +19,14 @@ const timelineMorningHour = 8;
 const timelineEdgeZone = 56.0;
 const timelineEdgeSpeed = 900.0;
 
-const _drawStep = Duration(minutes: timelineDrawStep);
-
-/// A drawn event shorter than one step becomes this long.
+/// A drawn event shorter than one step becomes this long, or one step when
+/// that is longer.
 const drawnEventDefault = Duration(hours: 1);
 
 /// Zoom steps are binary fractions, so `itemCount × 24 × pixels` stays exact
 /// and the list's extent is always a whole number of days.
 double quantizePixels(double pixelsPerHour) =>
     (pixelsPerHour * 32).round() / 32;
-
-/// Drawing and moving on the timeline snap to this coarser step so a finger
-/// lands where it means to; the sheet's wheels still offer 15 minutes.
-const timelineDrawStep = 30;
 
 /// [time] rounded to the nearest [step] minutes, rolling into the next day at
 /// midnight.
@@ -150,6 +145,10 @@ class _Hold {
   double x = 0;
   int lane = 0;
 
+  /// The snapping step at the zoom the hold started in (see
+  /// [timelineStepFor]); the sheet's wheels still offer 15 minutes.
+  Duration step = const Duration(minutes: 30);
+
   ({DateTime start, DateTime end}) get span {
     final event = this.event;
     if (event != null) {
@@ -159,7 +158,7 @@ class _Hold {
       );
     }
     if (current == anchor) {
-      return (start: anchor, end: anchor.add(_drawStep));
+      return (start: anchor, end: anchor.add(step));
     }
     return current.isBefore(anchor)
         ? (start: current, end: anchor)
@@ -253,6 +252,23 @@ class DayTimelineState extends State<DayTimeline>
     return box != null && box.hasSize ? box.size.width : 0;
   }
 
+  /// [raw] snapped for drawing or moving at the current zoom: on the step,
+  /// pulled to labelled lines, holding [current] near a boundary
+  /// ([snapWithMagnet]).
+  DateTime _snapTime(DateTime raw, DateTime? current) {
+    final day = dateOnly(raw);
+    double minutesOf(DateTime time) => time.difference(day).inSeconds / 60.0;
+    final minutes = snapWithMagnet(
+      raw: minutesOf(raw),
+      current: current == null ? null : minutesOf(current).round(),
+      step: timelineStepFor(_pixels),
+      division: timelineDivisionFor(_pixels),
+    );
+    final days = (minutes / (24 * 60)).floor();
+    final rest = minutes - days * 24 * 60;
+    return atClock(addCalendarDays(day, days), rest ~/ 60, rest % 60);
+  }
+
   /// The unsnapped time under viewport x.
   DateTime _timeAtX(double x) {
     final minutes = ((_scroll.offset + x) / _pixels * 60).floor();
@@ -288,9 +304,11 @@ class DayTimelineState extends State<DayTimeline>
     }
     final x = _viewportX(global);
     if (x == null) return;
-    final at = snapToStep(_timeAtX(x), step: timelineDrawStep);
-    final hold = _Hold.create(at)..x = x;
-    hold.lane = _freeLane(at, at.add(_drawStep));
+    final at = _snapTime(_timeAtX(x), null);
+    final hold = _Hold.create(at)
+      ..x = x
+      ..step = Duration(minutes: timelineStepFor(_pixels));
+    hold.lane = _freeLane(at, at.add(hold.step));
     _startHold(hold);
   }
 
@@ -303,7 +321,9 @@ class DayTimelineState extends State<DayTimeline>
     }
     final x = _viewportX(global);
     if (x == null) return;
-    final hold = _Hold.move(event, _timeAtX(x).difference(event.start))..x = x;
+    final hold = _Hold.move(event, _timeAtX(x).difference(event.start))
+      ..x = x
+      ..step = Duration(minutes: timelineStepFor(_pixels));
     hold.lane = _index.lanesAround(dateOnly(event.start))[event.id] ?? 0;
     _startHold(hold);
   }
@@ -327,12 +347,19 @@ class DayTimelineState extends State<DayTimeline>
   /// Re-reads the time under the finger, after it moved or the list scrolled.
   void _follow(_Hold hold) {
     final raw = _timeAtX(hold.x);
-    final next = hold.event == null
-        ? snapToStep(raw, step: timelineDrawStep)
-        : snapToStep(raw.subtract(hold.grab), step: timelineDrawStep);
+    final next = _snapTime(
+      hold.event == null ? raw : raw.subtract(hold.grab),
+      hold.current,
+    );
     if (next != hold.current) {
       hold.current = next;
-      HapticFeedback.selectionClick();
+      // A firmer tick on a labelled line: the hour the user aims for.
+      final division = timelineDivisionFor(_pixels);
+      if ((next.hour * 60 + next.minute) % division == 0) {
+        HapticFeedback.lightImpact();
+      } else {
+        HapticFeedback.selectionClick();
+      }
     }
     _ghost.value = _ghostOf(hold);
   }
@@ -360,11 +387,11 @@ class DayTimelineState extends State<DayTimeline>
       return;
     }
     final drawn = hold.current.difference(hold.anchor).abs();
-    if (drawn < _drawStep) {
-      widget.onCreateRange?.call(
-        hold.anchor,
-        hold.anchor.add(drawnEventDefault),
-      );
+    if (drawn < hold.step) {
+      final length = hold.step > drawnEventDefault
+          ? hold.step
+          : drawnEventDefault;
+      widget.onCreateRange?.call(hold.anchor, hold.anchor.add(length));
     } else {
       final span = hold.span;
       widget.onCreateRange?.call(span.start, span.end);
