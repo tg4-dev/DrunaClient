@@ -1,23 +1,49 @@
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/repeat_rule.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 
+/// The user's events before their profile (and so their colour) is known.
 const calendarEventColor = Color(0xFF9A3040);
 const calendarMinuteStep = 15;
 
+/// The colour of the user's own events: the colour of their avatar, so they
+/// look the same to themselves as to their friends.
+class OwnEventColor extends InheritedWidget {
+  const OwnEventColor({required this.color, required super.child, super.key});
+
+  final Color color;
+
+  static Color of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<OwnEventColor>()?.color ??
+      calendarEventColor;
+
+  @override
+  bool updateShouldNotify(OwnEventColor oldWidget) => oldWidget.color != color;
+}
+
+/// A friend's event keeps the friend's colour; the user's take [own].
+Color eventColor(CalendarEvent event, Color own) => event.color ?? own;
+
+/// Text on an event: white on dark colours, black on light ones.
+Color eventInk(Color background) => avatarInkFor(background);
+
 /// An event picked up or being drawn: a soft glow in its own colour and an
 /// edge a shade lighter, instead of a foreign outline.
-BoxDecoration liftedEventDecoration(BorderRadius radius) {
+BoxDecoration liftedEventDecoration(
+  BorderRadius radius, {
+  Color color = calendarEventColor,
+}) {
   return BoxDecoration(
-    color: calendarEventColor,
+    color: color,
     borderRadius: radius,
     border: Border.all(
-      color: Color.lerp(calendarEventColor, Colors.white, 0.28)!,
+      color: Color.lerp(color, Colors.white, 0.28)!,
       width: 1.5,
     ),
     boxShadow: [
       BoxShadow(
-        color: calendarEventColor.withValues(alpha: 0.55),
+        color: color.withValues(alpha: 0.55),
         blurRadius: 18,
         spreadRadius: 1,
       ),
@@ -37,6 +63,8 @@ class CalendarEvent {
     this.allDay = false,
     this.repeat,
     this.seriesId,
+    this.color,
+    this.ownerId,
   });
 
   final String id;
@@ -52,6 +80,12 @@ class CalendarEvent {
   /// Set on generated occurrences: the id of the event that holds the rule.
   final String? seriesId;
 
+  /// A friend's colour; the user's own events leave it null.
+  final Color? color;
+
+  /// The friend this event belongs to; null for the user's own events.
+  final int? ownerId;
+
   String get sourceId => seriesId ?? id;
 
   CalendarEvent copyWith({
@@ -64,6 +98,8 @@ class CalendarEvent {
     bool clearRepeat = false,
     String? seriesId,
     bool clearSeries = false,
+    Color? color,
+    int? ownerId,
   }) {
     return CalendarEvent(
       id: id ?? this.id,
@@ -73,6 +109,8 @@ class CalendarEvent {
       allDay: allDay ?? this.allDay,
       repeat: clearRepeat ? null : repeat ?? this.repeat,
       seriesId: clearSeries ? null : seriesId ?? this.seriesId,
+      color: color ?? this.color,
+      ownerId: ownerId ?? this.ownerId,
     );
   }
 }
@@ -411,6 +449,8 @@ class CalendarEventIndex {
       allDay: event.allDay,
       repeat: event.repeat,
       seriesId: event.id,
+      color: event.color,
+      ownerId: event.ownerId,
     );
   }
 }

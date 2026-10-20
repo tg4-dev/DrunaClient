@@ -1,14 +1,26 @@
 import 'package:druna_app/app/app_settings.dart';
 import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/config/app_config.dart';
+import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/calendar_screen.dart';
+import 'package:druna_app/features/friends/friend_schedule.dart';
+import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/features/friends/friends_page.dart';
 import 'package:druna_app/features/friends/friends_source.dart';
+import 'package:druna_app/features/friends/friends_store.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 
-/// The signed-in app: pages side by side on one plane, the calendar in the
-/// middle. Friends lie to its left, settings to its right.
+/// The signed-in app: one horizontal plane with four stops.
+///
+/// ```text
+/// [ Friends ] [ My calendar | Friends' calendar ] [ Settings ]
+///      0            1                2                 3
+/// ```
+///
+/// Stops 1 and 2 are the same calendar, which stays in place: between them
+/// the swipe only changes which events are shown ([CalendarScreen.mode]).
 class HomePager extends StatefulWidget {
   const HomePager({
     required this.session,
@@ -25,11 +37,15 @@ class HomePager extends StatefulWidget {
   /// How long demo friends take to answer; zero in tests.
   final Duration demoDelay;
 
-  static const friendsPage = 0;
-  static const calendarPage = 1;
-  static const settingsPage = 2;
+  static const friendsStop = 0;
+  static const myCalendarStop = 1;
+  static const friendsCalendarStop = 2;
+  static const settingsStop = 3;
 
-  /// Taps on the gear and system back slide this long.
+  /// The app opens on friends' calendar.
+  static const homeStop = friendsCalendarStop;
+
+  /// Taps that move along the plane (gear, stack, glow, back) take this long.
   static const slide = Duration(milliseconds: 280);
 
   @override
@@ -37,79 +53,190 @@ class HomePager extends StatefulWidget {
 }
 
 class _HomePagerState extends State<HomePager> {
-  final _controller = PageController(initialPage: HomePager.calendarPage);
-  var _page = HomePager.calendarPage;
+  ScrollController? _plane;
+  double _width = 0;
+  var _stop = HomePager.homeStop;
   var _calendarBusy = false;
+
+  /// 0 — my calendar, 1 — friends' calendar; follows the finger.
+  final _mode = ValueNotifier<double>(1);
+
   late var _demo = DemoFriendsSource(delay: widget.demoDelay);
   late final _server = ServerFriendsSource(widget.session.repository);
+  final _demoSchedule = DemoFriendSchedule();
+  late final FriendsStore _store = FriendsStore(_friendsSource)..load();
+  late final FriendSelection _selection = FriendSelection(
+    widget.settings.storage,
+  )..load();
+  late final FriendSchedules _schedules = FriendSchedules(
+    selection: _selection,
+    friends: _store,
+    source: _scheduleSource,
+  );
+
+  FriendsSource get _friendsSource =>
+      widget.settings.demoFriends ? _demo : _server;
+
+  FriendScheduleSource get _scheduleSource =>
+      widget.settings.demoSchedules ? _demoSchedule : const NoFriendSchedule();
+
+  @override
+  void initState() {
+    super.initState();
+    _demo.offline = widget.settings.demoOffline;
+    widget.settings.addListener(_onSettings);
+    widget.session.addListener(_onSession);
+    _store.addListener(_dropMissingFriends);
+  }
+
+  /// The profile arrives after sign-in; it sets the colour of my events.
+  void _onSession() => setState(() {});
+
+  Color get _ownColor {
+    final profile = widget.session.profile;
+    if (profile == null) return calendarEventColor;
+    return avatarColorFor(id: profile.id, username: profile.username);
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    widget.settings.removeListener(_onSettings);
+    widget.session.removeListener(_onSession);
+    _store.removeListener(_dropMissingFriends);
+    _plane?.dispose();
+    _mode.dispose();
+    _schedules.dispose();
+    _selection.dispose();
+    _store.dispose();
     super.dispose();
   }
 
-  void _onPageChanged(int page) {
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _page = page);
+  void _onSettings() {
+    _demo.offline = widget.settings.demoOffline;
+    _store.source = _friendsSource;
+    _schedules.source = _scheduleSource;
+    setState(() {});
   }
 
-  void _goTo(int page) {
-    _controller.animateToPage(
-      page,
-      duration: HomePager.slide,
-      curve: Curves.easeOutCubic,
-    );
+  void _dropMissingFriends() {
+    final friends = _store.friends;
+    if (friends == null || _store.error != null) return;
+    _selection.keepOnly(friends.map((friend) => friend.id));
   }
 
   void _resetDemo() {
     setState(() => _demo = DemoFriendsSource(delay: widget.demoDelay));
+    _onSettings();
+  }
+
+  ScrollController _planeFor(double width) {
+    final existing = _plane;
+    if (existing == null) {
+      _width = width;
+      return _plane = ScrollController(initialScrollOffset: _stop * width)
+        ..addListener(_onPlaneScroll);
+    }
+    if (width != _width) {
+      _width = width;
+      // A new width (rotation, split view): stay on the same stop.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (existing.hasClients) existing.jumpTo(_stop * width);
+      });
+    }
+    return existing;
+  }
+
+  void _onPlaneScroll() {
+    final plane = _plane;
+    if (plane == null || !plane.hasClients || _width == 0) return;
+    final offset = plane.offset;
+    _mode.value = ((offset - _width) / _width).clamp(0.0, 1.0);
+    final stop = (offset / _width).round().clamp(0, 3);
+    if (stop != _stop && (offset - stop * _width).abs() < 1) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      setState(() => _stop = stop);
+    }
+  }
+
+  void _goTo(int stop) {
+    _plane?.animateTo(
+      stop * _width,
+      duration: MediaQuery.of(context).disableAnimations
+          ? const Duration(milliseconds: 1)
+          : HomePager.slide,
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _page == HomePager.calendarPage,
+      canPop: _stop == HomePager.homeStop,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _goTo(HomePager.calendarPage);
+        if (!didPop) _goTo(HomePager.homeStop);
       },
       child: ColoredBox(
         color: Colors.black,
-        child: ListenableBuilder(
-          listenable: widget.settings,
-          builder: (context, _) {
-            final demo = widget.settings.demoFriends;
-            _demo.offline = widget.settings.demoOffline;
-            return PageView(
-              controller: _controller,
-              onPageChanged: _onPageChanged,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final height = constraints.maxHeight;
+            final plane = _planeFor(width);
+            final calendar = CalendarScreen(
+              mode: _mode,
+              onBusyChanged: (busy) => setState(() => _calendarBusy = busy),
+              onOpenSettings: () => _goTo(HomePager.settingsStop),
+              friends: CalendarFriends(
+                store: _store,
+                selection: _selection,
+                events: _schedules,
+                schedulesAvailable: widget.settings.demoSchedules,
+                onShowFriends: () => _goTo(HomePager.friendsCalendarStop),
+                onShowMine: () => _goTo(HomePager.myCalendarStop),
+                onAddFriends: () => _goTo(HomePager.friendsStop),
+              ),
+            );
+            return SingleChildScrollView(
+              controller: plane,
+              scrollDirection: Axis.horizontal,
               physics: _calendarBusy
                   ? const NeverScrollableScrollPhysics()
                   : const _SnappyPagePhysics(),
-              children: [
-                _KeepAlive(
-                  child: FriendsPage(
-                    // A new source is a new page: it loads from scratch.
-                    key: ObjectKey(demo ? _demo : _server),
-                    source: demo ? _demo : _server,
-                  ),
+              child: SizedBox(
+                width: width * 4,
+                height: height,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: width,
+                      child: FriendsPage(
+                        // A new source is a new page: it loads from scratch.
+                        key: ObjectKey(_friendsSource),
+                        source: _friendsSource,
+                        onChanged: _store.load,
+                      ),
+                    ),
+                    SizedBox(
+                      width: width * 2,
+                      child: _StillCalendar(
+                        plane: plane,
+                        width: width,
+                        child: OwnEventColor(color: _ownColor, child: calendar),
+                      ),
+                    ),
+                    SizedBox(
+                      width: width,
+                      child: SettingsPage(
+                        session: widget.session,
+                        settings: widget.settings,
+                        config: widget.config,
+                        onResetDemo: _resetDemo,
+                        onResetFriends: _selection.clear,
+                      ),
+                    ),
+                  ],
                 ),
-                _KeepAlive(
-                  child: CalendarScreen(
-                    onBusyChanged: (busy) =>
-                        setState(() => _calendarBusy = busy),
-                    onOpenSettings: () => _goTo(HomePager.settingsPage),
-                  ),
-                ),
-                _KeepAlive(
-                  child: SettingsPage(
-                    session: widget.session,
-                    settings: widget.settings,
-                    config: widget.config,
-                    onResetDemo: _resetDemo,
-                  ),
-                ),
-              ],
+              ),
             );
           },
         ),
@@ -118,8 +245,43 @@ class _HomePagerState extends State<HomePager> {
   }
 }
 
-/// Page snapping with a stiffer spring than the default, so a released swipe
-/// settles in about half the time.
+/// Holds the calendar still on screen while the plane moves between the
+/// two calendar stops; outside them it moves with the plane.
+class _StillCalendar extends StatelessWidget {
+  const _StillCalendar({
+    required this.plane,
+    required this.width,
+    required this.child,
+  });
+
+  final ScrollController plane;
+  final double width;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: plane,
+      child: SizedBox(width: width, child: child),
+      builder: (context, child) {
+        final offset = plane.hasClients ? plane.offset : width * 2;
+        final shift = (offset - width).clamp(0.0, width);
+        return ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.centerLeft,
+            minWidth: width,
+            maxWidth: width,
+            child: Transform.translate(offset: Offset(shift, 0), child: child),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Snapping from stop to stop with a stiffer spring than the default, so a
+/// released swipe settles in about half the time. Stops are a viewport
+/// width apart, which is exactly what page physics snaps to.
 class _SnappyPagePhysics extends PageScrollPhysics {
   const _SnappyPagePhysics({super.parent});
 
@@ -130,27 +292,4 @@ class _SnappyPagePhysics extends PageScrollPhysics {
   @override
   SpringDescription get spring =>
       SpringDescription.withDampingRatio(mass: 0.5, stiffness: 400, ratio: 1);
-}
-
-/// Keeps a page alive off screen, so the month keeps its scroll position and
-/// friends are not reloaded on every swipe.
-class _KeepAlive extends StatefulWidget {
-  const _KeepAlive({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_KeepAlive> createState() => _KeepAliveState();
-}
-
-class _KeepAliveState extends State<_KeepAlive>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    return widget.child;
-  }
 }

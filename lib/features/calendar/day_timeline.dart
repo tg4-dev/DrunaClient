@@ -576,6 +576,7 @@ class DayTimelineState extends State<DayTimeline>
                 child: DecoratedBox(
                   decoration: liftedEventDecoration(
                     const BorderRadius.all(timelineEventRadius),
+                    color: OwnEventColor.of(context),
                   ),
                   child: title == null
                       ? const SizedBox.expand()
@@ -590,7 +591,9 @@ class DayTimelineState extends State<DayTimeline>
                               maxLines: 1,
                               softWrap: false,
                               overflow: TextOverflow.ellipsis,
-                              style: timelineTitleStyle,
+                              style: timelineTitleStyle.copyWith(
+                                color: eventInk(OwnEventColor.of(context)),
+                              ),
                             ),
                           ),
                         ),

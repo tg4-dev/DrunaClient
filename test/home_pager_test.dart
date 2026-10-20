@@ -24,7 +24,6 @@ void main() {
     final repository = DrunaRepository(
       ApiClient(baseUrl: 'https://example.test', tokenStore: store, dio: Dio()),
     );
-    final session = SessionController(repository);
     final settings = AppSettings(
       storage: MemorySettingsStorage(),
       demoByDefault: true,
@@ -33,7 +32,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: HomePager(
-          session: session,
+          session: SessionController(repository),
           settings: settings,
           config: const AppConfig(
             apiBaseUrl: 'https://example.test',
@@ -52,50 +51,110 @@ void main() {
     return rect.left >= -1 && rect.right <= 403;
   }
 
-  testWidgets('starts on the calendar; friends lie to its left', (
+  Future<void> swipe(WidgetTester tester, double dx) async {
+    await tester.flingFrom(const Offset(200, 500), Offset(dx, 0), 1500);
+    await tester.pumpAndSettle();
+  }
+
+  Finder alinaFinder() => find.bySemanticsLabel('Алина Смирнова');
+  const hint = 'Выбери друзей, чтобы увидеть их занятость';
+
+  testWidgets('opens on friends’ calendar with the friend bar', (tester) async {
+    await pumpPager(tester);
+
+    expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
+    expect(find.text(hint), findsOneWidget);
+    expect(tester.getRect(alinaFinder()).left, lessThan(200));
+  });
+
+  testWidgets('left to right: my calendar, then the friends page', (
     tester,
   ) async {
     await pumpPager(tester);
-    expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
 
-    await tester.fling(find.byType(CalendarScreen), const Offset(300, 0), 1500);
-    await tester.pumpAndSettle();
+    await swipe(tester, 300);
+    // Same calendar in place; the bar folded away to the right.
+    expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
+    expect(tester.getRect(alinaFinder()).left, greaterThan(400));
+
+    await swipe(tester, 300);
     expect(onScreen(tester, find.byType(FriendsPage)), isTrue);
-    expect(find.text('Алина Смирнова'), findsOneWidget);
 
-    await tester.fling(find.byType(FriendsPage), const Offset(-300, 0), 1500);
-    await tester.pumpAndSettle();
-    expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
+    await swipe(tester, -300);
+    await swipe(tester, -300);
+    expect(tester.getRect(alinaFinder()).left, lessThan(200));
   });
 
-  testWidgets('the gear slides to settings on the right', (tester) async {
+  testWidgets('right to left from home, and the gear, open settings', (
+    tester,
+  ) async {
     await pumpPager(tester);
 
+    await swipe(tester, -300);
+    expect(onScreen(tester, find.byType(SettingsPage)), isTrue);
+
+    await swipe(tester, 300);
+    await swipe(tester, 300);
     await tester.tap(find.byKey(const ValueKey('settings-button')));
     await tester.pumpAndSettle();
     expect(onScreen(tester, find.byType(SettingsPage)), isTrue);
-    expect(find.text('Настройки'), findsOneWidget);
-
-    await tester.fling(find.byType(SettingsPage), const Offset(300, 0), 1500);
-    await tester.pumpAndSettle();
-    expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
   });
 
-  testWidgets('"Нет сети" turns demo friends into an error', (tester) async {
+  testWidgets('a picked friend folds into the stack, which taps back', (
+    tester,
+  ) async {
+    await pumpPager(tester);
+
+    await tester.tap(alinaFinder());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('friend-ring')), findsOneWidget);
+    expect(find.text(hint), findsNothing);
+
+    await swipe(tester, 300);
+    final folded = tester.getRect(alinaFinder());
+    expect(folded.left, greaterThan(250));
+    expect(folded.right, lessThanOrEqualTo(403));
+
+    await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(alinaFinder()).left, lessThan(200));
+  });
+
+  testWidgets('"Нет сети" makes a refresh of friends fail', (tester) async {
     final settings = await pumpPager(tester);
 
     settings.demoOffline = true;
     await tester.pumpAndSettle();
-    await tester.fling(find.byType(CalendarScreen), const Offset(300, 0), 1500);
-    await tester.pumpAndSettle();
-    expect(find.text('Не удалось загрузить друзей'), findsOneWidget);
-    expect(find.text('Демо: нет соединения с сервером.'), findsOneWidget);
+    await swipe(tester, 300);
+    await swipe(tester, 300);
+    expect(onScreen(tester, find.byType(FriendsPage)), isTrue);
 
-    settings.demoOffline = false;
+    await tester.fling(find.text('Друзья'), const Offset(0, 400), 1500);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Повторить'));
+    // The page already had friends, so it keeps them and says why.
+    expect(find.text('Демо: нет соединения с сервером.'), findsOneWidget);
+    expect(find.text('Марк Ли'), findsWidgets);
+  });
+
+  testWidgets('zooming the month never slides the plane', (tester) async {
+    await pumpPager(tester);
+
+    final first = await tester.startGesture(const Offset(120, 400));
+    final second = await tester.startGesture(const Offset(280, 600));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await first.moveBy(const Offset(30, -10));
+      await second.moveBy(const Offset(30, 10));
+      await tester.pump();
+    }
+    await first.up();
+    await second.up();
     await tester.pumpAndSettle();
-    expect(find.text('Алина Смирнова'), findsOneWidget);
+
+    // Still friends' calendar: neither my calendar nor the friends page.
+    expect(tester.getRect(alinaFinder()).left, lessThan(200));
+    expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
   });
 
   testWidgets('an open day keeps horizontal swipes for itself', (tester) async {
@@ -107,14 +166,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.chevron_left), findsOneWidget);
 
-    await tester.fling(find.byType(CalendarScreen), const Offset(300, 0), 1500);
-    await tester.pumpAndSettle();
+    await swipe(tester, 300);
+    expect(find.byIcon(Icons.chevron_left), findsOneWidget);
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
 
     await tester.tap(find.byIcon(Icons.chevron_left));
     await tester.pumpAndSettle();
-    await tester.fling(find.byType(CalendarScreen), const Offset(300, 0), 1500);
-    await tester.pumpAndSettle();
+    await swipe(tester, 300);
+    await swipe(tester, 300);
     expect(onScreen(tester, find.byType(FriendsPage)), isTrue);
   });
 }

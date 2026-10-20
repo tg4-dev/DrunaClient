@@ -312,6 +312,182 @@ void main() {
     expect(tester.takeException(), isNull);
     metrics.dispose();
   });
+
+  group('friends’ mode', () {
+    final today = DateTime.now();
+    final mine = CalendarEvent(
+      id: 'mine',
+      title: 'Моё',
+      start: DateTime(today.year, today.month, today.day, 10),
+      end: DateTime(today.year, today.month, today.day, 11),
+    );
+    const friendColour = Color(0xFF34C759);
+    final busy = CalendarEvent(
+      id: 'busy',
+      title: '',
+      start: DateTime(today.year, today.month, today.day, 12),
+      end: DateTime(today.year, today.month, today.day, 13),
+      color: friendColour,
+      ownerId: 7,
+    );
+
+    Future<List<CalendarEvent>> pumpMonth(
+      WidgetTester tester,
+      double mode, {
+      VoidCallback? onShowMine,
+    }) async {
+      final tapped = <CalendarEvent>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MonthCalendar(
+              focus: today,
+              events: [mine],
+              friendEvents: [busy],
+              mode: AlwaysStoppedAnimation(mode),
+              onShowMine: onShowMine,
+              onDayTap: (_, _) {},
+              onEventTap: (event, _) => tapped.add(event),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return tapped;
+    }
+
+    /// Painted: no fully transparent [Opacity] above it. Hidden layers stay
+    /// mounted (so their state survives a swipe) but are not drawn.
+    bool painted(WidgetTester tester, Element element) {
+      var shown = true;
+      element.visitAncestorElements((ancestor) {
+        final widget = ancestor.widget;
+        if (widget is Opacity && widget.opacity == 0) shown = false;
+        return shown;
+      });
+      return shown;
+    }
+
+    Iterable<Color?> chipColours(WidgetTester tester) => find
+        .byType(DecoratedBox)
+        .evaluate()
+        .where((element) => painted(tester, element))
+        .map((element) => (element.widget as DecoratedBox).decoration)
+        .whereType<BoxDecoration>()
+        .map((decoration) => decoration.color);
+
+    bool textShown(WidgetTester tester, String text) =>
+        find.text(text).evaluate().any((element) => painted(tester, element));
+
+    testWidgets('my mode: my chips in full and tappable', (tester) async {
+      final tapped = await pumpMonth(tester, 0);
+      expect(textShown(tester, 'Моё'), isTrue);
+      expect(chipColours(tester), isNot(contains(friendColour)));
+
+      await tester.tap(find.text('Моё'));
+      expect(tapped.single.id, 'mine');
+    });
+
+    testWidgets('friends’ chips do not replay their entrance after a swipe', (
+      tester,
+    ) async {
+      final mode = ValueNotifier<double>(1);
+      addTearDown(mode.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MonthCalendar(
+              focus: today,
+              events: [mine],
+              friendEvents: [busy],
+              mode: mode,
+              onDayTap: (_, _) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final value in [0.5, 0.0, 0.5, 1.0]) {
+        mode.value = value;
+        await tester.pump();
+      }
+      // The very first frame back: an entrance would start from 0.
+      final chip = find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).color == friendColour,
+      );
+      final fades = tester.widgetList<Opacity>(
+        find.ancestor(of: chip.first, matching: find.byType(Opacity)),
+      );
+      expect(fades.every((opacity) => opacity.opacity == 1), isTrue);
+    });
+
+    testWidgets('today is a white disc with a dark number', (tester) async {
+      await pumpMonth(tester, 0);
+      final number = tester.widget<Text>(
+        find.byKey(ValueKey('day-${today.year}-${today.month}-${today.day}')),
+      );
+      expect(number.style?.color, Colors.black);
+      final disc = tester.widget<Container>(
+        find
+            .ancestor(
+              of: find.byWidget(number),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      expect((disc.decoration! as BoxDecoration).color, Colors.white);
+    });
+
+    testWidgets('my events take my colour, with dark text on a light one', (
+      tester,
+    ) async {
+      const mine = Color(0xFFFFD60A);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OwnEventColor(
+              color: mine,
+              child: MonthCalendar(
+                focus: today,
+                events: [
+                  CalendarEvent(
+                    id: 'mine',
+                    title: 'Моё',
+                    start: DateTime(today.year, today.month, today.day, 10),
+                    end: DateTime(today.year, today.month, today.day, 11),
+                  ),
+                ],
+                onDayTap: (_, _) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(chipColours(tester), contains(mine));
+      expect(tester.widget<Text>(find.text('Моё')).style?.color, Colors.black);
+    });
+
+    testWidgets('friends’ mode: their chips in their colour; mine a band', (
+      tester,
+    ) async {
+      var shown = 0;
+      final tapped = await pumpMonth(tester, 1, onShowMine: () => shown++);
+      expect(textShown(tester, 'Моё'), isFalse);
+      expect(chipColours(tester), contains(friendColour));
+
+      // My chip is beyond the line and takes no taps.
+      await tester.tap(find.text('Моё'), warnIfMissed: false);
+
+      await tester.tap(find.bySemanticsLabel('Показать мои события').first);
+      expect(shown, 1);
+      expect(tapped, isEmpty);
+    });
+  });
 }
 
 void _ignoreTap(DateTime day, Rect weekRect) {}

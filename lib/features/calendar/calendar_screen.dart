@@ -4,15 +4,57 @@ import 'package:druna_app/features/calendar/day_title_layout.dart';
 import 'package:druna_app/features/calendar/event_sheet.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
+import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
+import 'package:druna_app/features/friends/friend_bar.dart';
+import 'package:druna_app/features/friends/friend_selection.dart';
+import 'package:druna_app/features/friends/friends_store.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({this.onBusyChanged, this.onOpenSettings, super.key});
+/// What the calendar needs to show friends: the bar at the bottom and their
+/// busy time in the month.
+class CalendarFriends {
+  const CalendarFriends({
+    required this.store,
+    required this.selection,
+    required this.events,
+    required this.onShowFriends,
+    required this.onShowMine,
+    required this.onAddFriends,
+    this.schedulesAvailable = true,
+  });
 
-  /// `true` while a day is open or an event sheet is on screen: horizontal
-  /// swipes then belong to the calendar, not to the pages around it.
+  final FriendsStore store;
+  final FriendSelection selection;
+
+  /// Busy time of the selected friends, already in their colours.
+  final ValueListenable<List<CalendarEvent>> events;
+  final VoidCallback onShowFriends;
+  final VoidCallback onShowMine;
+  final VoidCallback onAddFriends;
+  final bool schedulesAvailable;
+}
+
+class CalendarScreen extends StatefulWidget {
+  const CalendarScreen({
+    this.onBusyChanged,
+    this.onOpenSettings,
+    this.friends,
+    this.mode = myEventsMode,
+    super.key,
+  });
+
+  /// Without it the calendar shows only the user's events and no bar.
+  final CalendarFriends? friends;
+
+  /// 0 shows the user's events in full, 1 friends'; see [MonthWeekGrid].
+  final ValueListenable<double> mode;
+
+  /// `true` while a day is open, an event sheet is on screen or the month is
+  /// being zoomed: horizontal swipes then belong to the calendar, not to the
+  /// pages around it.
   final ValueChanged<bool>? onBusyChanged;
 
   /// Shows the gear at the top right of the month.
@@ -49,9 +91,13 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   var _reportedBusy = false;
 
+  /// Two fingers zoom the month: the plane must not slide meanwhile.
+  var _pinching = false;
+
   /// Tells the parent after the frame, since it rebuilds in response.
   void _reportBusy() {
-    final busy = _day != null || _editor != null || _leaving.isNotEmpty;
+    final busy =
+        _pinching || _day != null || _editor != null || _leaving.isNotEmpty;
     if (busy == _reportedBusy) return;
     _reportedBusy = busy;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -274,10 +320,17 @@ class _CalendarScreenState extends State<CalendarScreen>
     final from = _from;
     // Each layer is built once per state change and handed to the animation
     // as a child, so open/close frames only move and fade it.
-    final month = MonthCalendar(
+    final friends = widget.friends;
+    MonthCalendar monthWith(List<CalendarEvent> friendEvents) => MonthCalendar(
       key: _monthKey,
       focus: DateTime.now(),
       events: _events,
+      friendEvents: friendEvents,
+      mode: widget.mode,
+      onShowMine: friends?.onShowMine,
+      onPinchChanged: (pinching) {
+        if (pinching != _pinching) setState(() => _pinching = pinching);
+      },
       onDayTap: _open,
       onEventTap: (event, rect) => _openEditor(event, isNew: false),
       onCreate: _createEvent,
@@ -286,6 +339,12 @@ class _CalendarScreenState extends State<CalendarScreen>
           ? null
           : _SettingsButton(onPressed: widget.onOpenSettings!),
     );
+    final Widget month = friends == null
+        ? monthWith(const [])
+        : ValueListenableBuilder<List<CalendarEvent>>(
+            valueListenable: friends.events,
+            builder: (context, events, _) => monthWith(events),
+          );
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -307,6 +366,34 @@ class _CalendarScreenState extends State<CalendarScreen>
               );
             },
           ),
+          if (friends != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.paddingOf(context).bottom + 4,
+              child: AnimatedBuilder(
+                animation: _expand,
+                // The bar belongs to the month: it leaves as a day opens.
+                builder: (context, child) => IgnorePointer(
+                  ignoring: _expand.value > 0.04 && !_closingDay,
+                  child: Opacity(
+                    opacity: (1 - _expand.value * 2).clamp(0.0, 1.0),
+                    child: child,
+                  ),
+                ),
+                child: ListenableBuilder(
+                  listenable: friends.store,
+                  builder: (context, _) => FriendBar(
+                    friends: friends.store.friends,
+                    selection: friends.selection,
+                    mode: widget.mode,
+                    schedulesAvailable: friends.schedulesAvailable,
+                    onShowFriends: friends.onShowFriends,
+                    onAddFriends: friends.onAddFriends,
+                  ),
+                ),
+              ),
+            ),
           if (day != null && from != null)
             _ExpandedDay(
               animation: _expand,

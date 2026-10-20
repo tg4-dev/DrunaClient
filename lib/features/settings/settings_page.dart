@@ -20,6 +20,7 @@ class SettingsPage extends StatelessWidget {
     required this.settings,
     required this.config,
     required this.onResetDemo,
+    required this.onResetFriends,
     super.key,
   });
 
@@ -30,8 +31,16 @@ class SettingsPage extends StatelessWidget {
   /// Puts the demo friends back as they were at launch.
   final VoidCallback onResetDemo;
 
+  /// Forgets which friends are picked in the friend bar and how often.
+  final VoidCallback onResetFriends;
+
   @override
   Widget build(BuildContext context) {
+    // Its own messenger: the other pages of the plane are mounted too.
+    return ScaffoldMessenger(child: _page());
+  }
+
+  Widget _page() {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -78,6 +87,20 @@ class SettingsPage extends StatelessWidget {
                       onChanged: settings.demoFriends
                           ? (value) => settings.demoOffline = value
                           : null,
+                    ),
+                    _SwitchRow(
+                      title: 'Демо-расписания друзей',
+                      subtitle: 'Занятость выбранных друзей в календаре',
+                      value: settings.demoSchedules,
+                      onChanged: (value) => settings.demoSchedules = value,
+                    ),
+                    _ActionRow(
+                      title: 'Сбросить выбор друзей',
+                      subtitle: 'Кто выбран в нижней панели и как часто',
+                      onTap: () {
+                        onResetFriends();
+                        _toast(context, 'Выбор друзей сброшен');
+                      },
                     ),
                     _ActionRow(
                       title: 'Сбросить демо-друзей',

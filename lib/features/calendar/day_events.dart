@@ -97,7 +97,7 @@ class DayEventLayer extends StatelessWidget {
             duration: const Duration(milliseconds: 160),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: calendarEventColor,
+                color: eventColor(event, OwnEventColor.of(context)),
                 borderRadius: radius,
               ),
             ),
@@ -132,6 +132,7 @@ class DayTitleOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final own = OwnEventColor.of(context);
     final children = <Widget>[];
     for (final event in events) {
       if (event.id == hiddenEventId) continue;
@@ -178,7 +179,9 @@ class DayTitleOverlay extends StatelessWidget {
                 maxLines: 1,
                 softWrap: false,
                 overflow: TextOverflow.ellipsis,
-                style: timelineTitleStyle,
+                style: timelineTitleStyle.copyWith(
+                  color: eventInk(eventColor(event, own)),
+                ),
               ),
             ),
           ),

@@ -384,15 +384,20 @@ class _EventDurationSheetState extends State<EventDurationSheet>
     );
   }
 
+  Color get _color => eventColor(widget.event, OwnEventColor.of(context));
+
+  /// White on dark event colours, black on light ones.
+  Color get _ink => eventInk(_color);
+
   Widget _card() {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onVerticalDragUpdate: _onDragUpdate,
       onVerticalDragEnd: _onDragEnd,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: calendarEventColor,
-          borderRadius: BorderRadius.all(_cardRadius),
+        decoration: BoxDecoration(
+          color: _color,
+          borderRadius: const BorderRadius.all(_cardRadius),
         ),
         child: Padding(
           padding: _cardPadding,
@@ -417,9 +422,9 @@ class _EventDurationSheetState extends State<EventDurationSheet>
                       decoration: const BoxDecoration(),
                       cursorColor: SheetStyle.accent,
                       textCapitalization: TextCapitalization.sentences,
-                      style: _cardTitle,
+                      style: _cardTitle.copyWith(color: _ink),
                       placeholder: 'Название',
-                      placeholderStyle: _cardTitle,
+                      placeholderStyle: _cardTitle.copyWith(color: _ink),
                     ),
                   ),
                   AnimatedSwitcher(
@@ -431,7 +436,7 @@ class _EventDurationSheetState extends State<EventDurationSheet>
                             padding: const EdgeInsets.only(left: 12),
                             child: Text(
                               clockRangeLabel(_start, _end),
-                              style: _cardTime,
+                              style: _cardTime.copyWith(color: _ink),
                             ),
                           ),
                   ),

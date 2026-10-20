@@ -24,14 +24,22 @@ const avatarPalette = <Color>[
 /// The same person always gets the same colour: by server id, or by username
 /// when there is no id yet. The username hash is spelled out rather than
 /// `String.hashCode`, which may differ between platforms and runs.
+///
+/// Ids step through the palette by [avatarHueStride], so people with
+/// neighbouring ids (friends who joined together) get far-apart hues.
 Color avatarColorFor({required int id, String username = ''}) {
-  if (id > 0) return avatarPalette[id % avatarPalette.length];
+  if (id > 0) return avatarPalette[avatarSlotFor(id)];
   var hash = 0x811C9DC5;
   for (final unit in username.toLowerCase().codeUnits) {
     hash = ((hash ^ unit) * 0x01000193) & 0xFFFFFFFF;
   }
   return avatarPalette[hash % avatarPalette.length];
 }
+
+/// Coprime with 16: every slot is used once per 16 ids.
+const avatarHueStride = 7;
+
+int avatarSlotFor(int id) => (id * avatarHueStride) % avatarPalette.length;
 
 /// First letter of the name, else of the username, else "?". Takes a whole
 /// grapheme, so an emoji or a letter with a combining mark stays intact.

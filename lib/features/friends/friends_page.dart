@@ -38,9 +38,12 @@ abstract final class FriendsStyle {
 /// "Друзья": the page left of the month. Incoming requests with ✓ and ✕,
 /// the friends list, and search by username to send a request.
 class FriendsPage extends StatefulWidget {
-  const FriendsPage({required this.source, super.key});
+  const FriendsPage({required this.source, this.onChanged, super.key});
 
   final FriendsSource source;
+
+  /// After a friend was added or removed, so the friend bar can reload.
+  final VoidCallback? onChanged;
 
   @override
   State<FriendsPage> createState() => _FriendsPageState();
@@ -48,6 +51,10 @@ class FriendsPage extends StatefulWidget {
 
 class _FriendsPageState extends State<FriendsPage> {
   final _query = TextEditingController();
+
+  /// The page's own messenger: every page of the home plane is mounted at
+  /// once, and a shared one would show the snackbar on all of them.
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
   Timer? _debounce;
 
   List<FriendInfo>? _friends;
@@ -81,10 +88,10 @@ class _FriendsPageState extends State<FriendsPage> {
       ? Duration.zero
       : FriendsStyle.leave;
 
-  /// [quiet]: a refresh after an action keeps the lists on screen and reports
-  /// a failure in a snackbar instead of replacing the page with an error.
-  Future<void> _load({bool quiet = false}) async {
-    if (!quiet) setState(() => _error = null);
+  /// With lists on screen a failed load keeps them and shows a snackbar;
+  /// without them the page shows the error with a retry.
+  Future<void> _load() async {
+    setState(() => _error = null);
     try {
       final results = await Future.wait([
         widget.source.listFriends(),
@@ -100,7 +107,7 @@ class _FriendsPageState extends State<FriendsPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      if (quiet && _friends != null) {
+      if (_friends != null) {
         _toast(error);
       } else {
         setState(() => _error = error);
@@ -154,12 +161,13 @@ class _FriendsPageState extends State<FriendsPage> {
     setState(() => _busy.add(username));
     try {
       await action(username);
+      widget.onChanged?.call();
       if (!mounted) return;
       if (leaving != null) {
         setState(() => _gone.add('$leaving:$username'));
         await Future<void>.delayed(_motion);
       }
-      await _load(quiet: true);
+      await _load();
     } catch (error) {
       if (mounted) _toast(error);
     } finally {
@@ -188,13 +196,16 @@ class _FriendsPageState extends State<FriendsPage> {
     final message = error is ApiException
         ? error.message
         : 'Не получилось. Попробуй ещё раз.';
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+    _messenger.currentState
+      ?..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ScaffoldMessenger(key: _messenger, child: _page(context));
+
+  Widget _page(BuildContext context) {
     final friends = _friends;
     return Scaffold(
       backgroundColor: Colors.black,

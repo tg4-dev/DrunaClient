@@ -20,6 +20,10 @@ class MonthCalendar extends StatefulWidget {
     this.onCreate,
     this.onMove,
     this.titleAction,
+    this.friendEvents = const [],
+    this.mode = myEventsMode,
+    this.onShowMine,
+    this.onPinchChanged,
     super.key,
   });
 
@@ -32,6 +36,19 @@ class MonthCalendar extends StatefulWidget {
 
   /// A button at the right end of the month title, e.g. settings.
   final Widget? titleAction;
+
+  /// Busy time of the selected friends, in their colours.
+  final List<CalendarEvent> friendEvents;
+
+  /// 0 shows the user's events, 1 friends'; see [MonthWeekGrid].
+  final ValueListenable<double> mode;
+
+  /// A tap on the band of the user's events while friends are shown.
+  final VoidCallback? onShowMine;
+
+  /// `true` when a second finger lands and the month starts to zoom,
+  /// `false` when the zoom ends: sideways swipes must wait meanwhile.
+  final ValueChanged<bool>? onPinchChanged;
 
   /// [day] is the event's new first day: the drop day shifted back by how far
   /// into the event it was grabbed.
@@ -77,6 +94,7 @@ class MonthCalendarState extends State<MonthCalendar>
   /// The days the held event would land on, tinted in every row they cross.
   final _dropRange = ValueNotifier<DropRange?>(null);
   late CalendarEventIndex _index;
+  late CalendarEventIndex _friendIndex;
   late final AppLifecycleListener _lifecycle;
   Timer? _midnight;
 
@@ -92,6 +110,7 @@ class MonthCalendarState extends State<MonthCalendar>
     super.initState();
     _today = dateOnly(DateTime.now());
     _index = CalendarEventIndex(widget.events);
+    _friendIndex = CalendarEventIndex(widget.friendEvents);
     _lifecycle = AppLifecycleListener(onResume: _refreshToday);
     _scheduleMidnight();
     final focus = dateOnly(widget.focus ?? _today);
@@ -111,6 +130,9 @@ class MonthCalendarState extends State<MonthCalendar>
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.events, widget.events)) {
       _index = CalendarEventIndex(widget.events);
+    }
+    if (!identical(oldWidget.friendEvents, widget.friendEvents)) {
+      _friendIndex = CalendarEventIndex(widget.friendEvents);
     }
   }
 
@@ -224,6 +246,7 @@ class MonthCalendarState extends State<MonthCalendar>
     _pointers[event.pointer] = event.position;
     if (_pointers.length >= 2) _cancelHold();
     if (_pointers.length != 2) return;
+    widget.onPinchChanged?.call(true);
     _rowSnap.stop();
     _snapping = false;
     _pinchStartDistance = _pointerDistance();
@@ -280,6 +303,7 @@ class MonthCalendarState extends State<MonthCalendar>
     _pointers.remove(event.pointer);
     if (finishHold && _pointers.isEmpty) _finishHold();
     if (!wasPinch || _pointers.length >= 2) return;
+    widget.onPinchChanged?.call(false);
     _pinchStartDistance = null;
     _snapFrom = _rowHeight;
     _snapTo = nearestLevel(_rowHeight, monthRowLevels);
@@ -464,7 +488,10 @@ class MonthCalendarState extends State<MonthCalendar>
       height: height,
       child: IgnorePointer(
         child: DecoratedBox(
-          decoration: liftedEventDecoration(BorderRadius.circular(10)),
+          decoration: liftedEventDecoration(
+            BorderRadius.circular(10),
+            color: OwnEventColor.of(context),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Align(
@@ -473,8 +500,8 @@ class MonthCalendarState extends State<MonthCalendar>
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: eventInk(OwnEventColor.of(context)),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -555,6 +582,9 @@ class MonthCalendarState extends State<MonthCalendar>
                                   strip: strip,
                                   today: _today,
                                   index: _index,
+                                  friendIndex: _friendIndex,
+                                  mode: widget.mode,
+                                  onShowMine: widget.onShowMine,
                                   hiddenEventId: widget.hiddenEventId,
                                   dimmedEventId: _holdEvent?.id,
                                   hoverDay: _dropRange,
@@ -638,6 +668,9 @@ class _WeekStrip extends StatelessWidget {
     required this.today,
     required this.onTap,
     required this.index,
+    required this.friendIndex,
+    required this.mode,
+    this.onShowMine,
     this.hiddenEventId,
     this.dimmedEventId,
     this.hoverDay,
@@ -649,6 +682,9 @@ class _WeekStrip extends StatelessWidget {
   final DateTime today;
   final ValueChanged<DateTime> onTap;
   final CalendarEventIndex index;
+  final CalendarEventIndex friendIndex;
+  final ValueListenable<double> mode;
+  final VoidCallback? onShowMine;
   final String? hiddenEventId;
   final String? dimmedEventId;
   final ValueListenable<DropRange?>? hoverDay;
@@ -689,6 +725,9 @@ class _WeekStrip extends StatelessWidget {
                   rowKey: rowKey,
                   today: today,
                   index: index,
+                  friendIndex: friendIndex,
+                  mode: mode,
+                  onShowMine: onShowMine,
                   hiddenEventId: hiddenEventId,
                   dimmedEventId: dimmedEventId,
                   hoverDay: hoverDay,

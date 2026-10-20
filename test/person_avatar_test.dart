@@ -28,12 +28,21 @@ void main() {
 
     test('is the same for the same person', () {
       expect(avatarColorFor(id: 7), avatarColorFor(id: 7));
-      expect(avatarColorFor(id: 7), avatarPalette[7]);
-      expect(avatarColorFor(id: 23), avatarPalette[7]);
+      expect(avatarColorFor(id: 23), avatarColorFor(id: 7));
+      expect({
+        for (var id = 1; id <= 16; id++) avatarColorFor(id: id),
+      }, hasLength(16));
       expect(
         avatarColorFor(id: 0, username: 'Alina'),
         avatarColorFor(id: 0, username: 'alina'),
       );
+    });
+
+    test('neighbouring ids get hues far apart', () {
+      final a = avatarSlotFor(101);
+      final b = avatarSlotFor(102);
+      final distance = (a - b).abs();
+      expect(distance < 16 - distance ? distance : 16 - distance, 7);
     });
 
     test('spreads usernames over the palette', () {
@@ -61,6 +70,6 @@ void main() {
     expect(find.text('М'), findsOneWidget);
     final box = tester.widget<Container>(find.byType(Container));
     final decoration = box.decoration! as BoxDecoration;
-    expect(decoration.color, avatarPalette[3]);
+    expect(decoration.color, avatarColorFor(id: 3));
   });
 }
