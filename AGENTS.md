@@ -191,7 +191,7 @@ flutter run \
   `1246EEFE-E718-4DE2-AE96-2DE0DD2EF254`;
 - debug-сборка iOS Simulator успешно собрана, установлена и запущена;
 - `flutter analyze` проходит без замечаний;
-- `flutter test` проходит (на 2026-10-20 — 141 тест).
+- `flutter test` проходит (на 2026-10-20 — 142 теста).
 
 Android SDK и Chrome в этом окружении не установлены. Android-сборка не была
 проверена. Запуск на физическом iPhone и release signing также не проверялись.

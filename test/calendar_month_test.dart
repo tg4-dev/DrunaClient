@@ -427,6 +427,19 @@ void main() {
       expect(fades.every((opacity) => opacity.opacity == 1), isTrue);
     });
 
+    test('the layers take turns: one folds, then the other unfolds', () {
+      // First half: only my chips move; friends' stay folded.
+      expect(myFoldAt(0.25), 0.5);
+      expect(friendsFoldAt(0.25), 1);
+      // Halfway both are folded; second half only friends' move.
+      expect(myFoldAt(0.5), 1);
+      expect(friendsFoldAt(0.5), 1);
+      expect(myFoldAt(0.75), 1);
+      expect(friendsFoldAt(0.75), 0.5);
+      expect(myFoldAt(0), 0);
+      expect(friendsFoldAt(1), 0);
+    });
+
     test('friends’ chips stop at the middle density', () {
       expect(friendDensityFor(detailDensity), titleDensity);
       expect(friendDensityFor(titleDensity), titleDensity);

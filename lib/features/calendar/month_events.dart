@@ -494,7 +494,7 @@ class _MineChips extends StatelessWidget {
       builder: (context, d) {
         Widget moving(int lane, Widget child) => _ChipMotion(
           mode: mode,
-          awayAt: (t) => t,
+          awayAt: myFoldAt,
           lane: lane,
           lanes: lanes,
           homeTop: monthEventHeader + lane * d.slot,
@@ -544,6 +544,14 @@ class _MineChips extends StatelessWidget {
     );
   }
 }
+
+/// The two layers take turns, never moving at once: on the way to friends'
+/// calendar the user's chips fold over the first half of the swipe and
+/// friends' unfold over the second; the way back mirrors it. Each band
+/// follows its own layer.
+double myFoldAt(double mode) => (mode * 2).clamp(0.0, 1.0);
+
+double friendsFoldAt(double mode) => ((1 - mode) * 2).clamp(0.0, 1.0);
 
 /// Gap between a week line and a chip folded against it.
 const chipFoldGap = 2.0;
@@ -753,7 +761,7 @@ class _FriendChipsState extends State<_FriendChips> {
   Widget _motion(int lane, int lanes, EventDensity d, Widget child) =>
       _ChipMotion(
         mode: widget.mode,
-        awayAt: (t) => 1 - t,
+        awayAt: friendsFoldAt,
         lane: lane,
         lanes: lanes,
         homeTop: monthEventHeader + lane * d.slot,
@@ -830,8 +838,8 @@ class _BandPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    _paint(canvas, size, mine, away: mode, fromTop: true);
-    _paint(canvas, size, friends, away: 1 - mode, fromTop: false);
+    _paint(canvas, size, mine, away: myFoldAt(mode), fromTop: true);
+    _paint(canvas, size, friends, away: friendsFoldAt(mode), fromTop: false);
   }
 
   void _paint(
