@@ -9,6 +9,10 @@ class DrunaRepository {
 
   Future<bool> restoreSession() => _api.restoreSession();
   Future<void> logout() => _api.clearSession();
+  void debugExpireAccessToken() => _api.debugExpireAccessToken();
+
+  /// `GET /ping/`: the server and its database answer.
+  Future<void> ping() => _api.publicRequest<void>('/ping/', decode: (_) {});
 
   Future<void> signIn(String username, String password) async {
     final tokens = await _api.publicRequest<TokenPair>(
