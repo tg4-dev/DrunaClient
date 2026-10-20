@@ -1,22 +1,20 @@
 # Druna Flutter client
 
-Мобильный клиент Druna для iOS и Android. Приложение переносит визуальную систему прототипа v18 (тёмная тема, цветовые поля событий, карточки и нижняя панель) на адаптивные Flutter-виджеты и работает с REST API из `context/FRONTEND_API.md`.
+Мобильный клиент Druna для iOS и Android. Работает с REST API из `context/FRONTEND_API.md`. Интерфейс переписывается по Figma: дизайн-система и журнал решений — в `docs/design-system.md`, текущее состояние — в `AGENTS.md`.
 
-## Что реализовано
+## Что сейчас в приложении
 
-| Экран / сценарий | API | Состояния |
+| Экран / сценарий | Данные | Состояния |
 |---|---|---|
-| Splash и восстановление сессии | secure storage, `POST /auth/renew-token` при 401 | restoring, offline, expired session |
-| Регистрация и вход | `POST /auth/sign-up`, `POST /auth/sign-in` | validation, submitting, server error |
-| Главная и список событий | `GET /api/v1/events/` | loading, refreshing, empty, error |
-| Создание, редактирование, удаление события | `POST/PATCH/DELETE /api/v1/events/*` | validation, submitting, confirm delete |
-| Профиль | `GET/PATCH /api/v1/users/me` | loading, edit, error, logout |
-| Друзья, поиск и заявки | `/api/v1/friends/*` | loading, empty, search, incoming requests |
-| Группы и участники | `/api/v1/groups/*` | loading, empty, create, details |
-| Групповые события и общие окна | `/api/v1/groups/:id/events`, `/free-time` | loading, empty, CRUD, date selection |
-| Уведомления | polling входящих заявок при открытии/refresh | loading, empty, error |
+| Splash и восстановление сессии (старый UI) | secure storage, `POST /auth/renew-token` при 401 | restoring, offline, expired session |
+| Регистрация и вход (старый UI) | `POST /auth/sign-up`, `POST /auth/sign-in` | validation, submitting, server error |
+| Календарь: месяц, день, лист события | демо-события в памяти | — |
+| Друзья (слева от календаря, свайп слева направо) | `/api/v1/friends/*` или демо (переключается в настройках) | loading, empty, error, search, заявки ✓/✕ |
+| Настройки (справа от календаря, шестерёнка) | профиль, `GET /ping/`, refresh токена | демо-данные, «нет сети», замедление анимаций, выход |
 
-Опросы, гостевые приглашения, push delivery и подключение Apple/Google/Outlook Calendar показаны в дизайне, но отсутствуют в текущем backend-контракте. Приложение сообщает об этом пользователю и не имитирует успешное сохранение. Уведомления обновляются polling’ом, как предписывает API guide.
+Группы, профиль, события на сервере и уведомления есть в `DrunaRepository`, но их экраны ждут нового UI. Как они работали раньше — `docs/legacy/`.
+
+Опросы, гостевые приглашения, push delivery и подключение Apple/Google/Outlook Calendar отсутствуют в текущем backend-контракте (`docs/backend-changes.md`). Приложение не имитирует успешное сохранение.
 
 ## Требования
 

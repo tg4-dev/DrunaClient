@@ -35,6 +35,17 @@ class ApiClient {
     await _tokenStore.write(tokens);
   }
 
+  /// For the settings page: the next request goes out with a dead access
+  /// token, so the 401 → refresh → retry path runs. The stored pair is kept.
+  void debugExpireAccessToken() {
+    final tokens = _tokens;
+    if (tokens == null) return;
+    _tokens = TokenPair(
+      accessToken: 'expired-by-settings',
+      refreshToken: tokens.refreshToken,
+    );
+  }
+
   Future<void> clearSession() async {
     _tokens = null;
     await _tokenStore.clear();

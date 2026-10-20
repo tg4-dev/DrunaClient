@@ -5,10 +5,18 @@ import 'package:druna_app/features/calendar/event_sheet.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({super.key});
+  const CalendarScreen({this.onBusyChanged, this.onOpenSettings, super.key});
+
+  /// `true` while a day is open or an event sheet is on screen: horizontal
+  /// swipes then belong to the calendar, not to the pages around it.
+  final ValueChanged<bool>? onBusyChanged;
+
+  /// Shows the gear at the top right of the month.
+  final VoidCallback? onOpenSettings;
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -38,6 +46,18 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   /// Sheets that were swiped away: already saved, only playing their exit.
   final _leaving = <_Editor>[];
+
+  var _reportedBusy = false;
+
+  /// Tells the parent after the frame, since it rebuilds in response.
+  void _reportBusy() {
+    final busy = _day != null || _editor != null || _leaving.isNotEmpty;
+    if (busy == _reportedBusy) return;
+    _reportedBusy = busy;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onBusyChanged?.call(busy);
+    });
+  }
 
   @override
   void initState() {
@@ -249,6 +269,7 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   @override
   Widget build(BuildContext context) {
+    _reportBusy();
     final day = _day;
     final from = _from;
     // Each layer is built once per state change and handed to the animation
@@ -261,6 +282,9 @@ class _CalendarScreenState extends State<CalendarScreen>
       onEventTap: (event, rect) => _openEditor(event, isNew: false),
       onCreate: _createEvent,
       onMove: _moveEvent,
+      titleAction: widget.onOpenSettings == null
+          ? null
+          : _SettingsButton(onPressed: widget.onOpenSettings!),
     );
     return Scaffold(
       backgroundColor: Colors.black,
@@ -663,4 +687,33 @@ class _Editor {
   final CalendarEvent event;
   final bool isNew;
   final key = UniqueKey();
+}
+
+class _SettingsButton extends StatelessWidget {
+  const _SettingsButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Настройки',
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const ValueKey('settings-button'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: const SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            CupertinoIcons.gear_alt,
+            color: Color(0xFFD1D1D6),
+            size: 26,
+          ),
+        ),
+      ),
+    );
+  }
 }

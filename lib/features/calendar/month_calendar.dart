@@ -19,6 +19,7 @@ class MonthCalendar extends StatefulWidget {
     this.onEventTap,
     this.onCreate,
     this.onMove,
+    this.titleAction,
     super.key,
   });
 
@@ -28,6 +29,9 @@ class MonthCalendar extends StatefulWidget {
   final String? hiddenEventId;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
   final void Function(DateTime day, Rect chipRect)? onCreate;
+
+  /// A button at the right end of the month title, e.g. settings.
+  final Widget? titleAction;
 
   /// [day] is the event's new first day: the drop day shifted back by how far
   /// into the event it was grabbed.
@@ -497,18 +501,29 @@ class MonthCalendarState extends State<MonthCalendar>
                 SizedBox(
                   height: monthTitleHeight,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        monthTitle(_visibleMonth),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.6,
+                    // The action's 44 pt target reaches past the icon, so
+                    // the icon itself lines up with the 20 pt margin.
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      8,
+                      widget.titleAction == null ? 20 : 10,
+                      0,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            monthTitle(_visibleMonth),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.6,
+                            ),
+                          ),
                         ),
-                      ),
+                        ?widget.titleAction,
+                      ],
                     ),
                   ),
                 ),
