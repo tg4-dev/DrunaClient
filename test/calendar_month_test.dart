@@ -508,6 +508,14 @@ void main() {
       expect(friendsFoldAt(1), 0);
     });
 
+    test('month chips are pills, 15% lower than before', () {
+      for (final density in [barDensity, titleDensity, detailDensity]) {
+        expect(monthChipRadius(density), density.itemHeight / 2);
+      }
+      expect(titleDensity.itemHeight, 15);
+      expect(detailDensity.itemHeight, 27);
+    });
+
     test('friends’ chips stop at the middle density', () {
       expect(friendDensityFor(detailDensity), titleDensity);
       expect(friendDensityFor(titleDensity), titleDensity);

@@ -61,21 +61,21 @@ class EventDensity {
 const barDensity = EventDensity(
   bars: true,
   showTime: false,
-  itemHeight: 6,
+  itemHeight: 5,
   gap: 2,
 );
 
 const titleDensity = EventDensity(
   bars: false,
   showTime: false,
-  itemHeight: 18,
+  itemHeight: 15,
   gap: 2,
 );
 
 const detailDensity = EventDensity(
   bars: false,
   showTime: true,
-  itemHeight: 32,
+  itemHeight: 27,
   gap: 3,
 );
 

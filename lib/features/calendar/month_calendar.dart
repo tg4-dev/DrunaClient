@@ -480,7 +480,7 @@ class MonthCalendarState extends State<MonthCalendar>
     if (local == null) return const SizedBox.shrink();
     final title = _chipTitle;
     const width = 132.0;
-    const height = 28.0;
+    const height = 24.0;
     return Positioned(
       left: local.dx - width / 2,
       top: local.dy - height - 24,
@@ -489,11 +489,11 @@ class MonthCalendarState extends State<MonthCalendar>
       child: IgnorePointer(
         child: DecoratedBox(
           decoration: liftedEventDecoration(
-            BorderRadius.circular(10),
+            BorderRadius.circular(height / 2),
             color: OwnEventColor.of(context),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(

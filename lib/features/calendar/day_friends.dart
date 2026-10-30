@@ -73,17 +73,54 @@ class DayFriendsGeometry {
   double stackTarget(int stack) =>
       stackTop(stack < stackMax ? stack : stackMax);
 
-  /// Top of the avatar on row [row] scrolled by [offset], folded by [fold]
-  /// (0 on its row, 1 in the stack at [stack]). The column and friends'
-  /// bars both move by it, so a bar never leaves its avatar's level.
+  /// How softly an avatar settles into its place in the stack, in points.
+  static const _settle = 10.0;
+
+  double _openTop(double row, double offset) =>
+      rowTop(0) + row * rowStep + avatarInset - offset;
+
+  /// How far the picked friends travel together while folding: the first
+  /// one's way to the stack, and a little more so it settles there.
+  double _groupShift(double offset) =>
+      stackTop(0) - _openTop(0, offset) + 6 * _settle;
+
+  /// Top of the picked friend's avatar on row [row] scrolled by [offset],
+  /// folded by [fold] (0 on its row, 1 in the stack at [stack]). The column
+  /// and friends' bars both move by it, so a bar never leaves its avatar's
+  /// level.
+  ///
+  /// All slide down together, as fast as the finger; the lowest reaches the
+  /// stack first and settles, the ones above pile onto it, so the gaps close
+  /// towards the end, like stacked notifications on iOS. Back, they slide
+  /// out of the stack the top one first.
   double avatarTop({
     required double row,
     required int stack,
     required double offset,
     required double fold,
   }) {
-    final open = rowTop(0) + row * rowStep + avatarInset - offset;
-    return open + (stackTarget(stack) - open) * fold;
+    final open = _openTop(row, offset);
+    final target = stackTarget(stack);
+    if (fold <= 0) return open;
+    if (fold >= 1) return target;
+    if (open >= target) return open + (target - open) * fold;
+    final free = open + fold * _groupShift(offset);
+    // A smooth min(free, target): free far above, target once past it.
+    final x = (target - free) / _settle;
+    if (x > 30) return free;
+    return target - _settle * math.log(1 + math.exp(x));
+  }
+
+  /// Top of a friend who is not picked: slides down with the others and on
+  /// past the bottom of the screen, keeping their order.
+  double hiddenTop({
+    required double row,
+    required double offset,
+    required double fold,
+  }) {
+    final open = _openTop(row, offset);
+    final away = height + avatar + row * 12 - open;
+    return open + fold * math.max(_groupShift(offset), away);
   }
 
   /// How far the rows scroll: until the last one is above [bandBottom].
@@ -225,21 +262,8 @@ class DayFriendLayer extends StatelessWidget {
             height: DayFriendsGeometry.rowHeight,
             child: AnimatedBuilder(
               animation: motion,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.horizontal(
-                    left: span.continuesBefore
-                        ? Radius.zero
-                        : timelineEventRadius,
-                    right: span.continuesAfter
-                        ? Radius.zero
-                        : timelineEventRadius,
-                  ),
-                ),
-              ),
-              builder: (context, child) {
-                final fold = dayColumnFold(mode.value);
+              builder: (context, _) {
+                final fold = dayFriendsFold(mode.value);
                 final top =
                     geometry.avatarTop(
                       row: row.toDouble(),
@@ -248,11 +272,26 @@ class DayFriendLayer extends StatelessWidget {
                       fold: fold,
                     ) -
                     DayFriendsGeometry.avatarInset;
-                return Transform(
-                  alignment: Alignment.bottomCenter,
-                  transform: Matrix4.translationValues(0, top - homeTop, 0)
-                    ..scaleByDouble(1, _barScale(fold), 1, 1),
-                  child: child,
+                // In the stack the bars give way to the band of busy time
+                // growing under them: a fade of the colour, not a layer.
+                final alpha = 1 - _smoothStep(0.8, 1, fold);
+                if (alpha <= 0) return const SizedBox.shrink();
+                return Transform.translate(
+                  offset: Offset(0, top - homeTop),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: color.a * alpha),
+                      borderRadius: BorderRadius.horizontal(
+                        left: span.continuesBefore
+                            ? Radius.zero
+                            : timelineEventRadius,
+                        right: span.continuesAfter
+                            ? Radius.zero
+                            : timelineEventRadius,
+                      ),
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
                 );
               },
             ),
@@ -269,15 +308,9 @@ class DayFriendLayer extends StatelessWidget {
 }
 
 /// How far the open day's column and friends' bars are folded into the
-/// stack: 0 on their rows, 1 in the stack. It moves over the same half of
-/// the swipe as the month's friend chips ([friendsFoldAt]).
-double dayColumnFold(double mode) =>
-    Curves.easeInOutCubic.transform(friendsFoldAt(mode));
-
-/// Near the stack a friend's bar sinks into the band of busy time, which
-/// grows there at the same time ([DayBandsPainter]).
-double _barScale(double fold) =>
-    1 - Curves.easeIn.transform(_smoothStep(0.7, 1, fold));
+/// stack: 0 on their rows, 1 in the stack. Straight from the mode, over the
+/// whole pull, so they follow the finger.
+double dayFriendsFold(double mode) => (1 - mode).clamp(0.0, 1.0);
 
 class _BelowClipper extends CustomClipper<Rect> {
   const _BelowClipper(this.top);
@@ -332,7 +365,7 @@ class DayBandsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final t = mode.value;
     _paintMine(canvas, myFoldAt(t));
-    _paintFriends(canvas, friendsFoldAt(t));
+    _paintFriends(canvas, dayFriendsFold(t));
   }
 
   /// From the top line of the user's row down, fading towards its bottom.
@@ -367,8 +400,9 @@ class DayBandsPainter extends CustomPainter {
   /// month's band. The rounded ends are a clip, not a layer.
   void _paintFriends(Canvas canvas, double away) {
     if (away <= 0 || friends.isEmpty || geometry.bandHeight <= 0) return;
-    final grow = Curves.easeOutCubic.transform(_smooth(0.3, 1, away));
-    final opacity = _smooth(0.2, 0.7, away);
+    // Grows as the bars settle into the stack ([DayFriendLayer]).
+    final grow = Curves.easeOutCubic.transform(_smooth(0.6, 1, away));
+    final opacity = _smooth(0.6, 0.9, away);
     final h = geometry.bandHeight * grow;
     if (h < 0.5 || opacity <= 0) return;
     final bottom = geometry.bandBottom;

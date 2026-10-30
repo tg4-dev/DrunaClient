@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:druna_app/features/calendar/calendar_event.dart';
@@ -11,9 +12,12 @@ import 'package:flutter/material.dart';
 export 'package:druna_app/features/calendar/chip_motion.dart'
     show chipFoldGap, friendsFoldAt, myFoldAt;
 
-/// Rounder month chips: half the height for thin bars, at most 8.
-double monthChipRadius(EventDensity density) =>
-    (density.itemHeight / 2).clamp(3.0, 8.0);
+/// Month chips are pills: fully rounded at every density.
+double monthChipRadius(EventDensity density) => density.itemHeight / 2;
+
+/// Room for the title inside a pill, clear of its round ends.
+double monthChipPadding(EventDensity density) =>
+    math.max(4, monthChipRadius(density) * 0.6);
 
 /// Days a dragged event would cover if dropped now.
 class DropRange {
@@ -938,7 +942,9 @@ class _MonthEventBlock extends StatelessWidget {
           decoration: BoxDecoration(color: color, borderRadius: radius),
           child: density.showTitle && showTitle
               ? Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: monthChipPadding(density),
+                  ),
                   child: density.showTime && !event.allDay
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

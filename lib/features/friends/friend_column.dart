@@ -1,4 +1,3 @@
-import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/day_friends.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
@@ -125,7 +124,7 @@ class FriendColumn extends StatelessWidget {
             child: ValueListenableBuilder<double>(
               valueListenable: mode,
               builder: (context, t, _) => Opacity(
-                opacity: 1 - friendsFoldAt(t),
+                opacity: 1 - dayFriendsFold(t),
                 child: const ColoredBox(color: FriendColumnStyle.divider),
               ),
             ),
@@ -260,7 +259,7 @@ class _ColumnSlot extends StatelessWidget {
         animation: motion,
         child: child,
         builder: (context, child) {
-          final fold = dayColumnFold(mode.value);
+          final fold = dayFriendsFold(mode.value);
           final stack = stackIndex;
           final double top;
           var foldedScale = 1.0;
@@ -279,13 +278,11 @@ class _ColumnSlot extends StatelessWidget {
               hidden = true;
             }
           } else {
-            // Past the bottom of the screen, keeping their order.
-            final rowTop =
-                geometry.rowTop(0) +
-                slot * DayFriendsGeometry.rowStep +
-                DayFriendsGeometry.avatarInset -
-                offset.value;
-            top = _lerp(rowTop, geometry.height + avatar + slot * 12, fold);
+            top = geometry.hiddenTop(
+              row: slot,
+              offset: offset.value,
+              fold: fold,
+            );
             hidden = true;
           }
           return Positioned(
@@ -296,7 +293,7 @@ class _ColumnSlot extends StatelessWidget {
             child: ExcludeSemantics(
               excluding: hidden && fold > 0.5,
               child: Transform.scale(
-                scale: _lerp(1, foldedScale, fold),
+                scale: _lerp(1, foldedScale, _settling(fold)),
                 child: child,
               ),
             ),
@@ -308,6 +305,11 @@ class _ColumnSlot extends StatelessWidget {
 }
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+/// The end of the fold, while the stack forms: "+N" grows in and the
+/// friends past the third shrink under it.
+double _settling(double fold) =>
+    Curves.easeOut.transform(((fold - 0.6) / 0.4).clamp(0.0, 1.0));
 
 /// "+N" under the stack: grows in as the column folds.
 class _ColumnMore extends StatelessWidget {
@@ -348,7 +350,7 @@ class _ColumnMore extends StatelessWidget {
           ),
         ),
         builder: (context, t, child) =>
-            Transform.scale(scale: dayColumnFold(t), child: child),
+            Transform.scale(scale: _settling(dayFriendsFold(t)), child: child),
       ),
     );
   }

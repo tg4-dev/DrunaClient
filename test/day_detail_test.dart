@@ -69,6 +69,55 @@ void main() {
     );
   });
 
+  group('folding into the stack', () {
+    const geometry = DayFriendsGeometry(
+      height: 800,
+      bottomInset: 40,
+      rows: 8,
+      stackSlots: 3,
+    );
+    double top(int row, double fold, {double offset = 0}) => geometry.avatarTop(
+      row: row.toDouble(),
+      stack: row,
+      offset: offset,
+      fold: fold,
+    );
+
+    test('starts on the rows and ends in the stack', () {
+      for (var row = 0; row < 3; row++) {
+        expect(
+          top(row, 0),
+          geometry.rowTop(row) + DayFriendsGeometry.avatarInset,
+        );
+        expect(top(row, 1), geometry.stackTop(row));
+      }
+    });
+
+    test('slides down with the finger, never back up', () {
+      for (var row = 0; row < 3; row++) {
+        var last = top(row, 0);
+        for (var i = 1; i <= 100; i++) {
+          final now = top(row, i / 100);
+          expect(now, greaterThanOrEqualTo(last - 1e-9));
+          last = now;
+        }
+      }
+      // Early on all move together, by the same amount per step.
+      final step = top(0, 0.2) - top(0, 0.1);
+      expect(top(2, 0.2) - top(2, 0.1), closeTo(step, 0.5));
+      expect(step, greaterThan(0));
+    });
+
+    test('gaps close towards the end, the lowest settling first', () {
+      double gap(double fold) => top(1, fold) - top(0, fold);
+      expect(gap(0.3), closeTo(DayFriendsGeometry.rowStep, 0.5));
+      expect(gap(0.9), lessThan(gap(0.5)));
+      expect(gap(1), DayFriendsGeometry.stackStep);
+      expect(top(2, 0.9), closeTo(geometry.stackTop(2), 1));
+      expect(top(0, 0.9), lessThan(geometry.stackTop(0) - 5));
+    });
+  });
+
   group('open day with friends', () {
     Future<void> openDay(WidgetTester tester, {double height = 2622}) async {
       tester.view.physicalSize = Size(1206, height);
