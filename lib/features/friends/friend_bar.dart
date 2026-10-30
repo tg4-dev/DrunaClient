@@ -5,11 +5,15 @@ import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:progressive_background_blur/progressive_background_blur.dart';
+import 'package:progressive_blur/progressive_blur.dart';
 
 /// Measurements of the friend bar at the bottom of the calendar.
 abstract final class FriendBarStyle {
   static const avatar = 56.0;
+
+  /// The hint line above the row.
+  static const hint = 32.0;
+  static const hintGap = 8.0;
   static const step = 68.0;
   static const gutter = 20.0;
   static const height = 64.0;
@@ -30,6 +34,11 @@ abstract final class FriendBarStyle {
   static const edge = 28.0;
   static const edgeSigma = 24.0;
 }
+
+/// Height the friend bar takes over the bottom of the month above the safe
+/// area: hint, row and the margin under it.
+const friendBarExtent =
+    FriendBarStyle.hint + FriendBarStyle.hintGap + FriendBarStyle.height + 4;
 
 /// All friends at the bottom of the calendar. Picked friends get a ring and
 /// move to the front; their busy time shows in the month. While the user's
@@ -93,14 +102,18 @@ class _FriendBarState extends State<FriendBar> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Hint(text: _hint(friends), visible: expanded),
-              const SizedBox(height: 8),
+              const SizedBox(height: FriendBarStyle.hintGap),
               SizedBox(
                 height: FriendBarStyle.height,
                 child: friends == null
                     ? _Placeholder(visible: expanded)
                     : friends.isEmpty
                     ? _AddFriends(visible: expanded, onTap: widget.onAddFriends)
-                    : _row(friends, constraints.maxWidth, expanded),
+                    : _EdgeBlur(
+                        mode: widget.mode,
+                        width: constraints.maxWidth,
+                        child: _row(friends, constraints.maxWidth, expanded),
+                      ),
               ),
             ],
           ),
@@ -195,21 +208,6 @@ class _FriendBarState extends State<FriendBar> {
               ),
             ),
           ),
-        // The edge blur costs backdrop filters: it shows only once the bar
-        // has settled open, never while it moves.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: ModeGate(
-              mode: widget.mode,
-              threshold: 0.999,
-              builder: (context, open) => AnimatedOpacity(
-                duration: FriendBarStyle.select,
-                opacity: open ? 1 : 0,
-                child: open ? const _EdgeBlur() : const SizedBox.shrink(),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -291,6 +289,13 @@ class _StackGeometry {
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
+/// How far the row is scrolled. For a frame the controller can hold two
+/// positions — the row rebuilt under a new parent (the blur turning on)
+/// attaches before the old one detaches — and `offset` asserts there: the
+/// newest one is the row on screen.
+double _offsetOf(ScrollController scroll) =>
+    scroll.hasClients ? scroll.positions.last.pixels : 0.0;
+
 /// How far the bar is folded into the stack: 0 open, 1 folded.
 double friendBarFold(double mode) =>
     Curves.easeInOutCubic.transform(1 - mode.clamp(0.0, 1.0));
@@ -348,7 +353,7 @@ class _FriendSlot extends StatelessWidget {
         child: child,
         builder: (context, child) {
           final fold = friendBarFold(mode.value);
-          final offset = scroll.hasClients ? scroll.offset : 0.0;
+          final offset = _offsetOf(scroll);
           final rowLeft = FriendBarStyle.gutter + slot * FriendBarStyle.step;
           final stack = stackIndex;
           // Picked friends glide into the stack; the rest always slide off
@@ -483,7 +488,7 @@ class _MoreSlot extends StatelessWidget {
         ),
       ),
       builder: (context, child) {
-        final offset = scroll.hasClients ? scroll.offset : 0.0;
+        final offset = _offsetOf(scroll);
         return Positioned(
           left: geometry.slotLeft(FriendBarStyle.stackMax) + offset,
           top: (FriendBarStyle.height - FriendBarStyle.stackAvatar) / 2,
@@ -500,34 +505,46 @@ class _MoreSlot extends StatelessWidget {
   }
 }
 
-/// Blur that grows towards both screen edges, over whatever is under the
-/// bar: avatars scrolling out and the calendar behind.
+/// The row blurs towards both screen edges, avatars scrolling out of it
+/// (`progressive_blur`, which blurs its child: the calendar behind is
+/// blurred by the month itself). Only while the bar is open: folded, the
+/// stack at the right edge stays sharp; the blur grows in as it settles.
 class _EdgeBlur extends StatelessWidget {
-  const _EdgeBlur();
+  const _EdgeBlur({
+    required this.mode,
+    required this.width,
+    required this.child,
+  });
+
+  final ValueListenable<double> mode;
+  final double width;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    // One continuous blur per edge (`progressive_background_blur`), instead
-    // of stepped bands of backdrop filters, which showed their seams.
-    // The clip is required: unclipped, the backdrop layer filters the whole
-    // screen, and the blur ran down both edges of the month.
-    Widget side({required bool left}) => Positioned(
-      left: left ? 0 : null,
-      right: left ? null : 0,
-      top: 0,
-      bottom: 0,
-      width: FriendBarStyle.edge,
-      child: ClipRect(
-        child: ProgressiveBlur(
-          begin: left ? Alignment.centerLeft : Alignment.centerRight,
-          end: left ? Alignment.centerRight : Alignment.centerLeft,
-          sigmaStart: FriendBarStyle.edgeSigma,
-          sigmaEnd: 0,
-          child: const SizedBox.expand(),
+    final edge = width <= 0
+        ? 0.0
+        : (FriendBarStyle.edge / width).clamp(0.0, 0.5);
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return ModeGate(
+      mode: mode,
+      threshold: 0.999,
+      builder: (context, open) => TweenAnimationBuilder<double>(
+        tween: Tween(end: open ? 1 : 0),
+        duration: reduce ? Duration.zero : FriendBarStyle.select,
+        child: child,
+        builder: (context, shown, child) => ProgressiveBlurWidget(
+          sigma: FriendBarStyle.edgeSigma * shown,
+          linearGradientBlur: LinearGradientBlur(
+            values: const [1, 0, 0, 1],
+            stops: [0, edge, 1 - edge, 1],
+            start: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          child: child!,
         ),
       ),
     );
-    return Stack(children: [side(left: true), side(left: false)]);
   }
 }
 
@@ -541,7 +558,7 @@ class _Hint extends StatelessWidget {
   Widget build(BuildContext context) {
     final message = text;
     return SizedBox(
-      height: 32,
+      height: FriendBarStyle.hint,
       child: Center(
         child: AnimatedOpacity(
           duration: FriendBarStyle.select,

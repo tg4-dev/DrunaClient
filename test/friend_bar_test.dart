@@ -4,7 +4,7 @@ import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:progressive_background_blur/progressive_background_blur.dart';
+import 'package:progressive_blur/progressive_blur.dart';
 
 const _friends = [
   FriendInfo(id: 1, name: 'Алина', username: 'alina'),
@@ -91,20 +91,24 @@ void main() {
     expect(shownFriends, 1);
   });
 
-  testWidgets('the edge blur is clipped to the bar', (tester) async {
-    // Unclipped, the backdrop layer would blur both edges of the whole
-    // screen, the month's chips included.
+  testWidgets('the row blurs at both edges only while the bar is open', (
+    tester,
+  ) async {
     await pumpBar(tester);
-    final blurs = find.byType(ProgressiveBlur);
-    expect(blurs, findsNWidgets(2));
-    for (final element in blurs.evaluate()) {
-      final clip = find.ancestor(
-        of: find.byWidget(element.widget),
-        matching: find.byType(ClipRect),
-      );
-      expect(clip, findsWidgets);
-      expect(tester.getRect(clip.first).width, FriendBarStyle.edge);
-    }
+    ProgressiveBlurWidget blur() => tester.widget(
+      find.ancestor(
+        of: find.bySemanticsLabel('Алина'),
+        matching: find.byType(ProgressiveBlurWidget),
+      ),
+    );
+    expect(blur().sigma, FriendBarStyle.edgeSigma);
+    final gradient = blur().linearGradientBlur!;
+    expect(gradient.values, [1, 0, 0, 1]);
+    expect(gradient.stops[1], closeTo(FriendBarStyle.edge / 800, 1e-9));
+
+    mode.value = 0;
+    await tester.pumpAndSettle();
+    expect(blur().sigma, 0);
   });
 
   testWidgets('says when friends’ schedules are unavailable', (tester) async {

@@ -9,6 +9,7 @@ import 'package:druna_app/models/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:progressive_blur/progressive_blur.dart';
 
 /// A vertical pull of this many points takes the mode all the way across.
 const dayModePullRange = 280.0;
@@ -237,17 +238,35 @@ class _DayDetailState extends State<DayDetail>
             },
             child: Stack(
               children: [
+                // Under the friends column the timeline blurs towards the
+                // screen edge (`progressive_blur` blurs its child).
                 Positioned.fill(
-                  child: DayTimeline(
-                    day: widget.day,
-                    metrics: widget.metrics,
-                    events: widget.events,
-                    onVisibleDay: widget.onVisibleDay,
-                    onEventTap: widget.onEventTap,
-                    onCreateRange: widget.onCreateRange,
-                    onMoveEvent: widget.onMoveEvent,
-                    mode: widget.mode,
-                    friends: view,
+                  child: ProgressiveBlurWidget(
+                    sigma: FriendColumnStyle.blurSigma,
+                    linearGradientBlur: LinearGradientBlur(
+                      values: const [1, 0],
+                      stops: [
+                        0,
+                        constraints.maxWidth <= 0
+                            ? 0
+                            : (DayFriendsGeometry.columnWidth /
+                                      constraints.maxWidth)
+                                  .clamp(0.0, 1.0),
+                      ],
+                      start: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    child: DayTimeline(
+                      day: widget.day,
+                      metrics: widget.metrics,
+                      events: widget.events,
+                      onVisibleDay: widget.onVisibleDay,
+                      onEventTap: widget.onEventTap,
+                      onCreateRange: widget.onCreateRange,
+                      onMoveEvent: widget.onMoveEvent,
+                      mode: widget.mode,
+                      friends: view,
+                    ),
                   ),
                 ),
                 ..._bandTaps(geometry),

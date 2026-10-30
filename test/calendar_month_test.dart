@@ -6,6 +6,7 @@ import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -133,6 +134,102 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('week-2025-5-26-fresh'))).height,
       greaterThan(96),
     );
+  });
+
+  group('pinned top', () {
+    Future<void> pumpMonth(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1206, 2622);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(402, 874),
+              padding: EdgeInsets.only(top: 62, bottom: 34),
+            ),
+            child: MonthCalendar(focus: DateTime.now(), onDayTap: _ignoreTap),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('title pill on the safe area, weekdays pinned under it', (
+      tester,
+    ) async {
+      await pumpMonth(tester);
+      final pill = tester.getRect(find.byKey(const ValueKey('month-title')));
+      final weekdays = tester.getRect(
+        find.byKey(const ValueKey('weekday-header')),
+      );
+      expect(pill.top, 62);
+      expect(pill.height, monthHeaderBar);
+      expect(pill.center.dx, closeTo(201, 0.5));
+      expect(weekdays.top, pill.bottom + monthHeaderGap);
+    });
+
+    testWidgets('weeks run on under the top instead of being cut', (
+      tester,
+    ) async {
+      await pumpMonth(tester);
+      const listTop = 62 + monthChrome;
+      final month = tester.state<MonthCalendarState>(
+        find.byType(MonthCalendar),
+      );
+      month.restoreOffset(month.scrollOffset + 2 * monthRowLevels[1]);
+      await tester.pump();
+      final above = find.byWidgetPredicate((widget) {
+        final key = widget.key;
+        return key is ValueKey<String> && key.value.startsWith('day-');
+      });
+      final tops = [
+        for (final element in above.evaluate())
+          tester.getRect(find.byWidget(element.widget)).top,
+      ];
+      expect(tops.any((top) => top < listTop), isTrue);
+      // And painted there: the list does not clip them.
+      expect(
+        tester
+            .widget<CustomScrollView>(find.byType(CustomScrollView))
+            .clipBehavior,
+        Clip.none,
+      );
+      // A week wholly above the list is still painted until it has left
+      // the screen: the sliver does not drop it at its own edge.
+      final sliver = tester.renderObject<RenderSliver>(
+        find.byWidgetPredicate(
+          (widget) => widget.runtimeType.toString() == '_MonthStripSliver',
+        ),
+      );
+      final painted = <double>[];
+      expect(
+        sliver,
+        paints..everything((method, arguments) {
+          if (method == #drawParagraph) {
+            painted.add((arguments[1] as Offset).dy);
+          }
+          return true;
+        }),
+      );
+      expect(painted.any((dy) => dy < -monthRowLevels[1]), isTrue);
+    });
+
+    testWidgets('a tap on the title pill goes back to today', (tester) async {
+      await pumpMonth(tester);
+      final month = tester.state<MonthCalendarState>(
+        find.byType(MonthCalendar),
+      );
+      final start = month.scrollOffset;
+      month.restoreOffset(start + 40 * monthRowLevels[1]);
+      await tester.pumpAndSettle();
+      expect(find.text(monthTitle(DateTime.now())), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('month-title')));
+      await tester.pumpAndSettle();
+      expect(month.scrollOffset, closeTo(start, 0.5));
+      expect(find.text(monthTitle(DateTime.now())), findsOneWidget);
+    });
   });
 
   testWidgets('a Monday the 1st keeps its column and still has a band', (

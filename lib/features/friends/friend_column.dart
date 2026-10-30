@@ -6,12 +6,12 @@ import 'package:druna_app/models/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:progressive_background_blur/progressive_background_blur.dart';
 
 /// Look of the friends column of the open day.
 abstract final class FriendColumnStyle {
   /// The timeline passing under the column darkens and blurs towards the
-  /// screen edge. Sigma is in physical pixels, as the shader takes it.
+  /// screen edge ([DayDetail]). Sigma is in physical pixels, as the shader
+  /// takes it.
   static const blurSigma = 30.0;
   static const shade = [
     Color(0xE6000000),
@@ -74,27 +74,18 @@ class FriendColumn extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // The timeline goes under the column: darker and blurrier
-          // towards the edge. Clipped, or the backdrop layer filters the
-          // whole screen.
+          // The timeline goes under the column: darker towards the edge.
+          // It blurs itself there ([DayDetail]).
           const Positioned.fill(
             child: IgnorePointer(
-              child: ClipRect(
-                child: ProgressiveBlur(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  sigmaStart: FriendColumnStyle.blurSigma,
-                  sigmaEnd: 0,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: FriendColumnStyle.shade,
-                        stops: FriendColumnStyle.shadeStops,
-                      ),
-                    ),
-                    child: SizedBox.expand(),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: FriendColumnStyle.shade,
+                    stops: FriendColumnStyle.shadeStops,
                   ),
                 ),
+                child: SizedBox.expand(),
               ),
             ),
           ),

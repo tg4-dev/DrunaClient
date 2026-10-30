@@ -112,6 +112,14 @@ void main() {
     expect(onScreen(tester, find.byType(SettingsPage)), isTrue);
   });
 
+  testWidgets('the friends button opens the friends page', (tester) async {
+    await pumpPager(tester);
+
+    await tester.tap(find.byKey(const ValueKey('friends-button')));
+    await tester.pumpAndSettle();
+    expect(onScreen(tester, find.byType(FriendsPage)), isTrue);
+  });
+
   testWidgets('a picked friend folds into the stack, which taps back', (
     tester,
   ) async {

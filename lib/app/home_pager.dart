@@ -230,6 +230,7 @@ class _HomePagerState extends State<HomePager> {
               mode: _mode,
               onBusyChanged: (busy) => setState(() => _calendarBusy = busy),
               onOpenSettings: () => _goTo(HomePager.settingsStop),
+              onOpenFriends: () => _goTo(HomePager.friendsStop),
               friends: CalendarFriends(
                 store: _store,
                 selection: _selection,

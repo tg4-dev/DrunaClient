@@ -12,6 +12,7 @@ import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/features/friends/friends_store.dart';
 import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/glass.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -57,6 +58,7 @@ class CalendarScreen extends StatefulWidget {
   const CalendarScreen({
     this.onBusyChanged,
     this.onOpenSettings,
+    this.onOpenFriends,
     this.friends,
     this.mode = myEventsMode,
     super.key,
@@ -75,6 +77,9 @@ class CalendarScreen extends StatefulWidget {
 
   /// Shows the gear at the top right of the month.
   final VoidCallback? onOpenSettings;
+
+  /// Shows the friends button at the top left of the month.
+  final VoidCallback? onOpenFriends;
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -351,9 +356,26 @@ class _CalendarScreenState extends State<CalendarScreen>
       onEventTap: (event, rect) => _openEditor(event, isNew: false),
       onCreate: _createEvent,
       onMove: _moveEvent,
-      titleAction: widget.onOpenSettings == null
+      leading: widget.onOpenFriends == null
           ? null
-          : _SettingsButton(onPressed: widget.onOpenSettings!),
+          : GlassButton(
+              key: const ValueKey('friends-button'),
+              icon: CupertinoIcons.person_2,
+              label: 'Друзья',
+              onPressed: widget.onOpenFriends,
+            ),
+      trailing: widget.onOpenSettings == null
+          ? null
+          : GlassButton(
+              key: const ValueKey('settings-button'),
+              icon: CupertinoIcons.gear_alt,
+              label: 'Настройки',
+              onPressed: widget.onOpenSettings,
+            ),
+      bottomBlur: friends == null ? 0 : _bottomShadeHeight(context),
+      bottomInset: friends == null
+          ? 0
+          : MediaQuery.paddingOf(context).bottom + friendBarExtent,
     );
     final Widget month = friends == null
         ? monthWith(const [])
@@ -382,6 +404,24 @@ class _CalendarScreenState extends State<CalendarScreen>
               );
             },
           ),
+          // The bottom of the month darkens under the friend bar (the month
+          // blurs itself there, [MonthCalendar.bottomBlur]); the shade
+          // leaves with the bar as a day opens.
+          if (friends != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: _bottomShadeHeight(context),
+              child: AnimatedBuilder(
+                animation: _expand,
+                builder: (context, child) => Opacity(
+                  opacity: (1 - _expand.value * 2).clamp(0.0, 1.0),
+                  child: child,
+                ),
+                child: const IgnorePointer(child: _ShadedBottom()),
+              ),
+            ),
           if (friends != null)
             Positioned(
               left: 0,
@@ -851,31 +891,29 @@ class _Editor {
   final key = UniqueKey();
 }
 
-class _SettingsButton extends StatelessWidget {
-  const _SettingsButton({required this.onPressed});
+/// The bottom blur and shade reach this share of the way from the screen
+/// edge to just above the friend bar.
+const bottomBlurShare = 0.75;
 
-  final VoidCallback onPressed;
+double _bottomShadeHeight(BuildContext context) =>
+    (MediaQuery.paddingOf(context).bottom + friendBarExtent + chromeFade) *
+    bottomBlurShare;
+
+/// The bottom of the month under the friend bar: darker towards the screen
+/// edge, fading out upwards.
+class _ShadedBottom extends StatelessWidget {
+  const _ShadedBottom();
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Настройки',
-      excludeSemantics: true,
-      child: GestureDetector(
-        key: const ValueKey('settings-button'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: const SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(
-            CupertinoIcons.gear_alt,
-            color: Color(0xFFD1D1D6),
-            size: 26,
-          ),
-        ),
+  Widget build(BuildContext context) => const DecoratedBox(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [Color(0xD9000000), Color(0x99000000), Color(0x00000000)],
+        stops: [0, 0.55, 1],
       ),
-    );
-  }
+    ),
+    child: SizedBox.expand(),
+  );
 }

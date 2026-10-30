@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:druna_app/shared/ui/glass.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:progressive_blur/progressive_blur.dart';
 
 class MonthCalendar extends StatefulWidget {
   const MonthCalendar({
@@ -19,7 +22,11 @@ class MonthCalendar extends StatefulWidget {
     this.onEventTap,
     this.onCreate,
     this.onMove,
-    this.titleAction,
+    this.leading,
+    this.trailing,
+    this.onTitleTap,
+    this.bottomInset = 0,
+    this.bottomBlur = 0,
     this.friendEvents = const [],
     this.mode = myEventsMode,
     this.onShowMine,
@@ -34,8 +41,19 @@ class MonthCalendar extends StatefulWidget {
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
   final void Function(DateTime day, Rect chipRect)? onCreate;
 
-  /// A button at the right end of the month title, e.g. settings.
-  final Widget? titleAction;
+  /// Glass buttons left and right of the month title pill.
+  final Widget? leading;
+  final Widget? trailing;
+
+  /// A tap on the title pill; by default it goes back to today.
+  final VoidCallback? onTitleTap;
+
+  /// Room taken at the bottom by what stands over the month (the friend
+  /// bar): the weeks scroll on under it.
+  final double bottomInset;
+
+  /// How far up from the bottom edge the weeks are blurred, under the bar.
+  final double bottomBlur;
 
   /// Busy time of the selected friends, in their colours.
   final List<CalendarEvent> friendEvents;
@@ -187,6 +205,21 @@ class MonthCalendarState extends State<MonthCalendar>
     final month = monthOfStrip(strip);
     if (month == _visibleMonth) return;
     setState(() => _visibleMonth = month);
+  }
+
+  /// Back to the week of today, as a tap on the title of Apple's Calendar.
+  void scrollToToday() {
+    if (!_scroll.hasClients) return;
+    final offset = stripUnits(stripIndexOfDay(_today)) * _rowHeight;
+    final max = _scroll.position.maxScrollExtent;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    _scroll.animateTo(
+      offset.clamp(0, max).toDouble(),
+      duration: reduce
+          ? const Duration(milliseconds: 1)
+          : const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Rect? rectForStrip(int index) {
@@ -515,99 +548,130 @@ class MonthCalendarState extends State<MonthCalendar>
 
   @override
   Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+    final chrome = top + monthChrome;
+    // Exactly as far as the weeks show under the top and the bar: every
+    // week laid out is rebuilt on each frame of a pinch.
+    final above = chrome + chromeFade;
+    final below = widget.bottomInset;
+    final cache = math.max(above, below);
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        ColoredBox(
-          color: Colors.black,
-          child: SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: monthTitleHeight,
-                  child: Padding(
-                    // The action's 44 pt target reaches past the icon, so
-                    // the icon itself lines up with the 20 pt margin.
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      8,
-                      widget.titleAction == null ? 20 : 10,
-                      0,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            monthTitle(_visibleMonth),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.6,
-                            ),
-                          ),
-                        ),
-                        ?widget.titleAction,
-                      ],
-                    ),
-                  ),
-                ),
-                const _WeekdayHeader(),
-                Expanded(
-                  child: Listener(
-                    onPointerDown: _onPointerDown,
-                    onPointerMove: _onPointerMove,
-                    onPointerUp: _onPointerUp,
-                    onPointerCancel: _onPointerCancel,
-                    child: AnimatedBuilder(
-                      animation: _rows,
-                      builder: (context, _) {
-                        return CustomScrollView(
-                          key: _listKey,
-                          controller: _scroll,
-                          physics: _pointers.length >= 2 || _holding
-                              ? const NeverScrollableScrollPhysics()
-                              : const BouncingScrollPhysics(),
-                          slivers: [
-                            _MonthStripSliver(
-                              rowHeight: _rowHeight,
-                              delegate: SliverChildBuilderDelegate((
-                                context,
-                                index,
-                              ) {
-                                final strip = stripAt(index);
-                                return _WeekStrip(
-                                  strip: strip,
-                                  today: _today,
-                                  index: _index,
-                                  friendIndex: _friendIndex,
-                                  mode: widget.mode,
-                                  onShowMine: widget.onShowMine,
-                                  hiddenEventId: widget.hiddenEventId,
-                                  dimmedEventId: _holdEvent?.id,
-                                  hoverDay: _dropRange,
-                                  onEventTap: widget.onEventTap,
-                                  onHoldStart: _beginHold,
-                                  onTap: (day) {
-                                    final rect = rectForStrip(index);
-                                    if (rect != null) {
-                                      widget.onDayTap(day, rect);
-                                    }
-                                  },
-                                );
-                              }, childCount: stripCount),
-                            ),
-                          ],
-                        );
-                      },
+        // The weeks run on under the top and the friend bar: the list is
+        // unclipped and lays out that far past its edges. The month blurs
+        // itself there (`progressive_blur` blurs its child), strongest at
+        // the screen edges.
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) => ProgressiveBlurWidget(
+              sigma: chromeBlurSigma,
+              linearGradientBlur: _edgeBlur(
+                height: constraints.maxHeight,
+                top: above,
+                bottom: widget.bottomBlur,
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Positioned.fill(child: ColoredBox(color: Colors.black)),
+                  Positioned(
+                    top: chrome,
+                    left: 0,
+                    right: 0,
+                    bottom: widget.bottomInset,
+                    child: Listener(
+                      onPointerDown: _onPointerDown,
+                      onPointerMove: _onPointerMove,
+                      onPointerUp: _onPointerUp,
+                      onPointerCancel: _onPointerCancel,
+                      child: AnimatedBuilder(
+                        animation: _rows,
+                        builder: (context, _) {
+                          return CustomScrollView(
+                            key: _listKey,
+                            controller: _scroll,
+                            clipBehavior: Clip.none,
+                            scrollCacheExtent: ScrollCacheExtent.pixels(cache),
+                            physics: _pointers.length >= 2 || _holding
+                                ? const NeverScrollableScrollPhysics()
+                                : const BouncingScrollPhysics(),
+                            slivers: [
+                              _MonthStripSliver(
+                                rowHeight: _rowHeight,
+                                paintAbove: above,
+                                paintBelow: below,
+                                delegate: SliverChildBuilderDelegate((
+                                  context,
+                                  index,
+                                ) {
+                                  final strip = stripAt(index);
+                                  return _WeekStrip(
+                                    strip: strip,
+                                    today: _today,
+                                    index: _index,
+                                    friendIndex: _friendIndex,
+                                    mode: widget.mode,
+                                    onShowMine: widget.onShowMine,
+                                    hiddenEventId: widget.hiddenEventId,
+                                    dimmedEventId: _holdEvent?.id,
+                                    hoverDay: _dropRange,
+                                    onEventTap: widget.onEventTap,
+                                    onHoldStart: _beginHold,
+                                    onTap: (day) {
+                                      final rect = rectForStrip(index);
+                                      if (rect != null) {
+                                        widget.onDayTap(day, rect);
+                                      }
+                                    },
+                                  );
+                                }, childCount: stripCount),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: chrome + chromeFade,
+          child: const IgnorePointer(child: _ShadedTop()),
+        ),
+        Positioned(
+          top: top,
+          left: 16,
+          right: 16,
+          height: monthHeaderBar,
+          child: Row(
+            children: [
+              SizedBox(width: GlassStyle.size, child: widget.leading),
+              Expanded(
+                child: Center(
+                  child: GlassPill(
+                    key: const ValueKey('month-title'),
+                    semanticLabel: '${monthTitle(_visibleMonth)}, к сегодня',
+                    onPressed: widget.onTitleTap ?? scrollToToday,
+                    title: Text(monthTitle(_visibleMonth)),
+                  ),
+                ),
+              ),
+              SizedBox(width: GlassStyle.size, child: widget.trailing),
+            ],
+          ),
+        ),
+        Positioned(
+          top: top + monthHeaderBar + monthHeaderGap,
+          left: 0,
+          right: 0,
+          child: const _WeekdayHeader(),
         ),
         Positioned.fill(
           child: IgnorePointer(
@@ -631,6 +695,54 @@ class MonthCalendarState extends State<MonthCalendar>
     if (_holding && event.pointer == _holdPointer) _cancelHold();
     _onPointerUp(event);
   }
+}
+
+/// The top of the month darkens towards the screen edge under the glass
+/// row and the weekdays, fading out below them; the blur is the month's own.
+class _ShadedTop extends StatelessWidget {
+  const _ShadedTop();
+
+  @override
+  Widget build(BuildContext context) => const DecoratedBox(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xD9000000), Color(0xB3000000), Color(0x00000000)],
+        stops: [0, 0.7, 1],
+      ),
+    ),
+    child: SizedBox.expand(),
+  );
+}
+
+/// Blur at the screen edges of the month, under the pinned top and the
+/// bottom. Sigma is in physical pixels, as the shader takes it.
+const chromeBlurSigma = 24.0;
+
+/// Full blur at the top edge fading out [top] below it, and at the bottom
+/// edge fading out [bottom] above it; none between.
+LinearGradientBlur _edgeBlur({
+  required double height,
+  required double top,
+  required double bottom,
+}) {
+  if (height <= 0) {
+    return const LinearGradientBlur(
+      values: [0, 0],
+      stops: [0, 1],
+      start: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
+  }
+  final topStop = (top / height).clamp(0.0, 1.0);
+  final bottomStop = (1 - bottom / height).clamp(topStop, 1.0);
+  return LinearGradientBlur(
+    values: bottom > 0 ? const [1, 0, 0, 1] : const [1, 0, 0],
+    stops: bottom > 0 ? [0, topStop, bottomStop, 1] : [0, topStop, 1],
+    start: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
 }
 
 class _WeekdayHeader extends StatelessWidget {
@@ -817,14 +929,29 @@ class _MonthBand extends StatelessWidget {
 }
 
 class _MonthStripSliver extends SliverMultiBoxAdaptorWidget {
-  const _MonthStripSliver({required super.delegate, required this.rowHeight});
+  const _MonthStripSliver({
+    required super.delegate,
+    required this.rowHeight,
+    required this.paintAbove,
+    required this.paintBelow,
+  });
 
   final double rowHeight;
+
+  /// How far past the top and the bottom of the list weeks still show,
+  /// under the blurred top and the friend bar.
+  final double paintAbove;
+  final double paintBelow;
 
   @override
   RenderSliverVariedExtentList createRenderObject(BuildContext context) {
     final element = context as SliverMultiBoxAdaptorElement;
-    return _RenderMonthStrips(childManager: element, rowHeight: rowHeight);
+    return _RenderMonthStrips(
+      childManager: element,
+      rowHeight: rowHeight,
+      paintAbove: paintAbove,
+      paintBelow: paintBelow,
+    );
   }
 
   @override
@@ -832,16 +959,59 @@ class _MonthStripSliver extends SliverMultiBoxAdaptorWidget {
     BuildContext context,
     RenderSliverVariedExtentList renderObject,
   ) {
-    (renderObject as _RenderMonthStrips).rowHeight = rowHeight;
+    (renderObject as _RenderMonthStrips)
+      ..rowHeight = rowHeight
+      ..paintAbove = paintAbove
+      ..paintBelow = paintBelow;
   }
 }
 
 class _RenderMonthStrips extends RenderSliverVariedExtentList {
-  _RenderMonthStrips({required super.childManager, required double rowHeight})
-    : _rowHeight = rowHeight,
-      super(itemExtentBuilder: _extents(rowHeight));
+  _RenderMonthStrips({
+    required super.childManager,
+    required double rowHeight,
+    required double paintAbove,
+    required double paintBelow,
+  }) : _rowHeight = rowHeight,
+       _paintAbove = paintAbove,
+       _paintBelow = paintBelow,
+       super(itemExtentBuilder: _extents(rowHeight));
 
   double _rowHeight;
+
+  double _paintAbove;
+  set paintAbove(double value) {
+    if (_paintAbove == value) return;
+    _paintAbove = value;
+    markNeedsPaint();
+  }
+
+  double _paintBelow;
+  set paintBelow(double value) {
+    if (_paintBelow == value) return;
+    _paintBelow = value;
+    markNeedsPaint();
+  }
+
+  /// The list paints only the weeks inside it; these run on under the top
+  /// and the bar, so a week stays until it has left the screen, not the
+  /// list. Laid out by the cache extent, they only need painting.
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    assert(constraints.axisDirection == AxisDirection.down);
+    var child = firstChild;
+    while (child != null) {
+      final top = childMainAxisPosition(child);
+      if (top < constraints.remainingPaintExtent + _paintBelow &&
+          top + paintExtentOf(child) > -_paintAbove) {
+        context.paintChild(
+          child,
+          offset + Offset(childCrossAxisPosition(child), top),
+        );
+      }
+      child = childAfter(child);
+    }
+  }
 
   static ItemExtentBuilder _extents(double rowHeight) {
     return (int index, SliverLayoutDimensions _) {

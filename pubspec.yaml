@@ -41,7 +41,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   shared_preferences: ^2.5.6
-  progressive_background_blur: ^1.0.1
+  progressive_blur: ^0.0.2
 
 dev_dependencies:
   flutter_test:
