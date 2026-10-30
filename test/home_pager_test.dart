@@ -12,6 +12,7 @@ import 'package:druna_app/features/friends/friends_page.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/features/calendar/day_detail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -129,6 +130,24 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
     await tester.pumpAndSettle();
     expect(tester.getRect(alinaFinder()).left, lessThan(200));
+  });
+
+  testWidgets('taps work while the mode is still settling', (tester) async {
+    await pumpPager(tester);
+    await tester.tap(alinaFinder());
+    await tester.pumpAndSettle();
+    await swipe(tester, 300);
+
+    await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
+    // The slide has not ended: the tap goes through instead of being
+    // ignored.
+    await tester.pump(const Duration(milliseconds: 120));
+    final now = DateTime.now();
+    await tester.tap(
+      find.byKey(ValueKey('day-${now.year}-${now.month}-${now.day}')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(DayDetail), findsOneWidget);
   });
 
   testWidgets('"Нет сети" makes a refresh of friends fail', (tester) async {

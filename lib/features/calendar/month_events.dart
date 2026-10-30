@@ -1,11 +1,15 @@
 import 'dart:ui' as ui;
 
 import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/week_bands.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+export 'package:druna_app/features/calendar/chip_motion.dart'
+    show chipFoldGap, friendsFoldAt, myFoldAt;
 
 /// Rounder month chips: half the height for thin bars, at most 8.
 double monthChipRadius(EventDensity density) =>
@@ -203,7 +207,7 @@ class MonthWeekGrid extends StatelessWidget {
                       // chips keep their state and never replay their
                       // entrance after a swipe. Folded away, a layer is
                       // not painted; each chip moves on its own
-                      // ([_ChipMotion]), clipped to the week.
+                      // ([ChipMotion]), clipped to the week.
                       Positioned.fill(
                         child: IgnorePointer(
                           ignoring: friendsShown,
@@ -350,6 +354,7 @@ class _WeekLayer {
     required this.placed,
     required this.overflow,
     required this.bandChips,
+    required this.eventIds,
   });
 
   factory _WeekLayer.build({
@@ -432,7 +437,12 @@ class _WeekLayer {
         ),
       );
     }
-    return _WeekLayer(placed: placed, overflow: overflow, bandChips: bandChips);
+    return _WeekLayer(
+      placed: placed,
+      overflow: overflow,
+      bandChips: bandChips,
+      eventIds: {for (final event in shown) event.id},
+    );
   }
 
   final List<_Placed> placed;
@@ -442,6 +452,9 @@ class _WeekLayer {
 
   /// Where each event of the week sits along it, for the band.
   final List<BandChip> bandChips;
+
+  /// Every event of the week, also those behind "+N".
+  final Set<String> eventIds;
 
   /// Lanes in use, chips and "+N" together: the unfolding order counts
   /// them.
@@ -490,7 +503,7 @@ class _MineChips extends StatelessWidget {
     return _AnimatedDensity(
       density: density,
       builder: (context, d) {
-        Widget moving(int lane, Widget child) => _ChipMotion(
+        Widget moving(int lane, Widget child) => ChipMotion(
           mode: mode,
           awayAt: myFoldAt,
           lane: lane,
@@ -504,6 +517,7 @@ class _MineChips extends StatelessWidget {
           children: [
             for (final item in layer.placed)
               Positioned(
+                key: ValueKey('${item.event.id}-${item.startColumn}'),
                 left: item.left(columnWidth),
                 width: item.right(columnWidth) - item.left(columnWidth),
                 top: monthEventHeader + item.lane * d.slot,
@@ -523,6 +537,7 @@ class _MineChips extends StatelessWidget {
               ),
             for (final (column, lane, count) in layer.overflow)
               Positioned(
+                key: ValueKey('more-$column'),
                 left: column * columnWidth + 4,
                 width: columnWidth - 6,
                 top: monthEventHeader + lane * d.slot,
@@ -541,98 +556,6 @@ class _MineChips extends StatelessWidget {
       },
     );
   }
-}
-
-/// The two layers take turns, never moving at once: on the way to friends'
-/// calendar the user's chips fold over the first half of the swipe and
-/// friends' unfold over the second; the way back mirrors it. Each band
-/// follows its own layer.
-double myFoldAt(double mode) => (mode * 2).clamp(0.0, 1.0);
-
-double friendsFoldAt(double mode) => ((1 - mode) * 2).clamp(0.0, 1.0);
-
-/// Gap between a week line and a chip folded against it.
-const chipFoldGap = 2.0;
-
-/// How much later each lower lane starts to unfold, as a share of the way.
-/// Small, so each chip still travels over most of the swipe and its speed
-/// stays close to the finger's.
-const chipUnfoldStagger = 0.06;
-
-/// The first part of a chip's way during which it grows out of the line.
-const chipBirth = 0.35;
-
-/// One chip on its way between its place and its week line, following the
-/// mode. Folded, all chips of a day lie in one stack against the line; they
-/// unfold lane by lane, the first lane first, and are born from the line by
-/// growing out of it.
-///
-/// Only a transform changes per frame — no opacity: an [Opacity] below 1
-/// costs an offscreen layer per chip, and dozens of them per frame made the
-/// swipe stutter. The tree is the same at every progress, so a landing chip
-/// keeps its state.
-class _ChipMotion extends StatelessWidget {
-  const _ChipMotion({
-    required this.mode,
-    required this.awayAt,
-    required this.lane,
-    required this.lanes,
-    required this.homeTop,
-    required this.foldTop,
-    required this.child,
-  });
-
-  final ValueListenable<double> mode;
-
-  /// The mode turned into how far this layer is folded: 0 in place, 1 gone.
-  final double Function(double mode) awayAt;
-  final int lane;
-  final int lanes;
-  final double homeTop;
-  final double foldTop;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<double>(
-      valueListenable: mode,
-      child: child,
-      builder: (context, t, child) {
-        final progress = chipUnfoldProgress(
-          away: awayAt(t),
-          lane: lane,
-          lanes: lanes,
-        );
-        final travel = Curves.easeOutCubic.transform(progress);
-        final grow = Curves.easeOutCubic.transform(
-          (progress / chipBirth).clamp(0.0, 1.0),
-        );
-        // A folded chip grows from the side that touches its line.
-        final fromTop = foldTop < homeTop;
-        return Transform(
-          alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
-          transform: Matrix4.translationValues(
-            0,
-            (foldTop - homeTop) * (1 - travel),
-            0,
-          )..scaleByDouble(1, grow, 1, 1),
-          child: child,
-        );
-      },
-    );
-  }
-}
-
-/// How far a chip in [lane] has unfolded, 0 folded to 1 in place, when its
-/// layer is [away] from being shown. Lower lanes start a little later.
-double chipUnfoldProgress({
-  required double away,
-  required int lane,
-  required int lanes,
-}) {
-  final spread = chipUnfoldStagger * (lanes > 1 ? lanes - 1 : 0);
-  final shown = 1 - away.clamp(0.0, 1.0);
-  return (shown * (1 + spread) - chipUnfoldStagger * lane).clamp(0.0, 1.0);
 }
 
 /// Chip sizes glide when the month crosses into another density, instead of
@@ -717,11 +640,19 @@ class _FriendChipsState extends State<_FriendChips> {
   /// Chips whose friend was let go, playing their exit.
   final _leaving = <String, _Placed>{};
 
+  /// Events of a friend just picked: only they play the entrance. A chip
+  /// coming out from behind "+N" as the month is zoomed just shows.
+  late Set<String> _fresh = widget.layer.eventIds;
+
   @override
   void didUpdateWidget(covariant _FriendChips oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (identical(oldWidget.layer, widget.layer)) return;
-    final now = {for (final item in widget.layer.placed) item.event.id};
+    final before = oldWidget.layer.eventIds;
+    final now = widget.layer.eventIds;
+    _fresh = now.difference(before);
+    // Gone from the week, not just hidden behind "+N": that chip would
+    // fade out over the count.
     final gone = [
       for (final item in oldWidget.layer.placed)
         if (!now.contains(item.event.id)) item,
@@ -759,6 +690,7 @@ class _FriendChipsState extends State<_FriendChips> {
             _chip(item, d, lanes, leaving: false, reduce: reduce),
           for (final (column, lane, count) in widget.layer.overflow)
             Positioned(
+              key: ValueKey('more-$column'),
               left: column * widget.columnWidth + 4,
               width: widget.columnWidth - 6,
               top: monthEventHeader + lane * d.slot,
@@ -772,7 +704,7 @@ class _FriendChipsState extends State<_FriendChips> {
 
   /// Friends' chips fold down onto the bottom line of the week.
   Widget _motion(int lane, int lanes, EventDensity d, Widget child) =>
-      _ChipMotion(
+      ChipMotion(
         mode: widget.mode,
         awayAt: friendsFoldAt,
         lane: lane,
@@ -804,7 +736,10 @@ class _FriendChipsState extends State<_FriendChips> {
         child: _motion(item.lane, lanes, density, child!),
       ),
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: leaving ? 1 : 0, end: leaving ? 0 : 1),
+        tween: Tween(
+          begin: leaving || !_fresh.contains(item.event.id) ? 1 : 0,
+          end: leaving ? 0 : 1,
+        ),
         duration: reduce
             ? Duration.zero
             : leaving

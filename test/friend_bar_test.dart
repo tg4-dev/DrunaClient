@@ -4,6 +4,7 @@ import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:progressive_background_blur/progressive_background_blur.dart';
 
 const _friends = [
   FriendInfo(id: 1, name: 'Алина', username: 'alina'),
@@ -88,6 +89,22 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
     expect(shownFriends, 1);
+  });
+
+  testWidgets('the edge blur is clipped to the bar', (tester) async {
+    // Unclipped, the backdrop layer would blur both edges of the whole
+    // screen, the month's chips included.
+    await pumpBar(tester);
+    final blurs = find.byType(ProgressiveBlur);
+    expect(blurs, findsNWidgets(2));
+    for (final element in blurs.evaluate()) {
+      final clip = find.ancestor(
+        of: find.byWidget(element.widget),
+        matching: find.byType(ClipRect),
+      );
+      expect(clip, findsWidgets);
+      expect(tester.getRect(clip.first).width, FriendBarStyle.edge);
+    }
   });
 
   testWidgets('says when friends’ schedules are unavailable', (tester) async {

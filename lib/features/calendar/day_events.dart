@@ -33,6 +33,7 @@ class DayEventLayer extends StatelessWidget {
     this.onHoldStart,
     this.onHoldMove,
     this.onHoldEnd,
+    this.motion,
     super.key,
   });
 
@@ -50,6 +51,9 @@ class DayEventLayer extends StatelessWidget {
   final void Function(CalendarEvent event, Offset global)? onHoldStart;
   final ValueChanged<Offset>? onHoldMove;
   final VoidCallback? onHoldEnd;
+
+  /// Moves a bar in [lane] with the calendar's mode (see [ChipMotion]).
+  final LaneMotion? motion;
 
   @override
   Widget build(BuildContext context) {
@@ -92,13 +96,16 @@ class DayEventLayer extends StatelessWidget {
               : (details) => onHoldMove!(details.globalPosition),
           onLongPressEnd: onHoldEnd == null ? null : (_) => onHoldEnd!(),
           onLongPressCancel: onHoldEnd,
-          child: AnimatedOpacity(
-            opacity: event.id == dimmedEventId ? 0.35 : 1,
-            duration: const Duration(milliseconds: 160),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: eventColor(event, OwnEventColor.of(context)),
-                borderRadius: radius,
+          child: _moving(
+            lanes[event.id] ?? 0,
+            AnimatedOpacity(
+              opacity: event.id == dimmedEventId ? 0.35 : 1,
+              duration: const Duration(milliseconds: 160),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: eventColor(event, OwnEventColor.of(context)),
+                  borderRadius: radius,
+                ),
               ),
             ),
           ),
@@ -106,7 +113,15 @@ class DayEventLayer extends StatelessWidget {
       ),
     );
   }
+
+  Widget _moving(int lane, Widget child) {
+    final motion = this.motion;
+    return motion == null ? child : motion(lane, child);
+  }
 }
+
+/// Wraps a bar or a title in [lane] in its motion.
+typedef LaneMotion = Widget Function(int lane, Widget child);
 
 /// Sticky titles for the events in view, in the list's scroll coordinates
 /// shifted by [scrollOffset].
@@ -119,6 +134,8 @@ class DayTitleOverlay extends StatelessWidget {
     required this.viewportWidth,
     this.hiddenEventId,
     this.dimmedEventId,
+    this.motion,
+    this.leftInset = 0,
     super.key,
   });
 
@@ -130,6 +147,13 @@ class DayTitleOverlay extends StatelessWidget {
   final String? hiddenEventId;
   final String? dimmedEventId;
 
+  /// Moves a title together with its bar ([DayEventLayer.motion]).
+  final LaneMotion? motion;
+
+  /// The friends column covers this much of the left edge: titles stick
+  /// to its edge instead of going under it.
+  final double leftInset;
+
   @override
   Widget build(BuildContext context) {
     final own = OwnEventColor.of(context);
@@ -139,13 +163,13 @@ class DayTitleOverlay extends StatelessWidget {
       final span = timelineSpan(event);
       final left = timelineX(span.start, pixelsPerHour) - scrollOffset;
       final right = timelineX(span.end, pixelsPerHour) - scrollOffset;
-      if (right <= 0 || left >= viewportWidth) continue;
+      if (right <= leftInset || left >= viewportWidth) continue;
       final title = eventDisplayTitle(event);
       final dates = eventSpansDays(event) ? eventDatesLabel(event) : null;
       final x = stickyTitleX(
         eventLeft: left,
         eventRight: right,
-        viewportLeft: 0,
+        viewportLeft: leftInset,
         titleWidth:
             _titleWidth(title, timelineTitleStyle) +
             (dates == null
@@ -163,24 +187,30 @@ class DayTitleOverlay extends StatelessWidget {
           width: width,
           top: timelineLaneTop(lanes[event.id] ?? 0),
           height: timelineEventHeight,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: AnimatedOpacity(
-              opacity: event.id == dimmedEventId ? 0.35 : 1,
-              duration: const Duration(milliseconds: 160),
-              child: Text.rich(
-                TextSpan(
-                  text: title,
-                  children: [
-                    if (dates != null)
-                      TextSpan(text: '\u2002$dates', style: timelineDatesStyle),
-                  ],
-                ),
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-                style: timelineTitleStyle.copyWith(
-                  color: eventInk(eventColor(event, own)),
+          child: _moving(
+            lanes[event.id] ?? 0,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AnimatedOpacity(
+                opacity: event.id == dimmedEventId ? 0.35 : 1,
+                duration: const Duration(milliseconds: 160),
+                child: Text.rich(
+                  TextSpan(
+                    text: title,
+                    children: [
+                      if (dates != null)
+                        TextSpan(
+                          text: '\u2002$dates',
+                          style: timelineDatesStyle,
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: timelineTitleStyle.copyWith(
+                    color: eventInk(eventColor(event, own)),
+                  ),
                 ),
               ),
             ),
@@ -189,6 +219,11 @@ class DayTitleOverlay extends StatelessWidget {
       );
     }
     return IgnorePointer(child: Stack(children: children));
+  }
+
+  Widget _moving(int lane, Widget child) {
+    final motion = this.motion;
+    return motion == null ? child : motion(lane, child);
   }
 }
 

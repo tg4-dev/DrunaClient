@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
@@ -7,6 +5,7 @@ import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:progressive_background_blur/progressive_background_blur.dart';
 
 /// Measurements of the friend bar at the bottom of the calendar.
 abstract final class FriendBarStyle {
@@ -26,9 +25,10 @@ abstract final class FriendBarStyle {
   static const reorder = Duration(milliseconds: 200);
   static const select = Duration(milliseconds: 160);
 
-  /// Progressive blur at each edge: bands from the edge inwards.
-  static const edgeBands = [8.0, 5.0, 3.0, 1.5];
-  static const edgeBand = 6.0;
+  /// Progressive blur at each edge: strongest at the edge, gone at [edge]
+  /// from it. Sigma is in physical pixels, as the shader takes it.
+  static const edge = 28.0;
+  static const edgeSigma = 24.0;
 }
 
 /// All friends at the bottom of the calendar. Picked friends get a ring and
@@ -86,7 +86,7 @@ class _FriendBarState extends State<FriendBar> {
     return LayoutBuilder(
       builder: (context, constraints) => ListenableBuilder(
         listenable: widget.selection,
-        builder: (context, _) => _ModeGate(
+        builder: (context, _) => ModeGate(
           mode: widget.mode,
           builder: (context, expanded) => Column(
             mainAxisSize: MainAxisSize.min,
@@ -199,7 +199,7 @@ class _FriendBarState extends State<FriendBar> {
         // has settled open, never while it moves.
         Positioned.fill(
           child: IgnorePointer(
-            child: _ModeGate(
+            child: ModeGate(
               mode: widget.mode,
               threshold: 0.999,
               builder: (context, open) => AnimatedOpacity(
@@ -217,11 +217,12 @@ class _FriendBarState extends State<FriendBar> {
 
 /// Rebuilds [builder] only when [mode] crosses [threshold], so whatever
 /// depends on "open or folded" does not rebuild on every frame of a swipe.
-class _ModeGate extends StatefulWidget {
-  const _ModeGate({
+class ModeGate extends StatefulWidget {
+  const ModeGate({
     required this.mode,
     required this.builder,
     this.threshold = 0.5,
+    super.key,
   });
 
   final ValueListenable<double> mode;
@@ -229,10 +230,10 @@ class _ModeGate extends StatefulWidget {
   final Widget Function(BuildContext context, bool on) builder;
 
   @override
-  State<_ModeGate> createState() => _ModeGateState();
+  State<ModeGate> createState() => _ModeGateState();
 }
 
-class _ModeGateState extends State<_ModeGate> {
+class _ModeGateState extends State<ModeGate> {
   late bool _on = widget.mode.value >= widget.threshold;
 
   @override
@@ -242,7 +243,7 @@ class _ModeGateState extends State<_ModeGate> {
   }
 
   @override
-  void didUpdateWidget(covariant _ModeGate oldWidget) {
+  void didUpdateWidget(covariant ModeGate oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mode != widget.mode) {
       oldWidget.mode.removeListener(_check);
@@ -291,7 +292,7 @@ class _StackGeometry {
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
 /// How far the bar is folded into the stack: 0 open, 1 folded.
-double _foldOf(double mode) =>
+double friendBarFold(double mode) =>
     Curves.easeInOutCubic.transform(1 - mode.clamp(0.0, 1.0));
 
 /// One friend. Its place in the row animates when the order changes; its
@@ -339,14 +340,14 @@ class _FriendSlot extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: _RingedAvatar(friend: friend, selected: selected),
+          child: RingedAvatar(friend: friend, selected: selected),
         ),
       ),
       builder: (context, slot, child) => AnimatedBuilder(
         animation: motion,
         child: child,
         builder: (context, child) {
-          final fold = _foldOf(mode.value);
+          final fold = friendBarFold(mode.value);
           final offset = scroll.hasClients ? scroll.offset : 0.0;
           final rowLeft = FriendBarStyle.gutter + slot * FriendBarStyle.step;
           final stack = stackIndex;
@@ -397,8 +398,8 @@ class _FriendSlot extends StatelessWidget {
 }
 
 /// The avatar, with a ring in a lighter shade of its colour when picked.
-class _RingedAvatar extends StatelessWidget {
-  const _RingedAvatar({required this.friend, required this.selected});
+class RingedAvatar extends StatelessWidget {
+  const RingedAvatar({required this.friend, required this.selected, super.key});
 
   final FriendInfo friend;
   final bool selected;
@@ -489,7 +490,10 @@ class _MoreSlot extends StatelessWidget {
           width: FriendBarStyle.stackAvatar,
           height: FriendBarStyle.stackAvatar,
           // Grows in as the bar folds; a scale, not a fade.
-          child: Transform.scale(scale: _foldOf(mode.value), child: child),
+          child: Transform.scale(
+            scale: friendBarFold(mode.value),
+            child: child,
+          ),
         );
       },
     );
@@ -503,28 +507,24 @@ class _EdgeBlur extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // One continuous blur per edge (`progressive_background_blur`), instead
+    // of stepped bands of backdrop filters, which showed their seams.
+    // The clip is required: unclipped, the backdrop layer filters the whole
+    // screen, and the blur ran down both edges of the month.
     Widget side({required bool left}) => Positioned(
       left: left ? 0 : null,
       right: left ? null : 0,
       top: 0,
       bottom: 0,
-      width: FriendBarStyle.edgeBand * FriendBarStyle.edgeBands.length,
-      child: Row(
-        children: [
-          for (final sigma
-              in left
-                  ? FriendBarStyle.edgeBands
-                  : FriendBarStyle.edgeBands.reversed)
-            SizedBox(
-              width: FriendBarStyle.edgeBand,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-            ),
-        ],
+      width: FriendBarStyle.edge,
+      child: ClipRect(
+        child: ProgressiveBlur(
+          begin: left ? Alignment.centerLeft : Alignment.centerRight,
+          end: left ? Alignment.centerRight : Alignment.centerLeft,
+          sigmaStart: FriendBarStyle.edgeSigma,
+          sigmaEnd: 0,
+          child: const SizedBox.expand(),
+        ),
       ),
     );
     return Stack(children: [side(left: true), side(left: false)]);

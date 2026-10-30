@@ -427,6 +427,74 @@ void main() {
       expect(fades.every((opacity) => opacity.opacity == 1), isTrue);
     });
 
+    testWidgets('a chip going behind "+N" on a zoom does not fade over it', (
+      tester,
+    ) async {
+      final day = DateTime(2026, 11, 11);
+      final busyDay = [
+        for (var i = 0; i < 5; i++)
+          CalendarEvent(
+            id: 'f$i',
+            title: '',
+            start: DateTime(2026, 11, 11, 8 + i * 2),
+            end: DateTime(2026, 11, 11, 9 + i * 2),
+            color: friendColour,
+            ownerId: 7,
+          ),
+      ];
+      final tall = monthDetailThreshold - 1;
+      final short = monthBarSnapThreshold + 1;
+      expect(monthEventCapacity(tall, titleDensity), greaterThan(5));
+      expect(monthEventCapacity(short, titleDensity), lessThan(5));
+      final height = ValueNotifier<double>(tall);
+      addTearDown(height.dispose);
+      final grid = MonthWeekGrid(
+        strip: MonthStrip(weekIndexOf(day), MonthStripKind.full),
+        rowKey: 'w',
+        today: today,
+        onDayTap: (_) {},
+        index: CalendarEventIndex(const []),
+        friendIndex: CalendarEventIndex(busyDay),
+        mode: const AlwaysStoppedAnimation(1),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topCenter,
+            child: ValueListenableBuilder<double>(
+              valueListenable: height,
+              builder: (context, h, _) =>
+                  SizedBox(width: 390, height: h, child: grid),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final chip = find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).color == friendColour,
+      );
+      expect(chip, findsNWidgets(5));
+
+      height.value = short;
+      await tester.pump();
+      final firstFrame = chip.evaluate().length;
+      expect(find.textContaining('+'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(firstFrame, chip.evaluate().length);
+
+      // Coming out from behind "+N", chips just show: no entrance.
+      height.value = tall;
+      await tester.pump();
+      expect(chip, findsNWidgets(5));
+      final fades = tester.widgetList<Opacity>(
+        find.ancestor(of: chip, matching: find.byType(Opacity)),
+      );
+      expect(fades.every((opacity) => opacity.opacity == 1), isTrue);
+    });
+
     test('the layers take turns: one folds, then the other unfolds', () {
       // First half: only my chips move; friends' stay folded.
       expect(myFoldAt(0.25), 0.5);

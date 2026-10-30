@@ -1,4 +1,6 @@
 import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/day_detail.dart';
+import 'package:druna_app/features/calendar/day_friends.dart';
 import 'package:druna_app/features/calendar/day_timeline.dart';
 import 'package:druna_app/features/calendar/day_title_layout.dart';
 import 'package:druna_app/features/calendar/event_sheet.dart';
@@ -9,6 +11,8 @@ import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/features/friends/friends_store.dart';
+import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +27,9 @@ class CalendarFriends {
     required this.onShowFriends,
     required this.onShowMine,
     required this.onAddFriends,
+    required this.onModeDrag,
+    required this.onModeSettle,
+    this.me,
     this.schedulesAvailable = true,
   });
 
@@ -34,6 +41,15 @@ class CalendarFriends {
   final VoidCallback onShowFriends;
   final VoidCallback onShowMine;
   final VoidCallback onAddFriends;
+
+  /// Pulling the open day sets the mode under the finger…
+  final ValueChanged<double> onModeDrag;
+
+  /// …and letting go settles it, with the speed in modes per second.
+  final ValueChanged<double> onModeSettle;
+
+  /// The user, for their avatar on top of the open day's column.
+  final UserProfile? me;
   final bool schedulesAvailable;
 }
 
@@ -402,6 +418,8 @@ class _CalendarScreenState extends State<CalendarScreen>
               day: day,
               events: _events,
               metrics: _dayMetrics,
+              friends: friends,
+              mode: widget.mode,
               onVisibleDay: (next) => _visibleDay = next,
               onEventTap: (event, rect) => _openEditor(event, isNew: false),
               onCreateRange: _createRange,
@@ -439,6 +457,8 @@ class _ExpandedDay extends StatelessWidget {
     required this.day,
     required this.events,
     required this.metrics,
+    required this.friends,
+    required this.mode,
     required this.onVisibleDay,
     required this.onEventTap,
     required this.onCreateRange,
@@ -458,6 +478,11 @@ class _ExpandedDay extends StatelessWidget {
   final DateTime day;
   final List<CalendarEvent> events;
   final DayScrollMetrics metrics;
+
+  /// With friends the day shows their rows and switches modes with the
+  /// month (see [DayDetail]); without, only the user's events.
+  final CalendarFriends? friends;
+  final ValueListenable<double> mode;
   final ValueChanged<DateTime> onVisibleDay;
   final void Function(CalendarEvent event, Rect rect) onEventTap;
   final void Function(DateTime start, DateTime end) onCreateRange;
@@ -476,15 +501,42 @@ class _ExpandedDay extends StatelessWidget {
   Widget build(BuildContext context) {
     final headerHeight = MediaQuery.paddingOf(context).top + monthTitleHeight;
     final screenHeight = MediaQuery.sizeOf(context).height;
-    final timeline = DayTimeline(
-      day: day,
-      metrics: metrics,
-      events: events,
-      onVisibleDay: onVisibleDay,
-      onEventTap: onEventTap,
-      onCreateRange: onCreateRange,
-      onMoveEvent: onMoveEvent,
-    );
+    final friends = this.friends;
+    final Widget timeline = friends == null
+        ? DayTimeline(
+            day: day,
+            metrics: metrics,
+            events: events,
+            onVisibleDay: onVisibleDay,
+            onEventTap: onEventTap,
+            onCreateRange: onCreateRange,
+            onMoveEvent: onMoveEvent,
+          )
+        : ListenableBuilder(
+            listenable: Listenable.merge([
+              friends.store,
+              friends.selection,
+              friends.events,
+            ]),
+            builder: (context, _) => DayDetail(
+              day: day,
+              metrics: metrics,
+              events: events,
+              onVisibleDay: onVisibleDay,
+              onEventTap: onEventTap,
+              onCreateRange: onCreateRange,
+              onMoveEvent: onMoveEvent,
+              friends: friends.store.friends,
+              selection: friends.selection,
+              friendEvents: friends.events.value,
+              mode: mode,
+              me: _MyAvatar(profile: friends.me),
+              onShowMine: friends.onShowMine,
+              onShowFriends: friends.onShowFriends,
+              onModeDrag: friends.onModeDrag,
+              onModeSettle: friends.onModeSettle,
+            ),
+          );
     final sheet = FadeTransition(
       opacity: veil,
       child: ColoredBox(
@@ -762,6 +814,29 @@ class _DayTitleTrack extends StatelessWidget {
       child: Text(
         _dayTitle(_dayAt(dayIndex)),
         style: _dayTitleStyle(size, opacity, weight),
+      ),
+    );
+  }
+}
+
+/// The user on top of the open day's column, in the colour of their events.
+class _MyAvatar extends StatelessWidget {
+  const _MyAvatar({required this.profile});
+
+  final UserProfile? profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = this.profile;
+    return Semantics(
+      label: 'Мои события',
+      excludeSemantics: true,
+      child: PersonAvatar(
+        id: profile?.id ?? 0,
+        name: profile?.name ?? '',
+        username: profile?.username ?? 'Я',
+        color: OwnEventColor.of(context),
+        size: DayFriendsGeometry.avatar,
       ),
     );
   }
