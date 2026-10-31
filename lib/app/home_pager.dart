@@ -154,14 +154,63 @@ class _HomePagerState extends State<HomePager> {
   }
 
   void _goTo(int stop) {
-    _plane?.animateTo(
+    final plane = _plane;
+    if (plane == null || !plane.hasClients || _width == 0) return;
+    final reduce = MediaQuery.of(context).disableAnimations;
+    final from = plane.offset / _width;
+    final modeOnly =
+        from >= HomePager.myCalendarStop - 0.01 &&
+        from <= HomePager.friendsCalendarStop + 0.01 &&
+        (stop == HomePager.myCalendarStop ||
+            stop == HomePager.friendsCalendarStop);
+    final position = plane.position;
+    if (modeOnly && !reduce && position is ScrollPositionWithSingleContext) {
+      // `animateTo` would make the calendar ignore taps until the chips
+      // have unfolded; this slide lets them through.
+      position.beginActivity(
+        _TapThroughSlide(
+          position,
+          from: position.pixels,
+          to: stop * _width,
+          duration: HomePager.slide,
+          curve: Curves.easeInOutCubic,
+          vsync: position.context.vsync,
+        ),
+      );
+      return;
+    }
+    plane.animateTo(
       stop * _width,
-      duration: MediaQuery.of(context).disableAnimations
-          ? const Duration(milliseconds: 1)
-          : HomePager.slide,
+      duration: reduce ? const Duration(milliseconds: 1) : HomePager.slide,
       curve: Curves.easeOutCubic,
     );
   }
+
+  /// The open day pulls the mode: the plane follows between the two
+  /// calendar stops, where the calendar stands still.
+  void _dragMode(double t) {
+    final plane = _plane;
+    if (plane == null || !plane.hasClients) return;
+    plane.jumpTo((HomePager.myCalendarStop + t.clamp(0.0, 1.0)) * _width);
+  }
+
+  /// A quick flick picks its direction; a slow release, the nearer mode.
+  void _settleMode(double velocity) {
+    final int stop;
+    if (velocity.abs() > _modeFlick) {
+      stop = velocity > 0
+          ? HomePager.friendsCalendarStop
+          : HomePager.myCalendarStop;
+    } else {
+      stop = _mode.value >= 0.5
+          ? HomePager.friendsCalendarStop
+          : HomePager.myCalendarStop;
+    }
+    _goTo(stop);
+  }
+
+  /// Modes per second.
+  static const _modeFlick = 1.5;
 
   @override
   Widget build(BuildContext context) {
@@ -181,6 +230,7 @@ class _HomePagerState extends State<HomePager> {
               mode: _mode,
               onBusyChanged: (busy) => setState(() => _calendarBusy = busy),
               onOpenSettings: () => _goTo(HomePager.settingsStop),
+              onOpenFriends: () => _goTo(HomePager.friendsStop),
               friends: CalendarFriends(
                 store: _store,
                 selection: _selection,
@@ -189,6 +239,9 @@ class _HomePagerState extends State<HomePager> {
                 onShowFriends: () => _goTo(HomePager.friendsCalendarStop),
                 onShowMine: () => _goTo(HomePager.myCalendarStop),
                 onAddFriends: () => _goTo(HomePager.friendsStop),
+                onModeDrag: _dragMode,
+                onModeSettle: _settleMode,
+                me: widget.session.profile,
               ),
             );
             return SingleChildScrollView(
@@ -287,4 +340,21 @@ class _SnappyPagePhysics extends PageScrollPhysics {
   @override
   SpringDescription get spring =>
       SpringDescription.withDampingRatio(mass: 0.5, stiffness: 400, ratio: 1);
+}
+
+/// A scroll animation that, unlike [DrivenScrollActivity], keeps taps on
+/// the content: settling the mode must not freeze the calendar. A drag
+/// still takes over, as with any scroll activity.
+class _TapThroughSlide extends DrivenScrollActivity {
+  _TapThroughSlide(
+    super.delegate, {
+    required super.from,
+    required super.to,
+    required super.duration,
+    required super.curve,
+    required super.vsync,
+  });
+
+  @override
+  bool get shouldIgnorePointer => false;
 }

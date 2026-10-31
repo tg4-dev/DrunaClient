@@ -1,8 +1,12 @@
 import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/day_events.dart';
+import 'package:druna_app/features/calendar/day_friends.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
+import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -93,6 +97,8 @@ class DayTimeline extends StatefulWidget {
     this.onEventTap,
     this.onCreateRange,
     this.onMoveEvent,
+    this.mode = myEventsMode,
+    this.friends,
     super.key,
   });
 
@@ -111,6 +117,13 @@ class DayTimeline extends StatefulWidget {
 
   /// A long press on a timed event picks it up; this reports its new start.
   final void Function(CalendarEvent event, DateTime start)? onMoveEvent;
+
+  /// 0 shows the user's events in lanes, 1 friends' rows; see
+  /// [DayFriendsGeometry]. Only matters with [friends].
+  final ValueListenable<double> mode;
+
+  /// Without it the timeline shows only the user's events.
+  final DayFriendsView? friends;
 
   @override
   State<DayTimeline> createState() => DayTimelineState();
@@ -298,6 +311,11 @@ class DayTimelineState extends State<DayTimeline>
     return lane;
   }
 
+  /// Friends' rows are in view: the user's events are folded into their
+  /// band, and a new one is drawn on the user's row.
+  bool get _friendsShown =>
+      widget.friends != null && widget.mode.value > calendarModeHalfway;
+
   void _beginCreate(Offset global) {
     if (widget.onCreateRange == null || _hold != null || _pointers.length > 1) {
       return;
@@ -308,12 +326,13 @@ class DayTimelineState extends State<DayTimeline>
     final hold = _Hold.create(at)
       ..x = x
       ..step = Duration(minutes: timelineStepFor(_pixels));
-    hold.lane = _freeLane(at, at.add(hold.step));
+    hold.lane = _friendsShown ? 0 : _freeLane(at, at.add(hold.step));
     _startHold(hold);
   }
 
   void _beginMove(CalendarEvent event, Offset global) {
     if (widget.onMoveEvent == null ||
+        _friendsShown ||
         event.allDay ||
         _hold != null ||
         _pointers.length > 1) {
@@ -562,17 +581,108 @@ class DayTimelineState extends State<DayTimeline>
         _index.lanesAround(addCalendarDays(dayTimelineOrigin, index)),
       );
     }
-    return DayTitleOverlay(
-      events: _index.between(
-        addCalendarDays(dayTimelineOrigin, first),
-        addCalendarDays(dayTimelineOrigin, last),
-      ),
+    final events = _index.between(
+      addCalendarDays(dayTimelineOrigin, first),
+      addCalendarDays(dayTimelineOrigin, last),
+    );
+    final titles = DayTitleOverlay(
+      events: events,
       lanes: lanes,
       scrollOffset: offset,
       pixelsPerHour: _pixels,
       viewportWidth: width,
       hiddenEventId: widget.hiddenEventId,
       dimmedEventId: _hold?.event?.id,
+      motion: _laneMotion(lanes),
+      leftInset: widget.friends == null ? 0 : DayFriendsGeometry.columnWidth,
+    );
+    if (widget.friends == null) return titles;
+    return Stack(
+      children: [
+        Positioned.fill(child: titles),
+        Positioned.fill(
+          child: MyBandTitles(
+            events: events,
+            scrollOffset: offset,
+            pixelsPerHour: _pixels,
+            viewportWidth: width,
+            leftInset: DayFriendsGeometry.columnWidth,
+            mode: widget.mode,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// With friends, the user's bars fold up into their row as friends'
+  /// rows come in, lane by lane, like the month's chips.
+  LaneMotion? _laneMotion(Map<String, int> lanes) {
+    if (widget.friends == null) return null;
+    var count = 0;
+    for (final lane in lanes.values) {
+      if (lane + 1 > count) count = lane + 1;
+    }
+    return (lane, child) => ChipMotion(
+      mode: widget.mode,
+      awayAt: myFoldAt,
+      lane: lane,
+      lanes: count,
+      homeTop: timelineLaneTop(lane),
+      foldTop: DayFriendsGeometry.myRowTop,
+      child: child,
+    );
+  }
+
+  Widget _day(DateTime day) {
+    final lanes = _index.lanesAround(day);
+    final mine = DayEventLayer(
+      day: day,
+      pixelsPerHour: _pixels,
+      events: _index.onDay(day),
+      lanes: lanes,
+      hiddenEventId: widget.hiddenEventId,
+      dimmedEventId: _hold?.event?.id,
+      onEventTap: widget.onEventTap,
+      onHoldStart: _beginMove,
+      onHoldMove: _updateHold,
+      onHoldEnd: _endHold,
+      motion: _laneMotion(lanes),
+    );
+    final friends = widget.friends;
+    if (friends == null) return mine;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DayBands(
+              day: day,
+              pixelsPerHour: _pixels,
+              mine: _index.onDay(day),
+              view: friends,
+              mode: widget.mode,
+            ),
+          ),
+        ),
+        // Folded away, the user's bars take no taps.
+        Positioned.fill(
+          child: ValueListenableBuilder<double>(
+            valueListenable: widget.mode,
+            child: mine,
+            builder: (context, t, child) =>
+                IgnorePointer(ignoring: t > calendarModeHalfway, child: child),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DayFriendLayer(
+              day: day,
+              pixelsPerHour: _pixels,
+              view: friends,
+              mode: widget.mode,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -590,6 +700,10 @@ class DayTimelineState extends State<DayTimeline>
           final left = timelineX(ghost.start, _pixels) - _scroll.offset;
           final right = timelineX(ghost.end, _pixels) - _scroll.offset;
           final top = timelineLaneTop(ghost.lane);
+          // Drawn on the user's row among friends' rows: as tall as it.
+          final height = _friendsShown
+              ? DayFriendsGeometry.rowHeight
+              : timelineEventHeight;
           final title = ghost.title;
           return Stack(
             clipBehavior: Clip.none,
@@ -599,7 +713,7 @@ class DayTimelineState extends State<DayTimeline>
                 left: left,
                 width: (right - left).clamp(2.0, double.infinity),
                 top: top,
-                height: timelineEventHeight,
+                height: height,
                 child: DecoratedBox(
                   decoration: liftedEventDecoration(
                     const BorderRadius.all(timelineEventRadius),
@@ -629,7 +743,7 @@ class DayTimelineState extends State<DayTimeline>
               Positioned(
                 key: const ValueKey('timeline-ghost-time'),
                 left: left,
-                top: top + timelineEventHeight + 8,
+                top: top + height + 8,
                 child: _TimeBubble(
                   label: clockRangeLabel(ghost.start, ghost.end),
                 ),
@@ -677,18 +791,7 @@ class DayTimelineState extends State<DayTimeline>
                         onLongPressMoveUpdate: (details) =>
                             _updateHold(details.globalPosition),
                         onLongPressEnd: (_) => _endHold(),
-                        child: DayEventLayer(
-                          day: day,
-                          pixelsPerHour: _pixels,
-                          events: _index.onDay(day),
-                          lanes: _index.lanesAround(day),
-                          hiddenEventId: widget.hiddenEventId,
-                          dimmedEventId: _hold?.event?.id,
-                          onEventTap: widget.onEventTap,
-                          onHoldStart: _beginMove,
-                          onHoldMove: _updateHold,
-                          onHoldEnd: _endHold,
-                        ),
+                        child: _day(day),
                       ),
                     ),
                   );

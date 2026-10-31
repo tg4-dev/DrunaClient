@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
@@ -7,10 +5,15 @@ import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:progressive_blur/progressive_blur.dart';
 
 /// Measurements of the friend bar at the bottom of the calendar.
 abstract final class FriendBarStyle {
   static const avatar = 56.0;
+
+  /// The hint line above the row.
+  static const hint = 32.0;
+  static const hintGap = 8.0;
   static const step = 68.0;
   static const gutter = 20.0;
   static const height = 64.0;
@@ -26,10 +29,16 @@ abstract final class FriendBarStyle {
   static const reorder = Duration(milliseconds: 200);
   static const select = Duration(milliseconds: 160);
 
-  /// Progressive blur at each edge: bands from the edge inwards.
-  static const edgeBands = [8.0, 5.0, 3.0, 1.5];
-  static const edgeBand = 6.0;
+  /// Progressive blur at each edge: strongest at the edge, gone at [edge]
+  /// from it. Sigma is in physical pixels, as the shader takes it.
+  static const edge = 28.0;
+  static const edgeSigma = 24.0;
 }
+
+/// Height the friend bar takes over the bottom of the month above the safe
+/// area: hint, row and the margin under it.
+const friendBarExtent =
+    FriendBarStyle.hint + FriendBarStyle.hintGap + FriendBarStyle.height + 4;
 
 /// All friends at the bottom of the calendar. Picked friends get a ring and
 /// move to the front; their busy time shows in the month. While the user's
@@ -81,37 +90,35 @@ class _FriendBarState extends State<FriendBar> {
   @override
   Widget build(BuildContext context) {
     final friends = widget.friends;
+    // Rebuilt for the selection and when the swipe crosses the middle —
+    // never per frame. Per frame only the avatars move ([_FriendSlot]).
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        return ListenableBuilder(
-          listenable: Listenable.merge([widget.selection, widget.mode]),
-          builder: (context, _) {
-            final t = widget.mode.value;
-            final shown = t >= 0.5;
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Hint(
-                  text: _hint(friends),
-                  visible: shown,
-                  opacity: ((t - 0.5) * 2).clamp(0.0, 1.0),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: FriendBarStyle.height,
-                  child: friends == null
-                      ? _Placeholder(opacity: t)
-                      : friends.isEmpty
-                      ? _AddFriends(opacity: t, onTap: widget.onAddFriends)
-                      : _row(friends, width, t),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (context, constraints) => ListenableBuilder(
+        listenable: widget.selection,
+        builder: (context, _) => ModeGate(
+          mode: widget.mode,
+          builder: (context, expanded) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Hint(text: _hint(friends), visible: expanded),
+              const SizedBox(height: FriendBarStyle.hintGap),
+              SizedBox(
+                height: FriendBarStyle.height,
+                child: friends == null
+                    ? _Placeholder(visible: expanded)
+                    : friends.isEmpty
+                    ? _AddFriends(visible: expanded, onTap: widget.onAddFriends)
+                    : _EdgeBlur(
+                        mode: widget.mode,
+                        width: constraints.maxWidth,
+                        child: _row(friends, constraints.maxWidth, expanded),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -126,7 +133,7 @@ class _FriendBarState extends State<FriendBar> {
     return null;
   }
 
-  Widget _row(List<FriendInfo> friends, double width, double t) {
+  Widget _row(List<FriendInfo> friends, double width, bool expanded) {
     final ordered = widget.selection.ordered(friends);
     final selectedCount = ordered
         .where((friend) => widget.selection.isSelected(friend.id))
@@ -136,7 +143,7 @@ class _FriendBarState extends State<FriendBar> {
         ordered.length * FriendBarStyle.step -
         (FriendBarStyle.step - FriendBarStyle.avatar);
     final geometry = _StackGeometry(width: width, selected: selectedCount);
-    final expanded = t >= 0.5;
+    final motion = Listenable.merge([widget.mode, _scroll]);
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -152,36 +159,36 @@ class _FriendBarState extends State<FriendBar> {
             child: SizedBox(
               width: contentWidth < width ? width : contentWidth,
               height: FriendBarStyle.height,
-              child: AnimatedBuilder(
-                animation: _scroll,
-                builder: (context, _) {
-                  final offset = _scroll.hasClients ? _scroll.offset : 0.0;
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      for (var i = 0; i < ordered.length; i++)
-                        _FriendSlot(
-                          key: ValueKey(ordered[i].id),
-                          friend: ordered[i],
-                          index: i,
-                          stackIndex: i < selectedCount ? i : null,
-                          geometry: geometry,
-                          scrollOffset: offset,
-                          mode: t,
-                          selected: widget.selection.isSelected(ordered[i].id),
-                          onTap: () => _toggle(ordered[i]),
-                        ),
-                      if (geometry.extra > 0)
-                        _MoreSlot(
-                          count: geometry.extra,
-                          left:
-                              geometry.slotLeft(FriendBarStyle.stackMax) +
-                              offset,
-                          opacity: 1 - t,
-                        ),
-                    ],
-                  );
-                },
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Not picked first, so the picked ones paint over them and
+                  // the stack hides friends sliding out under it.
+                  for (final i in [
+                    for (var k = selectedCount; k < ordered.length; k++) k,
+                    for (var k = 0; k < selectedCount; k++) k,
+                  ])
+                    _FriendSlot(
+                      key: ValueKey(ordered[i].id),
+                      friend: ordered[i],
+                      index: i,
+                      stackIndex: i < selectedCount ? i : null,
+                      geometry: geometry,
+                      motion: motion,
+                      mode: widget.mode,
+                      scroll: _scroll,
+                      selected: widget.selection.isSelected(ordered[i].id),
+                      onTap: () => _toggle(ordered[i]),
+                    ),
+                  if (geometry.extra > 0)
+                    _MoreSlot(
+                      count: geometry.extra,
+                      geometry: geometry,
+                      motion: motion,
+                      mode: widget.mode,
+                      scroll: _scroll,
+                    ),
+                ],
               ),
             ),
           ),
@@ -201,18 +208,61 @@ class _FriendBarState extends State<FriendBar> {
               ),
             ),
           ),
-        if (t > 0)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: t.clamp(0.0, 1.0),
-                child: const _EdgeBlur(),
-              ),
-            ),
-          ),
       ],
     );
   }
+}
+
+/// Rebuilds [builder] only when [mode] crosses [threshold], so whatever
+/// depends on "open or folded" does not rebuild on every frame of a swipe.
+class ModeGate extends StatefulWidget {
+  const ModeGate({
+    required this.mode,
+    required this.builder,
+    this.threshold = 0.5,
+    super.key,
+  });
+
+  final ValueListenable<double> mode;
+  final double threshold;
+  final Widget Function(BuildContext context, bool on) builder;
+
+  @override
+  State<ModeGate> createState() => _ModeGateState();
+}
+
+class _ModeGateState extends State<ModeGate> {
+  late bool _on = widget.mode.value >= widget.threshold;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.mode.addListener(_check);
+  }
+
+  @override
+  void didUpdateWidget(covariant ModeGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mode != widget.mode) {
+      oldWidget.mode.removeListener(_check);
+      widget.mode.addListener(_check);
+    }
+    _on = widget.mode.value >= widget.threshold;
+  }
+
+  @override
+  void dispose() {
+    widget.mode.removeListener(_check);
+    super.dispose();
+  }
+
+  void _check() {
+    final on = widget.mode.value >= widget.threshold;
+    if (on != _on) setState(() => _on = on);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _on);
 }
 
 /// Where the folded stack of selected friends sits, right-aligned.
@@ -239,16 +289,29 @@ class _StackGeometry {
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
+/// How far the row is scrolled. For a frame the controller can hold two
+/// positions — the row rebuilt under a new parent (the blur turning on)
+/// attaches before the old one detaches — and `offset` asserts there: the
+/// newest one is the row on screen.
+double _offsetOf(ScrollController scroll) =>
+    scroll.hasClients ? scroll.positions.last.pixels : 0.0;
+
+/// How far the bar is folded into the stack: 0 open, 1 folded.
+double friendBarFold(double mode) =>
+    Curves.easeInOutCubic.transform(1 - mode.clamp(0.0, 1.0));
+
 /// One friend. Its place in the row animates when the order changes; its
-/// way into the stack follows [mode] directly.
+/// way into the stack follows the mode directly. Per frame only a position
+/// and a scale change: no opacity, no relayout of the avatar.
 class _FriendSlot extends StatelessWidget {
   const _FriendSlot({
     required this.friend,
     required this.index,
     required this.stackIndex,
     required this.geometry,
-    required this.scrollOffset,
+    required this.motion,
     required this.mode,
+    required this.scroll,
     required this.selected,
     required this.onTap,
     super.key,
@@ -260,50 +323,20 @@ class _FriendSlot extends StatelessWidget {
   /// Position in the folded stack; null for friends that are not picked.
   final int? stackIndex;
   final _StackGeometry geometry;
-  final double scrollOffset;
-  final double mode;
+  final Listenable motion;
+  final ValueListenable<double> mode;
+  final ScrollController scroll;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    final fold = Curves.easeOutCubic.transform(1 - mode.clamp(0.0, 1.0));
+    const avatar = FriendBarStyle.avatar;
     return TweenAnimationBuilder<double>(
       tween: Tween(end: index.toDouble()),
       duration: reduce ? Duration.zero : FriendBarStyle.reorder,
       curve: Curves.easeOutCubic,
-      builder: (context, slot, child) {
-        final rowLeft = FriendBarStyle.gutter + slot * FriendBarStyle.step;
-        final stack = stackIndex;
-        final double foldedLeft;
-        final double foldedSize;
-        var foldedOpacity = 1.0;
-        if (stack == null) {
-          // Not picked: slides off to the right and fades.
-          foldedLeft = geometry.width + FriendBarStyle.gutter + slot * 12;
-          foldedSize = FriendBarStyle.stackAvatar;
-          foldedOpacity = 0;
-        } else if (stack < FriendBarStyle.stackMax) {
-          foldedLeft = geometry.slotLeft(stack);
-          foldedSize = FriendBarStyle.stackAvatar;
-        } else {
-          // Beyond the stack: tucks under "+N".
-          foldedLeft = geometry.slotLeft(FriendBarStyle.stackMax);
-          foldedSize = FriendBarStyle.stackAvatar;
-          foldedOpacity = 0;
-        }
-        final size = _lerp(FriendBarStyle.avatar, foldedSize, fold);
-        final left = _lerp(rowLeft, foldedLeft + scrollOffset, fold);
-        final opacity = _lerp(1, foldedOpacity, fold);
-        return Positioned(
-          left: left,
-          top: (FriendBarStyle.height - size) / 2,
-          width: size,
-          height: size,
-          child: Opacity(opacity: opacity.clamp(0.0, 1.0), child: child),
-        );
-      },
       child: Semantics(
         button: true,
         selected: selected,
@@ -312,16 +345,66 @@ class _FriendSlot extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: _RingedAvatar(friend: friend, selected: selected),
+          child: RingedAvatar(friend: friend, selected: selected),
         ),
+      ),
+      builder: (context, slot, child) => AnimatedBuilder(
+        animation: motion,
+        child: child,
+        builder: (context, child) {
+          final fold = friendBarFold(mode.value);
+          final offset = _offsetOf(scroll);
+          final rowLeft = FriendBarStyle.gutter + slot * FriendBarStyle.step;
+          final stack = stackIndex;
+          // Picked friends glide into the stack; the rest always slide off
+          // to the right, under the stack (they are painted below it).
+          final double foldedLeft;
+          final double foldedScale;
+          var hidden = false;
+          if (stack != null && stack < FriendBarStyle.stackMax) {
+            foldedLeft =
+                geometry.slotLeft(stack) -
+                (avatar - FriendBarStyle.stackAvatar) / 2 +
+                offset;
+            foldedScale = FriendBarStyle.stackAvatar / avatar;
+          } else if (stack != null) {
+            // Beyond the stack: shrinks under "+N".
+            foldedLeft =
+                geometry.slotLeft(FriendBarStyle.stackMax) -
+                (avatar - FriendBarStyle.stackAvatar) / 2 +
+                offset;
+            foldedScale = 0;
+            hidden = true;
+          } else {
+            // Past the right edge of the screen, keeping their order.
+            foldedLeft =
+                geometry.width + FriendBarStyle.gutter + slot * 12 + offset;
+            foldedScale = FriendBarStyle.stackAvatar / avatar;
+            hidden = true;
+          }
+          return Positioned(
+            left: _lerp(rowLeft, foldedLeft, fold),
+            top: (FriendBarStyle.height - avatar) / 2,
+            width: avatar,
+            height: avatar,
+            // Off screen or under "+N": gone for VoiceOver too.
+            child: ExcludeSemantics(
+              excluding: hidden && fold > 0.5,
+              child: Transform.scale(
+                scale: _lerp(1, foldedScale, fold),
+                child: child,
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
 /// The avatar, with a ring in a lighter shade of its colour when picked.
-class _RingedAvatar extends StatelessWidget {
-  const _RingedAvatar({required this.friend, required this.selected});
+class RingedAvatar extends StatelessWidget {
+  const RingedAvatar({required this.friend, required this.selected, super.key});
 
   final FriendInfo friend;
   final bool selected;
@@ -372,100 +455,114 @@ class _RingedAvatar extends StatelessWidget {
 class _MoreSlot extends StatelessWidget {
   const _MoreSlot({
     required this.count,
-    required this.left,
-    required this.opacity,
+    required this.geometry,
+    required this.motion,
+    required this.mode,
+    required this.scroll,
   });
 
   final int count;
-  final double left;
-  final double opacity;
+  final _StackGeometry geometry;
+  final Listenable motion;
+  final ValueListenable<double> mode;
+  final ScrollController scroll;
 
   @override
   Widget build(BuildContext context) {
-    final fade = Curves.easeOutCubic.transform(opacity.clamp(0.0, 1.0));
-    return Positioned(
-      left: left,
-      top: (FriendBarStyle.height - FriendBarStyle.stackAvatar) / 2,
-      width: FriendBarStyle.stackAvatar,
-      height: FriendBarStyle.stackAvatar,
-      child: Opacity(
-        opacity: fade,
-        child: Container(
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            color: SheetStyle.chip,
-            shape: BoxShape.circle,
+    return AnimatedBuilder(
+      animation: motion,
+      child: Container(
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          color: SheetStyle.chip,
+          shape: BoxShape.circle,
+        ),
+        child: Text(
+          '+$count',
+          textScaler: TextScaler.noScaling,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
           ),
-          child: Text(
-            '+$count',
-            textScaler: TextScaler.noScaling,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
+        ),
+      ),
+      builder: (context, child) {
+        final offset = _offsetOf(scroll);
+        return Positioned(
+          left: geometry.slotLeft(FriendBarStyle.stackMax) + offset,
+          top: (FriendBarStyle.height - FriendBarStyle.stackAvatar) / 2,
+          width: FriendBarStyle.stackAvatar,
+          height: FriendBarStyle.stackAvatar,
+          // Grows in as the bar folds; a scale, not a fade.
+          child: Transform.scale(
+            scale: friendBarFold(mode.value),
+            child: child,
           ),
+        );
+      },
+    );
+  }
+}
+
+/// The row blurs towards both screen edges, avatars scrolling out of it
+/// (`progressive_blur`, which blurs its child: the calendar behind is
+/// blurred by the month itself). Only while the bar is open: folded, the
+/// stack at the right edge stays sharp; the blur grows in as it settles.
+class _EdgeBlur extends StatelessWidget {
+  const _EdgeBlur({
+    required this.mode,
+    required this.width,
+    required this.child,
+  });
+
+  final ValueListenable<double> mode;
+  final double width;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final edge = width <= 0
+        ? 0.0
+        : (FriendBarStyle.edge / width).clamp(0.0, 0.5);
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return ModeGate(
+      mode: mode,
+      threshold: 0.999,
+      builder: (context, open) => TweenAnimationBuilder<double>(
+        tween: Tween(end: open ? 1 : 0),
+        duration: reduce ? Duration.zero : FriendBarStyle.select,
+        child: child,
+        builder: (context, shown, child) => ProgressiveBlurWidget(
+          sigma: FriendBarStyle.edgeSigma * shown,
+          linearGradientBlur: LinearGradientBlur(
+            values: const [1, 0, 0, 1],
+            stops: [0, edge, 1 - edge, 1],
+            start: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          child: child!,
         ),
       ),
     );
   }
 }
 
-/// Blur that grows towards both screen edges, over whatever is under the
-/// bar: avatars scrolling out and the calendar behind.
-class _EdgeBlur extends StatelessWidget {
-  const _EdgeBlur();
-
-  @override
-  Widget build(BuildContext context) {
-    Widget side({required bool left}) => Positioned(
-      left: left ? 0 : null,
-      right: left ? null : 0,
-      top: 0,
-      bottom: 0,
-      width: FriendBarStyle.edgeBand * FriendBarStyle.edgeBands.length,
-      child: Row(
-        children: [
-          for (final sigma
-              in left
-                  ? FriendBarStyle.edgeBands
-                  : FriendBarStyle.edgeBands.reversed)
-            SizedBox(
-              width: FriendBarStyle.edgeBand,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-    return Stack(children: [side(left: true), side(left: false)]);
-  }
-}
-
 class _Hint extends StatelessWidget {
-  const _Hint({
-    required this.text,
-    required this.visible,
-    required this.opacity,
-  });
+  const _Hint({required this.text, required this.visible});
 
   final String? text;
   final bool visible;
-  final double opacity;
 
   @override
   Widget build(BuildContext context) {
     final message = text;
     return SizedBox(
-      height: 32,
+      height: FriendBarStyle.hint,
       child: Center(
         child: AnimatedOpacity(
           duration: FriendBarStyle.select,
-          opacity: message != null && visible ? opacity : 0,
+          opacity: message != null && visible ? 1 : 0,
           child: message == null
               ? const SizedBox.shrink()
               : DecoratedBox(
@@ -494,14 +591,15 @@ class _Hint extends StatelessWidget {
 }
 
 class _Placeholder extends StatelessWidget {
-  const _Placeholder({required this.opacity});
+  const _Placeholder({required this.visible});
 
-  final double opacity;
+  final bool visible;
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: opacity.clamp(0.0, 1.0),
+    return AnimatedOpacity(
+      duration: FriendBarStyle.select,
+      opacity: visible ? 1 : 0,
       child: Row(
         children: [
           const SizedBox(width: FriendBarStyle.gutter),
@@ -524,17 +622,18 @@ class _Placeholder extends StatelessWidget {
 }
 
 class _AddFriends extends StatelessWidget {
-  const _AddFriends({required this.opacity, required this.onTap});
+  const _AddFriends({required this.visible, required this.onTap});
 
-  final double opacity;
+  final bool visible;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      ignoring: opacity < 0.5,
-      child: Opacity(
-        opacity: opacity.clamp(0.0, 1.0),
+      ignoring: !visible,
+      child: AnimatedOpacity(
+        duration: FriendBarStyle.select,
+        opacity: visible ? 1 : 0,
         child: Center(
           child: GestureDetector(
             onTap: onTap,

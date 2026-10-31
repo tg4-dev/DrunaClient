@@ -7,10 +7,12 @@ import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/calendar_screen.dart';
+import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friends_page.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/features/calendar/day_detail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -77,7 +79,15 @@ void main() {
     await swipe(tester, 300);
     // Same calendar in place; the bar folded away to the right.
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
-    expect(tester.getRect(alinaFinder()).left, greaterThan(400));
+    // Not picked: slid off past the right edge.
+    final inBar = find.descendant(
+      of: find.byType(FriendBar),
+      matching: alinaFinder(),
+    );
+    expect(
+      inBar.evaluate().isEmpty || tester.getRect(inBar).left > 400,
+      isTrue,
+    );
 
     await swipe(tester, 300);
     expect(onScreen(tester, find.byType(FriendsPage)), isTrue);
@@ -102,6 +112,14 @@ void main() {
     expect(onScreen(tester, find.byType(SettingsPage)), isTrue);
   });
 
+  testWidgets('the friends button opens the friends page', (tester) async {
+    await pumpPager(tester);
+
+    await tester.tap(find.byKey(const ValueKey('friends-button')));
+    await tester.pumpAndSettle();
+    expect(onScreen(tester, find.byType(FriendsPage)), isTrue);
+  });
+
   testWidgets('a picked friend folds into the stack, which taps back', (
     tester,
   ) async {
@@ -120,6 +138,24 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
     await tester.pumpAndSettle();
     expect(tester.getRect(alinaFinder()).left, lessThan(200));
+  });
+
+  testWidgets('taps work while the mode is still settling', (tester) async {
+    await pumpPager(tester);
+    await tester.tap(alinaFinder());
+    await tester.pumpAndSettle();
+    await swipe(tester, 300);
+
+    await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
+    // The slide has not ended: the tap goes through instead of being
+    // ignored.
+    await tester.pump(const Duration(milliseconds: 120));
+    final now = DateTime.now();
+    await tester.tap(
+      find.byKey(ValueKey('day-${now.year}-${now.month}-${now.day}')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(DayDetail), findsOneWidget);
   });
 
   testWidgets('"Нет сети" makes a refresh of friends fail', (tester) async {

@@ -6,10 +6,14 @@ import 'package:druna_app/core/storage/token_store.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:progressive_blur/progressive_blur.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ru_RU');
+  // Loaded before the first frame: until then the blurred widgets show
+  // their child bare, and switching later would rebuild their subtrees.
+  await ProgressiveBlurWidget.precache();
 
   const config = AppConfig.fromEnvironment();
   final tokenStore = SecureTokenStore();

@@ -1,8 +1,23 @@
 const monthRowLevels = [100.0, 148.0, 230.0, 340.0, 520.0];
 const monthRowMin = 100.0;
 const monthRowMax = 520.0;
-const monthTitleHeight = 58.0;
 const weekdayHeaderHeight = 28.0;
+
+/// Height of the open day's title row under the safe area.
+const monthTitleHeight = 58.0;
+
+/// The glass row on top of the month: buttons and the title pill.
+const monthHeaderBar = 44.0;
+
+/// From the glass row down to the weekdays.
+const monthHeaderGap = 18.0;
+
+/// Everything pinned over the month below the safe area; the weeks scroll
+/// on under it, blurred.
+const monthChrome = monthHeaderBar + monthHeaderGap + weekdayHeaderHeight;
+
+/// The blurred top runs this far past the weekdays, fading out.
+const chromeFade = 24.0;
 
 /// Extra height of a month-start row, as a fraction of the regular row.
 const monthBandRatio = 0.34;

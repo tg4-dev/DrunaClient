@@ -1,15 +1,23 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/week_bands.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-/// Rounder month chips: half the height for thin bars, at most 8.
-double monthChipRadius(EventDensity density) =>
-    (density.itemHeight / 2).clamp(3.0, 8.0);
+export 'package:druna_app/features/calendar/chip_motion.dart'
+    show chipFoldGap, friendsFoldAt, myFoldAt;
+
+/// Month chips are pills: fully rounded at every density.
+double monthChipRadius(EventDensity density) => density.itemHeight / 2;
+
+/// Room for the title inside a pill, clear of its round ends.
+double monthChipPadding(EventDensity density) =>
+    math.max(4, monthChipRadius(density) * 0.6);
 
 /// Days a dragged event would cover if dropped now.
 class DropRange {
@@ -166,15 +174,13 @@ class MonthWeekGrid extends StatelessWidget {
             Positioned.fill(
               child: IgnorePointer(
                 child: RepaintBoundary(
-                  child: ValueListenableBuilder<double>(
-                    valueListenable: mode,
-                    builder: (context, t, _) => CustomPaint(
-                      painter: _BandPainter(
-                        mine: mineBands,
-                        friends: friendBands,
-                        mode: t,
-                        height: bandHeight,
-                      ),
+                  // Repaints on every mode change without rebuilding.
+                  child: CustomPaint(
+                    painter: _BandPainter(
+                      mine: mineBands,
+                      friends: friendBands,
+                      mode: mode,
+                      height: bandHeight,
                     ),
                   ),
                 ),
@@ -205,7 +211,7 @@ class MonthWeekGrid extends StatelessWidget {
                       // chips keep their state and never replay their
                       // entrance after a swipe. Folded away, a layer is
                       // not painted; each chip moves on its own
-                      // ([_ChipMotion]), clipped to the week.
+                      // ([ChipMotion]), clipped to the week.
                       Positioned.fill(
                         child: IgnorePointer(
                           ignoring: friendsShown,
@@ -352,6 +358,7 @@ class _WeekLayer {
     required this.placed,
     required this.overflow,
     required this.bandChips,
+    required this.eventIds,
   });
 
   factory _WeekLayer.build({
@@ -434,7 +441,12 @@ class _WeekLayer {
         ),
       );
     }
-    return _WeekLayer(placed: placed, overflow: overflow, bandChips: bandChips);
+    return _WeekLayer(
+      placed: placed,
+      overflow: overflow,
+      bandChips: bandChips,
+      eventIds: {for (final event in shown) event.id},
+    );
   }
 
   final List<_Placed> placed;
@@ -444,6 +456,9 @@ class _WeekLayer {
 
   /// Where each event of the week sits along it, for the band.
   final List<BandChip> bandChips;
+
+  /// Every event of the week, also those behind "+N".
+  final Set<String> eventIds;
 
   /// Lanes in use, chips and "+N" together: the unfolding order counts
   /// them.
@@ -492,7 +507,7 @@ class _MineChips extends StatelessWidget {
     return _AnimatedDensity(
       density: density,
       builder: (context, d) {
-        Widget moving(int lane, Widget child) => _ChipMotion(
+        Widget moving(int lane, Widget child) => ChipMotion(
           mode: mode,
           awayAt: myFoldAt,
           lane: lane,
@@ -506,6 +521,7 @@ class _MineChips extends StatelessWidget {
           children: [
             for (final item in layer.placed)
               Positioned(
+                key: ValueKey('${item.event.id}-${item.startColumn}'),
                 left: item.left(columnWidth),
                 width: item.right(columnWidth) - item.left(columnWidth),
                 top: monthEventHeader + item.lane * d.slot,
@@ -525,6 +541,7 @@ class _MineChips extends StatelessWidget {
               ),
             for (final (column, lane, count) in layer.overflow)
               Positioned(
+                key: ValueKey('more-$column'),
                 left: column * columnWidth + 4,
                 width: columnWidth - 6,
                 top: monthEventHeader + lane * d.slot,
@@ -543,83 +560,6 @@ class _MineChips extends StatelessWidget {
       },
     );
   }
-}
-
-/// The two layers take turns, never moving at once: on the way to friends'
-/// calendar the user's chips fold over the first half of the swipe and
-/// friends' unfold over the second; the way back mirrors it. Each band
-/// follows its own layer.
-double myFoldAt(double mode) => (mode * 2).clamp(0.0, 1.0);
-
-double friendsFoldAt(double mode) => ((1 - mode) * 2).clamp(0.0, 1.0);
-
-/// Gap between a week line and a chip folded against it.
-const chipFoldGap = 2.0;
-
-/// How much later each lower lane starts to unfold, as a share of the way.
-const chipUnfoldStagger = 0.12;
-
-/// One chip on its way between its place and its week line, following the
-/// mode. Folded, all chips of a day lie in one stack against the line; they
-/// unfold lane by lane, the first lane first, and are born from the line
-/// with a short fade. Only a transform and an opacity change per frame.
-class _ChipMotion extends StatelessWidget {
-  const _ChipMotion({
-    required this.mode,
-    required this.awayAt,
-    required this.lane,
-    required this.lanes,
-    required this.homeTop,
-    required this.foldTop,
-    required this.child,
-  });
-
-  final ValueListenable<double> mode;
-
-  /// The mode turned into how far this layer is folded: 0 in place, 1 gone.
-  final double Function(double mode) awayAt;
-  final int lane;
-  final int lanes;
-  final double homeTop;
-  final double foldTop;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<double>(
-      valueListenable: mode,
-      child: child,
-      builder: (context, t, child) {
-        final progress = chipUnfoldProgress(
-          away: awayAt(t),
-          lane: lane,
-          lanes: lanes,
-        );
-        // Same tree at every progress: a chip that lands must keep its
-        // state, or friends' chips would replay their entrance.
-        final travel = Curves.easeOutCubic.transform(progress);
-        return Opacity(
-          opacity: _smooth(0, 0.3, progress),
-          child: Transform.translate(
-            offset: Offset(0, (foldTop - homeTop) * (1 - travel)),
-            child: child,
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// How far a chip in [lane] has unfolded, 0 folded to 1 in place, when its
-/// layer is [away] from being shown. Lower lanes start a little later.
-double chipUnfoldProgress({
-  required double away,
-  required int lane,
-  required int lanes,
-}) {
-  final spread = chipUnfoldStagger * (lanes > 1 ? lanes - 1 : 0);
-  final shown = 1 - away.clamp(0.0, 1.0);
-  return (shown * (1 + spread) - chipUnfoldStagger * lane).clamp(0.0, 1.0);
 }
 
 /// Chip sizes glide when the month crosses into another density, instead of
@@ -704,11 +644,19 @@ class _FriendChipsState extends State<_FriendChips> {
   /// Chips whose friend was let go, playing their exit.
   final _leaving = <String, _Placed>{};
 
+  /// Events of a friend just picked: only they play the entrance. A chip
+  /// coming out from behind "+N" as the month is zoomed just shows.
+  late Set<String> _fresh = widget.layer.eventIds;
+
   @override
   void didUpdateWidget(covariant _FriendChips oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (identical(oldWidget.layer, widget.layer)) return;
-    final now = {for (final item in widget.layer.placed) item.event.id};
+    final before = oldWidget.layer.eventIds;
+    final now = widget.layer.eventIds;
+    _fresh = now.difference(before);
+    // Gone from the week, not just hidden behind "+N": that chip would
+    // fade out over the count.
     final gone = [
       for (final item in oldWidget.layer.placed)
         if (!now.contains(item.event.id)) item,
@@ -746,6 +694,7 @@ class _FriendChipsState extends State<_FriendChips> {
             _chip(item, d, lanes, leaving: false, reduce: reduce),
           for (final (column, lane, count) in widget.layer.overflow)
             Positioned(
+              key: ValueKey('more-$column'),
               left: column * widget.columnWidth + 4,
               width: widget.columnWidth - 6,
               top: monthEventHeader + lane * d.slot,
@@ -759,7 +708,7 @@ class _FriendChipsState extends State<_FriendChips> {
 
   /// Friends' chips fold down onto the bottom line of the week.
   Widget _motion(int lane, int lanes, EventDensity d, Widget child) =>
-      _ChipMotion(
+      ChipMotion(
         mode: widget.mode,
         awayAt: friendsFoldAt,
         lane: lane,
@@ -791,7 +740,10 @@ class _FriendChipsState extends State<_FriendChips> {
         child: _motion(item.lane, lanes, density, child!),
       ),
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: leaving ? 1 : 0, end: leaving ? 0 : 1),
+        tween: Tween(
+          begin: leaving || !_fresh.contains(item.event.id) ? 1 : 0,
+          end: leaving ? 0 : 1,
+        ),
         duration: reduce
             ? Duration.zero
             : leaving
@@ -829,17 +781,31 @@ class _BandPainter extends CustomPainter {
     required this.friends,
     required this.mode,
     required this.height,
-  });
+  }) : super(repaint: mode);
 
   final List<WeekBand> mine;
   final List<WeekBand> friends;
-  final double mode;
+  final ValueListenable<double> mode;
   final double height;
+
+  /// The fade from the line to the middle of the week, drawn as thin slices
+  /// of falling opacity rather than an alpha mask: a mask needs a saveLayer
+  /// per band, and those every frame made the swipe stutter.
+  static const _slice = 2.0;
+
+  /// Opacity at a share of the way from the line to the middle.
+  static double _fade(double x) {
+    // 100% at the line, about 55% at a third, 20% at two thirds, 0 at the
+    // middle: the curve of the reference.
+    final k = 1 - x.clamp(0.0, 1.0);
+    return k * k * (0.45 + 0.55 * k);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    _paint(canvas, size, mine, away: myFoldAt(mode), fromTop: true);
-    _paint(canvas, size, friends, away: friendsFoldAt(mode), fromTop: false);
+    final t = mode.value;
+    _paint(canvas, size, mine, away: myFoldAt(t), fromTop: true);
+    _paint(canvas, size, friends, away: friendsFoldAt(t), fromTop: false);
   }
 
   void _paint(
@@ -854,38 +820,31 @@ class _BandPainter extends CustomPainter {
     final opacity = _smooth(0.2, 0.7, away);
     final h = height * grow;
     if (h < 0.5 || opacity <= 0) return;
-    final top = fromTop ? 0.0 : size.height - h;
-    final line = fromTop ? top : top + h;
-    final middle = fromTop ? top + h : top;
-    final mask = Paint()
-      ..blendMode = BlendMode.dstIn
-      ..shader = ui.Gradient.linear(
-        Offset(0, line),
-        Offset(0, middle),
-        const [
-          Color(0xFF000000),
-          Color(0x8C000000),
-          Color(0x33000000),
-          Color(0x00000000),
-        ],
-        const [0, 0.35, 0.7, 1],
-      );
-    final layer = Paint()..color = Color.fromRGBO(0, 0, 0, opacity);
+    final slices = (h / _slice).ceil();
     for (final band in bands) {
-      final rect = Rect.fromLTRB(band.left, top, band.right, top + h);
-      canvas.saveLayer(rect, layer);
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..shader = ui.Gradient.linear(
-            Offset(band.left, 0),
-            Offset(band.right, 0),
-            band.colors,
-            band.stops,
-          ),
-      );
-      canvas.drawRect(rect, mask);
-      canvas.restore();
+      final paint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(band.left, 0),
+          Offset(band.right, 0),
+          band.colors,
+          band.stops,
+        );
+      for (var i = 0; i < slices; i++) {
+        final from = i * h / slices;
+        final to = (i + 1) * h / slices;
+        final alpha = _fade((from + to) / 2 / h) * opacity;
+        if (alpha <= 0.004) continue;
+        // Modulate scales the shader's colour, alpha included, per draw.
+        paint.colorFilter = ColorFilter.mode(
+          Color.fromRGBO(255, 255, 255, alpha),
+          BlendMode.modulate,
+        );
+        final top = fromTop ? from : size.height - to;
+        canvas.drawRect(
+          Rect.fromLTRB(band.left, top, band.right, top + (to - from)),
+          paint,
+        );
+      }
     }
   }
 
@@ -983,7 +942,9 @@ class _MonthEventBlock extends StatelessWidget {
           decoration: BoxDecoration(color: color, borderRadius: radius),
           child: density.showTitle && showTitle
               ? Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: monthChipPadding(density),
+                  ),
                   child: density.showTime && !event.allDay
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

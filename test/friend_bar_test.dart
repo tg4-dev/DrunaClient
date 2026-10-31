@@ -4,6 +4,7 @@ import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:progressive_blur/progressive_blur.dart';
 
 const _friends = [
   FriendInfo(id: 1, name: 'Алина', username: 'alina'),
@@ -82,11 +83,32 @@ void main() {
 
     expect(find.text('+1'), findsOneWidget);
     expect(leftOf(tester, 'Алина'), greaterThan(600));
-    // Not picked: gone from the screen and from accessibility.
-    expect(find.bySemanticsLabel('Дина'), findsNothing);
+    // Not picked: slid off past the right edge.
+    final dina = find.bySemanticsLabel('Дина');
+    expect(dina.evaluate().isEmpty || tester.getRect(dina).left > 800, isTrue);
 
     await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
     expect(shownFriends, 1);
+  });
+
+  testWidgets('the row blurs at both edges only while the bar is open', (
+    tester,
+  ) async {
+    await pumpBar(tester);
+    ProgressiveBlurWidget blur() => tester.widget(
+      find.ancestor(
+        of: find.bySemanticsLabel('Алина'),
+        matching: find.byType(ProgressiveBlurWidget),
+      ),
+    );
+    expect(blur().sigma, FriendBarStyle.edgeSigma);
+    final gradient = blur().linearGradientBlur!;
+    expect(gradient.values, [1, 0, 0, 1]);
+    expect(gradient.stops[1], closeTo(FriendBarStyle.edge / 800, 1e-9));
+
+    mode.value = 0;
+    await tester.pumpAndSettle();
+    expect(blur().sigma, 0);
   });
 
   testWidgets('says when friends’ schedules are unavailable', (tester) async {
