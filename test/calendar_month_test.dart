@@ -613,7 +613,14 @@ void main() {
       expect(detailDensity.itemHeight, 27);
     });
 
+    test('the tallest chips are thicker, two-line and less round', () {
+      expect(fullDensity.titleLines, 2);
+      expect(fullDensity.itemHeight, greaterThan(detailDensity.itemHeight));
+      expect(monthChipRadius(fullDensity), monthChipMaxRadius);
+    });
+
     test('friends’ chips stop at the middle density', () {
+      expect(friendDensityFor(fullDensity), titleDensity);
       expect(friendDensityFor(detailDensity), titleDensity);
       expect(friendDensityFor(titleDensity), titleDensity);
       expect(friendDensityFor(barDensity), barDensity);

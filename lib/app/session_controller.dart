@@ -58,6 +58,15 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A new display name; the server ignores an empty one, so it is refused
+  /// here. Throws on failure, keeping the old name.
+  Future<void> rename(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError.value(name, 'name', 'пустое');
+    profile = await repository.updateProfile(name: trimmed);
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await repository.logout();
     profile = null;

@@ -6,12 +6,12 @@ import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
-import 'package:druna_app/shared/ui/glass.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:progressive_blur/progressive_blur.dart';
+import 'package:druna_app/shared/ui/edge_blur.dart';
 
 class MonthCalendar extends StatefulWidget {
   const MonthCalendar({
@@ -31,6 +31,7 @@ class MonthCalendar extends StatefulWidget {
     this.mode = myEventsMode,
     this.onShowMine,
     this.onPinchChanged,
+    this.inviteColors,
     super.key,
   });
 
@@ -67,6 +68,10 @@ class MonthCalendar extends StatefulWidget {
   /// `true` when a second finger lands and the month starts to zoom,
   /// `false` when the zoom ends: sideways swipes must wait meanwhile.
   final ValueChanged<bool>? onPinchChanged;
+
+  /// In friends' calendar with friends picked, a hold invites them: the
+  /// chip being placed takes their colours and says so.
+  final List<Color>? inviteColors;
 
   /// [day] is the event's new first day: the drop day shifted back by how far
   /// into the event it was grabbed.
@@ -367,12 +372,25 @@ class MonthCalendarState extends State<MonthCalendar>
     return (points[0] - points[1]).distance;
   }
 
+  /// The colours of an invite a hold would make now; null for an own event.
+  List<Color>? get _invitingColors {
+    final colors = widget.inviteColors;
+    if (colors == null || colors.length < 2) return null;
+    return widget.mode.value > calendarModeHalfway ? colors : null;
+  }
+
   void _beginHold(CalendarEvent? event, Offset global) {
+    // An invite is not the user's to move: its page changes it.
+    if (event?.invite != null) return;
     if (_holding || _pointers.length != 1) return;
     _holdPointer = _pointers.keys.single;
     final day = _dayAtGlobal(global);
     _holdLocal.value = _localOf(global);
-    _chipTitle = event == null ? 'Название' : eventDisplayTitle(event);
+    _chipTitle = event != null
+        ? eventDisplayTitle(event)
+        : _invitingColors != null
+        ? 'Приглашение'
+        : 'Название';
     _chipFade.forward();
     setState(() {
       _holding = true;
@@ -514,6 +532,10 @@ class MonthCalendarState extends State<MonthCalendar>
     final title = _chipTitle;
     const width = 132.0;
     const height = 24.0;
+    final colors = _holdEvent == null ? _invitingColors : null;
+    final base = colors == null
+        ? OwnEventColor.of(context)
+        : mixedColor(colors);
     return Positioned(
       left: local.dx - width / 2,
       top: local.dy - height - 24,
@@ -523,7 +545,8 @@ class MonthCalendarState extends State<MonthCalendar>
         child: DecoratedBox(
           decoration: liftedEventDecoration(
             BorderRadius.circular(height / 2),
-            color: OwnEventColor.of(context),
+            color: base,
+            colors: colors,
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -534,7 +557,7 @@ class MonthCalendarState extends State<MonthCalendar>
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: eventInk(OwnEventColor.of(context)),
+                  color: eventInk(base),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -564,9 +587,9 @@ class MonthCalendarState extends State<MonthCalendar>
         // the screen edges.
         Positioned.fill(
           child: LayoutBuilder(
-            builder: (context, constraints) => ProgressiveBlurWidget(
+            builder: (context, constraints) => EdgeBlur(
               sigma: chromeBlurSigma,
-              linearGradientBlur: _edgeBlur(
+              gradient: _edgeBlur(
                 height: constraints.maxHeight,
                 top: above,
                 bottom: widget.bottomBlur,
@@ -652,18 +675,18 @@ class MonthCalendarState extends State<MonthCalendar>
           height: monthHeaderBar,
           child: Row(
             children: [
-              SizedBox(width: GlassStyle.size, child: widget.leading),
+              SizedBox(width: PillStyle.size, child: widget.leading),
               Expanded(
                 child: Center(
-                  child: GlassPill(
+                  child: PillButton(
                     key: const ValueKey('month-title'),
-                    semanticLabel: '${monthTitle(_visibleMonth)}, к сегодня',
+                    label: '${monthTitle(_visibleMonth)}, к сегодня',
                     onPressed: widget.onTitleTap ?? scrollToToday,
-                    title: Text(monthTitle(_visibleMonth)),
+                    child: Text(monthTitle(_visibleMonth)),
                   ),
                 ),
               ),
-              SizedBox(width: GlassStyle.size, child: widget.trailing),
+              SizedBox(width: PillStyle.size, child: widget.trailing),
             ],
           ),
         ),

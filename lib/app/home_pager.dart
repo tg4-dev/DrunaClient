@@ -3,12 +3,19 @@ import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/calendar_screen.dart';
+import 'package:druna_app/features/event_page/event_page.dart';
+import 'package:druna_app/features/event_page/event_subject.dart';
 import 'package:druna_app/features/friends/friend_schedule.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/features/friends/friends_page.dart';
 import 'package:druna_app/features/friends/friends_source.dart';
 import 'package:druna_app/features/friends/friends_store.dart';
+import 'package:druna_app/features/invites/invite.dart';
+import 'package:druna_app/features/invites/invite_events.dart';
+import 'package:druna_app/features/invites/invites_source.dart';
+import 'package:druna_app/features/invites/invites_store.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
+import 'package:druna_app/models/models.dart';
 import 'package:flutter/material.dart';
 
 /// The signed-in app: one horizontal plane with four stops.
@@ -73,8 +80,53 @@ class _HomePagerState extends State<HomePager> {
     source: _scheduleSource,
   );
 
+  /// Invites run on demo data only with demo friends: the server has none
+  /// (docs/backend-changes.md, «Приглашения на события»).
+  DemoInvitesSource? _demoInvites;
+  late final InvitesStore _invites = InvitesStore(_newInvitesSource())
+    ..addListener(_syncInvites)
+    ..load();
+
+  /// The invites as events, in everyone's colours, for the calendar.
+  final _inviteEvents = ValueNotifier<List<CalendarEvent>>(const []);
+
+  /// The invite whose page is open over the plane.
+  String? _openInvite;
+
   FriendsSource get _friendsSource =>
       widget.settings.demoFriends ? _demo : _server;
+
+  FriendInfo get _me => meAsPerson(widget.session.profile);
+
+  InvitesSource _newInvitesSource() {
+    if (!widget.settings.demoFriends) {
+      _demoInvites = null;
+      return const ServerInvitesSource();
+    }
+    return _demoInvites = DemoInvitesSource(
+      me: () => _me,
+      delay: widget.demoDelay,
+      // Friends answer by themselves, but not in tests (no delay there).
+      replyDelay: widget.demoDelay == Duration.zero
+          ? null
+          : const Duration(seconds: 4),
+    )..offline = widget.settings.demoOffline;
+  }
+
+  void _syncInvites() {
+    _inviteEvents.value = inviteEvents(
+      _invites.invites,
+      meId: _me.id,
+      own: _ownColor,
+    );
+  }
+
+  void _resetInvites() => _invites.source = _newInvitesSource();
+
+  void _showInvite(String id) => setState(() => _openInvite = id);
+
+  /// Sends a new invite to the store; throws for the sheet to say so.
+  Future<void> _sendInvite(InviteDraft draft) => _invites.create(draft);
 
   FriendScheduleSource get _scheduleSource =>
       widget.settings.demoSchedules ? _demoSchedule : const NoFriendSchedule();
@@ -89,7 +141,10 @@ class _HomePagerState extends State<HomePager> {
   }
 
   /// The profile arrives after sign-in; it sets the colour of my events.
-  void _onSession() => setState(() {});
+  void _onSession() {
+    _syncInvites();
+    setState(() {});
+  }
 
   Color get _ownColor => ownColorFor(widget.settings, widget.session.profile);
 
@@ -100,6 +155,8 @@ class _HomePagerState extends State<HomePager> {
     _store.removeListener(_dropMissingFriends);
     _plane?.dispose();
     _mode.dispose();
+    _invites.dispose();
+    _inviteEvents.dispose();
     _schedules.dispose();
     _selection.dispose();
     _store.dispose();
@@ -110,6 +167,14 @@ class _HomePagerState extends State<HomePager> {
     _demo.offline = widget.settings.demoOffline;
     _store.source = _friendsSource;
     _schedules.source = _scheduleSource;
+    final demoInvites = _demoInvites;
+    if ((demoInvites != null) != widget.settings.demoFriends) {
+      _resetInvites();
+    } else {
+      demoInvites?.offline = widget.settings.demoOffline;
+    }
+    // The user's colour may have changed: their part of every gradient.
+    _syncInvites();
     setState(() {});
   }
 
@@ -242,12 +307,15 @@ class _HomePagerState extends State<HomePager> {
                 onModeDrag: _dragMode,
                 onModeSettle: _settleMode,
                 me: widget.session.profile,
+                invites: _inviteEvents,
+                onOpenInvite: _showInvite,
+                onSendInvite: _sendInvite,
               ),
             );
-            return SingleChildScrollView(
+            final pages = SingleChildScrollView(
               controller: plane,
               scrollDirection: Axis.horizontal,
-              physics: _calendarBusy
+              physics: _calendarBusy || _openInvite != null
                   ? const NeverScrollableScrollPhysics()
                   : const _SnappyPagePhysics(),
               child: SizedBox(
@@ -280,11 +348,34 @@ class _HomePagerState extends State<HomePager> {
                         config: widget.config,
                         onResetDemo: _resetDemo,
                         onResetFriends: _selection.clear,
+                        invites: _invites,
+                        onOpenInvite: _showInvite,
+                        onResetInvites: _resetInvites,
                       ),
                     ),
                   ],
                 ),
               ),
+            );
+            return Stack(
+              children: [
+                pages,
+                // An invite opens over every page, from the calendar or
+                // from the profile.
+                if (_openInvite case final id?)
+                  Positioned.fill(
+                    child: OwnEventColor(
+                      color: _ownColor,
+                      child: EventPage(
+                        key: ValueKey('invite-page-$id'),
+                        subject: SharedInvite(id),
+                        invites: _invites,
+                        me: _me,
+                        onGone: () => setState(() => _openInvite = null),
+                      ),
+                    ),
+                  ),
+              ],
             );
           },
         ),

@@ -163,6 +163,13 @@ void main() {
     expect(densityForRowHeight(monthRowLevels[1]).showTitle, isTrue);
     expect(densityForRowHeight(monthRowLevels[1]).showTime, isFalse);
     expect(densityForRowHeight(monthRowLevels[2]).showTime, isTrue);
+    expect(densityForRowHeight(monthRowLevels[2]).titleLines, 1);
+    expect(densityForRowHeight(monthRowLevels[3]), fullDensity);
+    expect(densityForRowHeight(monthRowMax), fullDensity);
+    expect(
+      monthEventCapacity(monthRowLevels[3], fullDensity),
+      greaterThanOrEqualTo(5),
+    );
     expect(
       monthEventCapacity(monthRowMin, barDensity),
       greaterThanOrEqualTo(4),

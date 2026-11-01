@@ -4,6 +4,9 @@ import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
+import 'package:druna_app/features/invites/invite.dart';
+import 'package:druna_app/features/invites/invites_section.dart';
+import 'package:druna_app/features/invites/invites_store.dart';
 import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/page_parts.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
@@ -12,8 +15,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// "Настройки": the page right of the month. The account, the server the
-/// build talks to, and switches that make testing easier.
+/// The page right of the month: the user's profile on top (name, the
+/// invites, their colour), then the server the build talks to and switches
+/// that make testing easier (design-system §9.3).
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     required this.session,
@@ -21,8 +25,18 @@ class SettingsPage extends StatelessWidget {
     required this.config,
     required this.onResetDemo,
     required this.onResetFriends,
+    this.invites,
+    this.onOpenInvite,
+    this.onResetInvites,
     super.key,
   });
+
+  /// The user's invites for the «События» block; none without it.
+  final InvitesStore? invites;
+  final ValueChanged<String>? onOpenInvite;
+
+  /// Puts the demo invites back as they were at launch.
+  final VoidCallback? onResetInvites;
 
   final SessionController session;
   final AppSettings settings;
@@ -47,95 +61,141 @@ class SettingsPage extends StatelessWidget {
         bottom: false,
         child: ListenableBuilder(
           listenable: Listenable.merge([session, settings]),
-          builder: (context, _) => ListView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(
-              PageStyle.gutter,
-              8,
-              PageStyle.gutter,
-              40,
-            ),
-            children: [
-              const SizedBox(
-                height: 50,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Настройки', style: PageStyle.title),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _AccountSection(session: session, settings: settings),
-              const SizedBox(height: 12),
-              _ServerSection(session: session, config: config),
-              if (settings.allowDemo) ...[
-                const SizedBox(height: 12),
-                BlockSection(
-                  icon: CupertinoIcons.lab_flask_solid,
-                  title: 'Демо-данные',
-                  children: [
-                    _SwitchRow(
-                      title: 'Демо-друзья',
-                      subtitle: '12 друзей и заявка, без сервера',
-                      value: settings.demoFriends,
-                      onChanged: (value) => settings.demoFriends = value,
-                    ),
-                    _SwitchRow(
-                      title: 'Нет сети',
-                      subtitle:
-                          'Демо отвечает ошибкой: проверить экраны ошибок',
-                      value: settings.demoOffline,
-                      onChanged: settings.demoFriends
-                          ? (value) => settings.demoOffline = value
-                          : null,
-                    ),
-                    _SwitchRow(
-                      title: 'Демо-расписания друзей',
-                      subtitle: 'Занятость выбранных друзей в календаре',
-                      value: settings.demoSchedules,
-                      onChanged: (value) => settings.demoSchedules = value,
-                    ),
-                    _ActionRow(
-                      title: 'Сбросить выбор друзей',
-                      subtitle: 'Кто выбран в нижней панели и как часто',
-                      onTap: () {
-                        onResetFriends();
-                        _toast(context, 'Выбор друзей сброшен');
-                      },
-                    ),
-                    _ActionRow(
-                      title: 'Сбросить демо-друзей',
-                      onTap: settings.demoFriends
-                          ? () {
-                              onResetDemo();
-                              _toast(context, 'Демо-друзья сброшены');
-                            }
-                          : null,
-                    ),
-                  ],
+          builder: (context, _) {
+            final own = ownColorFor(settings, session.profile);
+            final invites = this.invites;
+            return ListView(
+              physics: const BouncingScrollPhysics(),
+              // No side margins: the invite shelves run to the screen edges;
+              // everything else is inset by [PageStyle.gutter].
+              padding: const EdgeInsets.only(top: 8, bottom: 40),
+              children: [
+                _inset(_ProfileHeader(session: session, own: own)),
+                const SizedBox(height: 28),
+                if (invites != null) ...[
+                  InvitesSection(
+                    store: invites,
+                    me: meAsPerson(session.profile),
+                    own: own,
+                    onOpen: (id) => onOpenInvite?.call(id),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                _inset(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      BlockSection(
+                        icon: CupertinoIcons.paintbrush_fill,
+                        title: 'Мой цвет',
+                        children: [
+                          _ColorPicker(
+                            selected: settings.ownColorSlot,
+                            current: own,
+                            onPick: (slot) => settings.ownColorSlot = slot,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _ServerSection(session: session, config: config),
+                      if (settings.allowDemo) ...[
+                        const SizedBox(height: 12),
+                        BlockSection(
+                          icon: CupertinoIcons.lab_flask_solid,
+                          title: 'Демо-данные',
+                          children: [
+                            _SwitchRow(
+                              title: 'Демо-друзья',
+                              subtitle: '12 друзей и заявка, без сервера',
+                              value: settings.demoFriends,
+                              onChanged: (value) =>
+                                  settings.demoFriends = value,
+                            ),
+                            _SwitchRow(
+                              title: 'Нет сети',
+                              subtitle:
+                                  'Демо отвечает ошибкой: проверить экраны ошибок',
+                              value: settings.demoOffline,
+                              onChanged: settings.demoFriends
+                                  ? (value) => settings.demoOffline = value
+                                  : null,
+                            ),
+                            _SwitchRow(
+                              title: 'Демо-расписания друзей',
+                              subtitle:
+                                  'Занятость выбранных друзей в календаре',
+                              value: settings.demoSchedules,
+                              onChanged: (value) =>
+                                  settings.demoSchedules = value,
+                            ),
+                            _ActionRow(
+                              title: 'Сбросить выбор друзей',
+                              subtitle:
+                                  'Кто выбран в нижней панели и как часто',
+                              onTap: () {
+                                onResetFriends();
+                                _toast(context, 'Выбор друзей сброшен');
+                              },
+                            ),
+                            _ActionRow(
+                              title: 'Сбросить демо-друзей',
+                              onTap: settings.demoFriends
+                                  ? () {
+                                      onResetDemo();
+                                      _toast(context, 'Демо-друзья сброшены');
+                                    }
+                                  : null,
+                            ),
+                            _ActionRow(
+                              title: 'Сбросить демо-приглашения',
+                              subtitle: 'Приглашения работают с демо-друзьями',
+                              onTap:
+                                  settings.demoFriends && onResetInvites != null
+                                  ? () {
+                                      onResetInvites!();
+                                      _toast(
+                                        context,
+                                        'Демо-приглашения сброшены',
+                                      );
+                                    }
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      BlockSection(
+                        icon: CupertinoIcons.wand_stars,
+                        title: 'Анимации',
+                        children: [
+                          _SwitchRow(
+                            title:
+                                'Замедлить в '
+                                '${AppSettings.slowMotionFactor.round()} раз',
+                            subtitle: 'Чтобы разглядеть переходы',
+                            value: settings.slowMotion,
+                            onChanged: (value) => settings.slowMotion = value,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _LogoutBlock(session: session),
+                    ],
+                  ),
                 ),
               ],
-              const SizedBox(height: 12),
-              BlockSection(
-                icon: CupertinoIcons.wand_stars,
-                title: 'Анимации',
-                children: [
-                  _SwitchRow(
-                    title:
-                        'Замедлить в '
-                        '${AppSettings.slowMotionFactor.round()} раз',
-                    subtitle: 'Чтобы разглядеть переходы',
-                    value: settings.slowMotion,
-                    onChanged: (value) => settings.slowMotion = value,
-                  ),
-                ],
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
+
+Widget _inset(Widget child) => Padding(
+  padding: const EdgeInsets.symmetric(horizontal: PageStyle.gutter),
+  child: child,
+);
 
 void _toast(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
@@ -146,11 +206,135 @@ void _toast(BuildContext context, String message) {
 String _errorText(Object error) =>
     error is ApiException ? error.message : 'Не получилось';
 
-class _AccountSection extends StatelessWidget {
-  const _AccountSection({required this.session, required this.settings});
+/// The user on top of the page: a large avatar in their colour with a ring,
+/// the name (a tap renames), the username and the email.
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({required this.session, required this.own});
 
   final SessionController session;
-  final AppSettings settings;
+  final Color own;
+
+  static const _avatar = 96.0;
+  static const _ring = 3.0;
+  static const _ringGap = 4.0;
+
+  static const _name = TextStyle(
+    color: Colors.white,
+    fontSize: 26,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.4,
+  );
+
+  Future<void> _rename(BuildContext context, String current) async {
+    final name = await askText(
+      context,
+      title: 'Как тебя зовут?',
+      confirmLabel: 'Сохранить',
+      initial: current,
+      placeholder: 'Имя',
+    );
+    if (name == null || name == current) return;
+    try {
+      await session.rename(name);
+    } catch (error) {
+      if (context.mounted) _toast(context, _errorText(error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = session.profile;
+    const outer = _avatar + (_ring + _ringGap) * 2;
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        children: [
+          Container(
+            width: outer,
+            height: outer,
+            padding: const EdgeInsets.all(_ringGap),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Color.lerp(own, Colors.white, 0.55)!,
+                width: _ring,
+              ),
+            ),
+            child: PersonAvatar(
+              id: profile?.id ?? 0,
+              name: profile?.name ?? '',
+              username: profile?.username ?? '?',
+              color: own,
+              size: _avatar,
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (profile == null)
+            _ActionRow(
+              title: 'Профиль не загружен',
+              subtitle: 'Нажми, чтобы запросить снова',
+              onTap: () async {
+                try {
+                  await session.refreshProfile();
+                } catch (error) {
+                  if (context.mounted) _toast(context, _errorText(error));
+                }
+              },
+            )
+          else ...[
+            Semantics(
+              button: true,
+              label: 'Имя: ${profile.name}. Изменить',
+              excludeSemantics: true,
+              child: GestureDetector(
+                key: const ValueKey('profile-name'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _rename(context, profile.name),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          profile.name.isEmpty
+                              ? profile.username
+                              : profile.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _name,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        CupertinoIcons.pencil,
+                        size: 18,
+                        color: SheetStyle.muted,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Text(
+              '@${profile.username}',
+              style: SheetStyle.value.copyWith(fontSize: 15),
+            ),
+            if (profile.email.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(profile.email, style: _subtitle),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LogoutBlock extends StatelessWidget {
+  const _LogoutBlock({required this.session});
+
+  final SessionController session;
 
   Future<void> _logout(BuildContext context) async {
     final confirmed = await confirmAction(
@@ -165,76 +349,16 @@ class _AccountSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profile = session.profile;
-    final own = ownColorFor(settings, profile);
-    return BlockSection(
-      icon: CupertinoIcons.person_crop_circle_fill,
-      title: 'Аккаунт',
-      children: [
-        if (profile == null)
-          _ActionRow(
-            title: 'Профиль не загружен',
-            subtitle: 'Нажми, чтобы запросить снова',
-            onTap: () async {
-              try {
-                await session.refreshProfile();
-              } catch (error) {
-                if (context.mounted) _toast(context, _errorText(error));
-              }
-            },
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                PersonAvatar(
-                  id: profile.id,
-                  name: profile.name,
-                  username: profile.username,
-                  color: own,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        profile.name.isEmpty ? profile.username : profile.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        [
-                          '@${profile.username}',
-                          if (profile.email.isNotEmpty) profile.email,
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _subtitle,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        _ColorPicker(
-          selected: settings.ownColorSlot,
-          current: own,
-          onPick: (slot) => settings.ownColorSlot = slot,
-        ),
-        _ActionRow(
+    return DecoratedBox(
+      decoration: SheetStyle.blockDecoration,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
+        child: _ActionRow(
           title: 'Выйти',
           color: SheetStyle.today,
           onTap: () => _logout(context),
         ),
-      ],
+      ),
     );
   }
 }
@@ -483,7 +607,6 @@ class _ColorPicker extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Мой цвет', style: _title),
           const Text('Им рисуются мои события и аватар', style: _subtitle),
           const SizedBox(height: 10),
           LayoutBuilder(

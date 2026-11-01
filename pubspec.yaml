@@ -65,6 +65,20 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The event page: Unbounded for its title only, Onest for everything
+  # else on it (docs/design-system.md §3). Both OFL.
+  fonts:
+    - family: Unbounded
+      fonts:
+        - asset: assets/fonts/Unbounded-Variable.ttf
+    - family: Onest
+      fonts:
+        - asset: assets/fonts/Onest-Variable.ttf
+
+  # The event page's moving background (event_gradient.dart).
+  shaders:
+    - shaders/event_gradient.frag
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

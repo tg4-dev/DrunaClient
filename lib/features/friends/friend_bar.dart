@@ -2,10 +2,11 @@ import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:progressive_blur/progressive_blur.dart';
 
 /// Measurements of the friend bar at the bottom of the calendar.
 abstract final class FriendBarStyle {
@@ -28,11 +29,6 @@ abstract final class FriendBarStyle {
 
   static const reorder = Duration(milliseconds: 200);
   static const select = Duration(milliseconds: 160);
-
-  /// Progressive blur at each edge: strongest at the edge, gone at [edge]
-  /// from it. Sigma is in physical pixels, as the shader takes it.
-  static const edge = 28.0;
-  static const edgeSigma = 24.0;
 }
 
 /// Height the friend bar takes over the bottom of the month above the safe
@@ -109,11 +105,7 @@ class _FriendBarState extends State<FriendBar> {
                     ? _Placeholder(visible: expanded)
                     : friends.isEmpty
                     ? _AddFriends(visible: expanded, onTap: widget.onAddFriends)
-                    : _EdgeBlur(
-                        mode: widget.mode,
-                        width: constraints.maxWidth,
-                        child: _row(friends, constraints.maxWidth, expanded),
-                      ),
+                    : _row(friends, constraints.maxWidth, expanded),
               ),
             ],
           ),
@@ -290,8 +282,7 @@ class _StackGeometry {
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
 /// How far the row is scrolled. For a frame the controller can hold two
-/// positions — the row rebuilt under a new parent (the blur turning on)
-/// attaches before the old one detaches — and `offset` asserts there: the
+/// positions — the row rebuilt under a new parent attaches before the old one detaches — and `offset` asserts there: the
 /// newest one is the row on screen.
 double _offsetOf(ScrollController scroll) =>
     scroll.hasClients ? scroll.positions.last.pixels : 0.0;
@@ -505,49 +496,6 @@ class _MoreSlot extends StatelessWidget {
   }
 }
 
-/// The row blurs towards both screen edges, avatars scrolling out of it
-/// (`progressive_blur`, which blurs its child: the calendar behind is
-/// blurred by the month itself). Only while the bar is open: folded, the
-/// stack at the right edge stays sharp; the blur grows in as it settles.
-class _EdgeBlur extends StatelessWidget {
-  const _EdgeBlur({
-    required this.mode,
-    required this.width,
-    required this.child,
-  });
-
-  final ValueListenable<double> mode;
-  final double width;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final edge = width <= 0
-        ? 0.0
-        : (FriendBarStyle.edge / width).clamp(0.0, 0.5);
-    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    return ModeGate(
-      mode: mode,
-      threshold: 0.999,
-      builder: (context, open) => TweenAnimationBuilder<double>(
-        tween: Tween(end: open ? 1 : 0),
-        duration: reduce ? Duration.zero : FriendBarStyle.select,
-        child: child,
-        builder: (context, shown, child) => ProgressiveBlurWidget(
-          sigma: FriendBarStyle.edgeSigma * shown,
-          linearGradientBlur: LinearGradientBlur(
-            values: const [1, 0, 0, 1],
-            stops: [0, edge, 1 - edge, 1],
-            start: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          child: child!,
-        ),
-      ),
-    );
-  }
-}
-
 class _Hint extends StatelessWidget {
   const _Hint({required this.text, required this.visible});
 
@@ -635,25 +583,10 @@ class _AddFriends extends StatelessWidget {
         duration: FriendBarStyle.select,
         opacity: visible ? 1 : 0,
         child: Center(
-          child: GestureDetector(
-            onTap: onTap,
-            child: Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 22),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: SheetStyle.block,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Text(
-                'Добавить друзей',
-                style: TextStyle(
-                  color: SheetStyle.accent,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+          child: PillButton(
+            icon: CupertinoIcons.person_add,
+            text: 'Добавить друзей',
+            onPressed: onTap,
           ),
         ),
       ),

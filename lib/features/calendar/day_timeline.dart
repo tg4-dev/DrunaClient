@@ -99,6 +99,7 @@ class DayTimeline extends StatefulWidget {
     this.onMoveEvent,
     this.mode = myEventsMode,
     this.friends,
+    this.inviteColors,
     super.key,
   });
 
@@ -124,6 +125,10 @@ class DayTimeline extends StatefulWidget {
 
   /// Without it the timeline shows only the user's events.
   final DayFriendsView? friends;
+
+  /// In friends' rows with friends picked, drawing makes an invite: the
+  /// event being drawn takes their colours.
+  final List<Color>? inviteColors;
 
   @override
   State<DayTimeline> createState() => DayTimelineState();
@@ -333,6 +338,7 @@ class DayTimelineState extends State<DayTimeline>
   void _beginMove(CalendarEvent event, Offset global) {
     if (widget.onMoveEvent == null ||
         _friendsShown ||
+        event.invite != null ||
         event.allDay ||
         _hold != null ||
         _pointers.length > 1) {
@@ -705,6 +711,15 @@ class DayTimelineState extends State<DayTimeline>
               ? DayFriendsGeometry.rowHeight
               : timelineEventHeight;
           final title = ghost.title;
+          final colors =
+              _friendsShown &&
+                  _hold?.event == null &&
+                  (widget.inviteColors?.length ?? 0) > 1
+              ? widget.inviteColors
+              : null;
+          final base = colors == null
+              ? OwnEventColor.of(context)
+              : mixedColor(colors);
           return Stack(
             clipBehavior: Clip.none,
             children: [
@@ -717,7 +732,8 @@ class DayTimelineState extends State<DayTimeline>
                 child: DecoratedBox(
                   decoration: liftedEventDecoration(
                     const BorderRadius.all(timelineEventRadius),
-                    color: OwnEventColor.of(context),
+                    color: base,
+                    colors: colors,
                   ),
                   child: title == null
                       ? const SizedBox.expand()
@@ -733,7 +749,7 @@ class DayTimelineState extends State<DayTimeline>
                               softWrap: false,
                               overflow: TextOverflow.ellipsis,
                               style: timelineTitleStyle.copyWith(
-                                color: eventInk(OwnEventColor.of(context)),
+                                color: eventInk(base),
                               ),
                             ),
                           ),
