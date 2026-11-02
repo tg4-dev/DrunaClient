@@ -25,7 +25,25 @@ class DrunaRepository {
     await _api.saveTokens(tokens);
   }
 
+  /// `POST /auth/sign-up`, then signs in: the server's sign-up returns no
+  /// tokens.
   Future<void> signUp({
+    required String name,
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    await createAccount(
+      name: name,
+      username: username,
+      email: email,
+      password: password,
+    );
+    await signIn(username, password);
+  }
+
+  /// `POST /auth/sign-up` alone.
+  Future<void> createAccount({
     required String name,
     required String username,
     required String email,
@@ -42,7 +60,6 @@ class DrunaRepository {
       },
       decode: (_) {},
     );
-    await signIn(username, password);
   }
 
   Future<UserProfile> getProfile() => _api.request(

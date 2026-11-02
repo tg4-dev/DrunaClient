@@ -1,24 +1,20 @@
+import 'package:druna_app/shared/ui/avatar_style.dart';
 import 'package:flutter/material.dart';
 
-/// Sixteen hues around the colour wheel, about 22.5° apart, bright enough for
-/// the black background. Every person in the app gets one of them.
+/// Eight colours for everyone (design-system §2.3, docs/avatar.md), the
+/// nearest hues of the earlier palette of 16 (softer than Figma's first
+/// draft): the
+/// user picks theirs, friends get one by id. Change a colour in place and
+/// add new ones at the end: the user's choice is kept as an index.
 const avatarPalette = <Color>[
-  Color(0xFFFF3B30),
-  Color(0xFFFF6B2C),
-  Color(0xFFFF9500),
-  Color(0xFFFFB800),
-  Color(0xFFFFD60A),
-  Color(0xFFB8D93A),
   Color(0xFF34C759),
-  Color(0xFF00C7A3),
-  Color(0xFF30C8D6),
-  Color(0xFF32ADE6),
-  Color(0xFF0A84FF),
-  Color(0xFF4C5BFF),
-  Color(0xFF7D5CFF),
-  Color(0xFFAF52DE),
-  Color(0xFFE040C8),
+  Color(0xFFFFD60A),
+  Color(0xFFFF9500),
+  Color(0xFFFF3B30),
   Color(0xFFFF2D78),
+  Color(0xFFAF52DE),
+  Color(0xFF0A84FF),
+  Color(0xFF30C8D6),
 ];
 
 /// The same person always gets the same colour: by server id, or by username
@@ -36,8 +32,9 @@ Color avatarColorFor({required int id, String username = ''}) {
   return avatarPalette[hash % avatarPalette.length];
 }
 
-/// Coprime with 16: every slot is used once per 16 ids.
-const avatarHueStride = 7;
+/// Coprime with 8: every slot is used once per 8 ids, and neighbouring ids
+/// land three colours apart.
+const avatarHueStride = 3;
 
 int avatarSlotFor(int id) => (id * avatarHueStride) % avatarPalette.length;
 
@@ -55,8 +52,9 @@ String avatarInitial(String name, [String username = '']) {
 Color avatarInkFor(Color background) =>
     background.computeLuminance() > 0.5 ? Colors.black : Colors.white;
 
-/// A person: a palette colour and the first letter of their name. There are
-/// no photos anywhere in the app.
+/// A person: a circle in a 45° gradient of their colour and the first letter
+/// of their name in their font (docs/avatar.md). There are no photos
+/// anywhere in the app.
 class PersonAvatar extends StatelessWidget {
   const PersonAvatar({
     required this.id,
@@ -64,6 +62,7 @@ class PersonAvatar extends StatelessWidget {
     this.username = '',
     this.size = 48,
     this.color,
+    this.font,
     super.key,
   });
 
@@ -75,30 +74,58 @@ class PersonAvatar extends StatelessWidget {
   /// A colour the person picked; without it the palette decides by id.
   final Color? color;
 
+  /// Without it: the user's own pick for the user ([OwnAvatar]), the
+  /// default for friends until the server shares theirs.
+  final AvatarFont? font;
+
   @override
   Widget build(BuildContext context) {
-    final color = this.color ?? avatarColorFor(id: id, username: username);
+    final own = OwnAvatar.maybeOf(context);
+    final mine = own != null && id > 0 && own.id == id;
+    final color =
+        this.color ??
+        (mine ? own.color : avatarColorFor(id: id, username: username));
+    final font = this.font ?? (mine ? own.font : defaultAvatarFont);
     final label = name.trim().isNotEmpty ? name.trim() : username;
     return Semantics(
       label: 'Аватар $label',
       image: true,
       excludeSemantics: true,
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        child: Text(
-          avatarInitial(name, username),
-          textScaler: TextScaler.noScaling,
-          style: TextStyle(
-            color: avatarInkFor(color),
-            fontSize: size * 0.42,
-            fontWeight: FontWeight.w700,
-            height: 1,
-          ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: avatarGradient(color),
+          shape: BoxShape.circle,
+        ),
+        child: AvatarLetter(
+          letter: font.cased(avatarInitial(name, username)),
+          font: font,
+          size: size,
+          color: avatarInkFor(color),
         ),
       ),
     );
   }
+}
+
+/// The user's own colour and font, for every [PersonAvatar] of them below:
+/// the profile, the faces on an event, the invites.
+class OwnAvatar extends InheritedWidget {
+  const OwnAvatar({
+    required this.id,
+    required this.color,
+    required this.font,
+    required super.child,
+    super.key,
+  });
+
+  final int id;
+  final Color color;
+  final AvatarFont font;
+
+  static OwnAvatar? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<OwnAvatar>();
+
+  @override
+  bool updateShouldNotify(OwnAvatar old) =>
+      old.id != id || old.color != color || old.font != font;
 }

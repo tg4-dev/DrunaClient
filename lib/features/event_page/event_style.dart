@@ -1,25 +1,8 @@
 import 'package:druna_app/shared/ui/pill_button.dart';
+import 'package:druna_app/shared/ui/onest.dart';
 import 'package:flutter/material.dart';
 
-/// Onest at [weight]: the font is variable, and its `wght` axis follows
-/// only an explicit variation, not [FontWeight] alone.
-TextStyle onest(
-  double size, {
-  FontWeight weight = FontWeight.w500,
-  Color color = Colors.white,
-  double? height,
-  double? letterSpacing,
-  List<FontFeature>? features,
-}) => TextStyle(
-  fontFamily: 'Onest',
-  fontSize: size,
-  fontWeight: weight,
-  fontVariations: [FontVariation('wght', weight.value.toDouble())],
-  color: color,
-  height: height,
-  letterSpacing: letterSpacing,
-  fontFeatures: features,
-);
+export 'package:druna_app/shared/ui/onest.dart';
 
 /// Measurements of the event page (design-system §9.1).
 abstract final class EventPageStyle {
@@ -59,6 +42,11 @@ abstract final class EventPageStyle {
 
   /// The frame around the title, kept while viewing too.
   static const titleInset = EdgeInsets.symmetric(horizontal: 10, vertical: 6);
+
+  /// The organizer's line to the title's frame, and the frame to the
+  /// description: equal, so the title sits midway (2026-11-02).
+  static const statusGap = 10.0;
+  static const descriptionGap = statusGap;
 
   /// The font's own line height (ascent 0.995 + descent 0.245), set
   /// explicitly: left empty, a text field takes the theme's 1.5 and its

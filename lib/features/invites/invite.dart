@@ -1,4 +1,5 @@
 import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/foundation.dart';
 
 /// A guest's answer to an invite: yes, no, or not yet (design-system §9.8).
@@ -128,7 +129,9 @@ FriendInfo meAsPerson(UserProfile? profile) => FriendInfo(
 String peopleLabel(List<FriendInfo> people, {int shown = 2}) {
   String nameOf(FriendInfo person) {
     final name = person.name.trim();
-    final first = name.isEmpty ? person.username : name.split(' ').first;
+    final first = name.isEmpty
+        ? person.username
+        : shownName(name.split(' ').first);
     return first;
   }
 

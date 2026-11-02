@@ -62,7 +62,7 @@ void main() {
     return session;
   }
 
-  Finder alina() => find.bySemanticsLabel('Алина Смирнова');
+  Finder alina() => find.bySemanticsLabel('АЛИНА СМИРНОВА');
 
   Future<void> holdToday(WidgetTester tester) async {
     final today = DateTime.now();
@@ -231,22 +231,47 @@ void main() {
   testWidgets('the profile header renames the user', (tester) async {
     final session = await pumpPager(tester);
     await openProfile(tester);
-    expect(find.text('Глеб'), findsOneWidget);
-    expect(find.text('@gleb'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('profile-name')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('ask-text-field')),
-      'Глеб Я.',
+    final field = find.byKey(const ValueKey('profile-name-field'));
+    EditableText editable() => tester.widget<EditableText>(
+      find.descendant(of: field, matching: find.byType(EditableText)),
     );
-    await tester.tap(find.text('Сохранить'));
+    String shown() => editable().controller
+        .buildTextSpan(context: tester.element(field), withComposing: false)
+        .toPlainText();
+    // A field in the app's style, not a dialog; the name in capitals, kept
+    // as typed (design-system §3).
+    expect(editable().controller.text, 'Глеб');
+    expect(shown(), 'ГЛЕБ');
+    expect(find.text('@gleb'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-name-save')), findsNothing);
+
+    // In and out without a change: ✓ ends the editing, so does a tap
+    // outside.
+    await tester.tap(field);
+    await tester.pump();
+    expect(editable().focusNode.hasFocus, isTrue);
+    expect(find.byKey(const ValueKey('profile-name-save')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile-name-save')));
+    await tester.pump();
+    expect(editable().focusNode.hasFocus, isFalse);
+    expect(server.name, 'Глеб');
+    await tester.tap(field);
+    await tester.pump();
+    await tester.tapAt(const Offset(20, 300));
+    await tester.pump();
+    expect(editable().focusNode.hasFocus, isFalse);
+
+    await tester.enterText(field, 'Глеб Я.');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('profile-name-save')));
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
 
     expect(server.name, 'Глеб Я.');
     expect(session.profile?.name, 'Глеб Я.');
-    expect(find.text('Глеб Я.'), findsOneWidget);
+    expect(shown(), 'ГЛЕБ Я.');
+    expect(find.text('Имя сохранено'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-name-save')), findsNothing);
   });
 
   test('an unanswered invite is see-through on the calendar', () {

@@ -58,14 +58,14 @@ void main() {
   ) async {
     await pumpBar(tester);
     expect(find.text('Выбери друзей, чтобы увидеть их занятость'), findsOne);
-    expect(leftOf(tester, 'Алина'), lessThan(leftOf(tester, 'Вера')));
+    expect(leftOf(tester, 'АЛИНА'), lessThan(leftOf(tester, 'ВЕРА')));
 
-    await tester.tap(find.bySemanticsLabel('Вера'));
+    await tester.tap(find.bySemanticsLabel('ВЕРА'));
     await tester.pumpAndSettle();
 
     expect(selection.selected, [3]);
     expect(find.byKey(const ValueKey('friend-ring')), findsOneWidget);
-    expect(leftOf(tester, 'Вера'), lessThan(leftOf(tester, 'Алина')));
+    expect(leftOf(tester, 'ВЕРА'), lessThan(leftOf(tester, 'АЛИНА')));
     expect(
       find.text('Выбери друзей, чтобы увидеть их занятость'),
       findsNothing,
@@ -82,9 +82,9 @@ void main() {
     await pumpBar(tester);
 
     expect(find.text('+1'), findsOneWidget);
-    expect(leftOf(tester, 'Алина'), greaterThan(600));
+    expect(leftOf(tester, 'АЛИНА'), greaterThan(600));
     // Not picked: slid off past the right edge.
-    final dina = find.bySemanticsLabel('Дина');
+    final dina = find.bySemanticsLabel('ДИНА');
     expect(dina.evaluate().isEmpty || tester.getRect(dina).left > 800, isTrue);
 
     await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
@@ -95,7 +95,7 @@ void main() {
     await pumpBar(tester);
     expect(
       find.ancestor(
-        of: find.bySemanticsLabel('Алина'),
+        of: find.bySemanticsLabel('АЛИНА'),
         matching: find.byType(EdgeBlur),
       ),
       findsNothing,

@@ -18,6 +18,8 @@ import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
+import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -87,7 +89,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   )..addListener(_onSettle);
   final _drag = ValueNotifier<double>(0);
   double _settleFrom = 0;
-  final _messenger = GlobalKey<ScaffoldMessengerState>();
   final _titleFocus = FocusNode();
   final _title = TextEditingController();
   final _description = TextEditingController();
@@ -261,17 +262,13 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   }
 
   void _toast(Object error) {
-    _messenger.currentState
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            error is ApiException
-                ? error.message
-                : 'Не получилось. Попробуй ещё раз.',
-          ),
-        ),
-      );
+    showToast(
+      context,
+      error is ApiException
+          ? error.message
+          : 'Не получилось. Попробуй ещё раз.',
+      error: true,
+    );
   }
 
   // Editing
@@ -447,74 +444,71 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     final top = media.padding.top + EventPageStyle.top;
     return IgnorePointer(
       ignoring: _closing,
-      child: ScaffoldMessenger(
-        key: _messenger,
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          resizeToAvoidBottomInset: false,
-          body: AnimatedBuilder(
-            animation: Listenable.merge([_rise, _drag]),
-            builder: (context, sheet) {
-              final drag = _drag.value;
-              final release = (1 - drag.clamp(0, 400) / 400).toDouble();
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: (_rise.value * release).clamp(0.0, 1.0),
-                      child: const ColoredBox(color: EventPageStyle.scrim),
-                    ),
-                  ),
-                  Positioned.fill(
-                    top: top,
-                    child: Transform.translate(
-                      offset: Offset(0, height * (1 - _rise.value) + drag),
-                      child: sheet,
-                    ),
-                  ),
-                ],
-              );
-            },
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(EventPageStyle.radius),
-              ),
-              // White caret, handles and selection over any gradient.
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  textSelectionTheme: const TextSelectionThemeData(
-                    cursorColor: Colors.white,
-                    selectionColor: Color(0x55FFFFFF),
-                    selectionHandleColor: Colors.white,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: false,
+        body: AnimatedBuilder(
+          animation: Listenable.merge([_rise, _drag]),
+          builder: (context, sheet) {
+            final drag = _drag.value;
+            final release = (1 - drag.clamp(0, 400) / 400).toDouble();
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: (_rise.value * release).clamp(0.0, 1.0),
+                    child: const ColoredBox(color: EventPageStyle.scrim),
                   ),
                 ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: EventGradient(colors: _colors(invite)),
-                    ),
-                    Positioned.fill(child: _content(invite, media)),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: EventPageStyle.handleZone,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onVerticalDragUpdate: _onDragUpdate,
-                        onVerticalDragEnd: _onDragEnd,
-                        child: const Align(
-                          alignment: Alignment.topCenter,
-                          child: Padding(
-                            padding: EdgeInsets.only(top: 10),
-                            child: _Grabber(key: ValueKey('event-grabber')),
-                          ),
+                Positioned.fill(
+                  top: top,
+                  child: Transform.translate(
+                    offset: Offset(0, height * (1 - _rise.value) + drag),
+                    child: sheet,
+                  ),
+                ),
+              ],
+            );
+          },
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(EventPageStyle.radius),
+            ),
+            // White caret, handles and selection over any gradient.
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                textSelectionTheme: const TextSelectionThemeData(
+                  cursorColor: Colors.white,
+                  selectionColor: Color(0x55FFFFFF),
+                  selectionHandleColor: Colors.white,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: EventGradient(colors: _colors(invite)),
+                  ),
+                  Positioned.fill(child: _content(invite, media)),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: EventPageStyle.handleZone,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onVerticalDragUpdate: _onDragUpdate,
+                      onVerticalDragEnd: _onDragEnd,
+                      child: const Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 10),
+                          child: _Grabber(key: ValueKey('event-grabber')),
                         ),
                       ),
                     ),
-                    ..._buttons(),
-                  ],
-                ),
+                  ),
+                  ..._buttons(),
+                ],
               ),
             ),
           ),
@@ -671,7 +665,7 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
         ),
         children: [
           _status(invite),
-          const SizedBox(height: 10),
+          const SizedBox(height: EventPageStyle.statusGap),
           // The frame is always there, clear while viewing: switching into
           // editing changes no size and moves nothing.
           AnimatedContainer(
@@ -701,7 +695,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
                     style: EventPageStyle.title,
                   ),
           ),
-          if (invite != null) _Together(invite: invite, me: widget.me),
           if (!_own)
             Reveal(
               open: true,
@@ -713,7 +706,9 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
               child: _editing
                   ? Padding(
                       key: const ValueKey('description-field'),
-                      padding: const EdgeInsets.only(top: 14),
+                      padding: const EdgeInsets.only(
+                        top: EventPageStyle.descriptionGap,
+                      ),
                       // A small light frame says the description can be
                       // written.
                       child: Center(
@@ -761,7 +756,9 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
                   ? const SizedBox(width: double.infinity)
                   : Padding(
                       key: const ValueKey('description'),
-                      padding: const EdgeInsets.only(top: 14),
+                      padding: const EdgeInsets.only(
+                        top: EventPageStyle.descriptionGap,
+                      ),
                       child: Text(
                         description,
                         textAlign: TextAlign.center,
@@ -769,6 +766,8 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
                       ),
                     ),
             ),
+          // The description first, right under the title; then who else goes.
+          if (invite != null) _Together(invite: invite, me: widget.me),
           const SizedBox(height: 32),
           WhenBlock(
             span: showing,
@@ -840,7 +839,7 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
             _firstName(organizer),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: style.copyWith(color: Colors.white),
+            style: nameStyle(style.copyWith(color: Colors.white)),
           ),
         ),
       ],
@@ -866,7 +865,9 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
 /// "Алина" from "Алина Смирнова"; the username without a name.
 String _firstName(FriendInfo person) {
   final name = person.name.trim();
-  return name.isEmpty ? person.username : name.split(RegExp(r'\s+')).first;
+  return name.isEmpty
+      ? person.username
+      : shownName(name.split(RegExp(r'\s+')).first);
 }
 
 class _Grabber extends StatelessWidget {

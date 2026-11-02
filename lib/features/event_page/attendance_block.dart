@@ -202,15 +202,25 @@ class _AttendanceBlockState extends State<AttendanceBlock>
     );
   }
 
+  /// «Да» and «Нет» with their faces: a block as wide as a button and six
+  /// faces, centred under the centred title, so the buttons stand on the
+  /// page's axis instead of at its left edge.
+  static const _rowWidth = PillStyle.wide + 16 + _FacesState.fullWidth;
+
   Widget _row({required Widget button, required List<FriendInfo> people}) {
-    return Row(
-      children: [
-        button,
-        const SizedBox(width: 16),
-        Expanded(
-          child: _Faces(people: people, me: widget.me, own: widget.own),
+    return Center(
+      child: SizedBox(
+        width: _rowWidth,
+        child: Row(
+          children: [
+            button,
+            const SizedBox(width: 16),
+            Expanded(
+              child: _Faces(people: people, me: widget.me, own: widget.own),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -235,8 +245,20 @@ class _FacesState extends State<_Faces> {
   static const _step = 26.0;
   static const _shown = 6;
 
-  /// Who was in the row when it was first shown: they do not land.
-  late final Set<int> _first = {for (final person in widget.people) person.id};
+  /// Six faces and the «+N» after them.
+  static const fullWidth = _size + (_shown - 1) * _step + 44;
+
+  /// Who was in the row when it was first shown: they do not land. Taken
+  /// in [initState]: a lazy field was first read only once someone was in
+  /// the row, so the first one into an empty row counted as always there
+  /// and never landed.
+  late final Set<int> _first;
+
+  @override
+  void initState() {
+    super.initState();
+    _first = {for (final person in widget.people) person.id};
+  }
 
   @override
   Widget build(BuildContext context) {

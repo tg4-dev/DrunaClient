@@ -46,10 +46,10 @@ void main() {
     });
 
     test('names for a sentence', () {
-      expect(peopleLabel([anna]), 'Анна');
-      expect(peopleLabel([anna, mark]), 'Анна и Марк');
-      expect(peopleLabel([anna, mark, _me]), 'Анна, Марк и Глеб');
-      expect(peopleLabel([anna, mark, _me, anna]), 'Анна, Марк и ещё 2');
+      expect(peopleLabel([anna]), 'АННА');
+      expect(peopleLabel([anna, mark]), 'АННА и МАРК');
+      expect(peopleLabel([anna, mark, _me]), 'АННА, МАРК и ГЛЕБ');
+      expect(peopleLabel([anna, mark, _me, anna]), 'АННА, МАРК и ещё 2');
     });
   });
 

@@ -1,4 +1,5 @@
 import 'package:druna_app/app/app_settings.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
@@ -284,100 +285,109 @@ class _HomePagerState extends State<HomePager> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _goTo(HomePager.homeStop);
       },
-      child: ColoredBox(
-        color: Colors.black,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final height = constraints.maxHeight;
-            final plane = _planeFor(width);
-            final calendar = CalendarScreen(
-              mode: _mode,
-              onBusyChanged: (busy) => setState(() => _calendarBusy = busy),
-              onOpenSettings: () => _goTo(HomePager.settingsStop),
-              onOpenFriends: () => _goTo(HomePager.friendsStop),
-              friends: CalendarFriends(
-                store: _store,
-                selection: _selection,
-                events: _schedules,
-                schedulesAvailable: widget.settings.demoSchedules,
-                onShowFriends: () => _goTo(HomePager.friendsCalendarStop),
-                onShowMine: () => _goTo(HomePager.myCalendarStop),
-                onAddFriends: () => _goTo(HomePager.friendsStop),
-                onModeDrag: _dragMode,
-                onModeSettle: _settleMode,
-                me: widget.session.profile,
-                invites: _inviteEvents,
-                onOpenInvite: _showInvite,
-                onSendInvite: _sendInvite,
-              ),
-            );
-            final pages = SingleChildScrollView(
-              controller: plane,
-              scrollDirection: Axis.horizontal,
-              physics: _calendarBusy || _openInvite != null
-                  ? const NeverScrollableScrollPhysics()
-                  : const _SnappyPagePhysics(),
-              child: SizedBox(
-                width: width * 4,
-                height: height,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: width,
-                      child: FriendsPage(
-                        // A new source is a new page: it loads from scratch.
-                        key: ObjectKey(_friendsSource),
-                        source: _friendsSource,
-                        onChanged: _store.load,
-                      ),
-                    ),
-                    SizedBox(
-                      width: width * 2,
-                      child: _StillCalendar(
-                        plane: plane,
-                        width: width,
-                        child: OwnEventColor(color: _ownColor, child: calendar),
-                      ),
-                    ),
-                    SizedBox(
-                      width: width,
-                      child: SettingsPage(
-                        session: widget.session,
-                        settings: widget.settings,
-                        config: widget.config,
-                        onResetDemo: _resetDemo,
-                        onResetFriends: _selection.clear,
-                        invites: _invites,
-                        onOpenInvite: _showInvite,
-                        onResetInvites: _resetInvites,
-                      ),
-                    ),
-                  ],
+      // The user's colour and font for every avatar of them in the plane.
+      child: OwnAvatar(
+        id: widget.session.profile?.id ?? 0,
+        color: _ownColor,
+        font: ownFontFor(widget.settings),
+        child: ColoredBox(
+          color: Colors.black,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final height = constraints.maxHeight;
+              final plane = _planeFor(width);
+              final calendar = CalendarScreen(
+                mode: _mode,
+                onBusyChanged: (busy) => setState(() => _calendarBusy = busy),
+                onOpenSettings: () => _goTo(HomePager.settingsStop),
+                onOpenFriends: () => _goTo(HomePager.friendsStop),
+                friends: CalendarFriends(
+                  store: _store,
+                  selection: _selection,
+                  events: _schedules,
+                  schedulesAvailable: widget.settings.demoSchedules,
+                  onShowFriends: () => _goTo(HomePager.friendsCalendarStop),
+                  onShowMine: () => _goTo(HomePager.myCalendarStop),
+                  onAddFriends: () => _goTo(HomePager.friendsStop),
+                  onModeDrag: _dragMode,
+                  onModeSettle: _settleMode,
+                  me: widget.session.profile,
+                  invites: _inviteEvents,
+                  onOpenInvite: _showInvite,
+                  onSendInvite: _sendInvite,
                 ),
-              ),
-            );
-            return Stack(
-              children: [
-                pages,
-                // An invite opens over every page, from the calendar or
-                // from the profile.
-                if (_openInvite case final id?)
-                  Positioned.fill(
-                    child: OwnEventColor(
-                      color: _ownColor,
-                      child: EventPage(
-                        key: ValueKey('invite-page-$id'),
-                        subject: SharedInvite(id),
-                        invites: _invites,
-                        me: _me,
-                        onGone: () => setState(() => _openInvite = null),
+              );
+              final pages = SingleChildScrollView(
+                controller: plane,
+                scrollDirection: Axis.horizontal,
+                physics: _calendarBusy || _openInvite != null
+                    ? const NeverScrollableScrollPhysics()
+                    : const _SnappyPagePhysics(),
+                child: SizedBox(
+                  width: width * 4,
+                  height: height,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: width,
+                        child: FriendsPage(
+                          // A new source is a new page: it loads from scratch.
+                          key: ObjectKey(_friendsSource),
+                          source: _friendsSource,
+                          onChanged: _store.load,
+                        ),
+                      ),
+                      SizedBox(
+                        width: width * 2,
+                        child: _StillCalendar(
+                          plane: plane,
+                          width: width,
+                          child: OwnEventColor(
+                            color: _ownColor,
+                            child: calendar,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: SettingsPage(
+                          session: widget.session,
+                          settings: widget.settings,
+                          config: widget.config,
+                          onResetDemo: _resetDemo,
+                          onResetFriends: _selection.clear,
+                          invites: _invites,
+                          onOpenInvite: _showInvite,
+                          onResetInvites: _resetInvites,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+              return Stack(
+                children: [
+                  pages,
+                  // An invite opens over every page, from the calendar or
+                  // from the profile.
+                  if (_openInvite case final id?)
+                    Positioned.fill(
+                      child: OwnEventColor(
+                        color: _ownColor,
+                        child: EventPage(
+                          key: ValueKey('invite-page-$id'),
+                          subject: SharedInvite(id),
+                          invites: _invites,
+                          me: _me,
+                          onGone: () => setState(() => _openInvite = null),
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

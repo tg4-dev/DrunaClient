@@ -25,7 +25,7 @@ Backend находится в отдельном репозитории DrunaSer
 ## Текущее состояние
 
 Идёт замена UI. Летом 2026 был сделан клиент по прототипу v18; осенью
-интерфейс переписывается по Figma. Состояние на 2026-10-30:
+интерфейс переписывается по Figma. Состояние на 2026-11-02:
 
 - **Новый UI.** После входа открывается `HomePager`
   (`lib/app/home_pager.dart`): одна горизонтальная плоскость
@@ -58,15 +58,45 @@ Backend находится в отдельном репозитории DrunaSer
   токена, демо-данные, замедление анимаций и «Выйти». Переключатели хранятся
   в `shared_preferences`. Вне production демо-друзья включены по умолчанию;
   в production демо-переключателей нет.
-- **Аватары.** У людей нет фото: везде `PersonAvatar`
-  (`lib/shared/ui/person_avatar.dart`) — цвет из палитры 16 цветов и первая
-  буква имени.
-- **Старый UI.** Экраны прототипа v18 (`lib/features/home|groups|events|
-  profile|notifications`, `friends_screen.dart`) ещё лежат в репозитории, но
-  ни к чему не подключены: из `main.dart` до них не дойти. Не используйте их и
-  не возвращайте. Вход и сплэш (`features/auth/`,
-  `core/theme/druna_theme.dart`, `shared/ui/druna_widgets.dart`) работают,
-  их заменят по Figma. Как работали старые экраны — `docs/legacy/`.
+- **Аватары.** У людей нет фото. Везде `PersonAvatar`
+  (`lib/shared/ui/person_avatar.dart`): круг с градиентом 45° цвета из
+  палитры 8 цветов и первая буква имени выбранным шрифтом (6 шрифтов,
+  оптическая центровка). Свой цвет и шрифт выбираются на шаге «Профиль» и в
+  настройках (`lib/shared/ui/profile_pickers.dart`) и хранятся на
+  устройстве. **Как менять цвета и шрифты — `docs/avatar.md`**; подгонка
+  шрифтов — экран «Подгонка аватаров» в демо-блоке настроек.
+- **Онбординг** (`lib/features/onboarding/`, `docs/design-system.md` §9.9),
+  с 2026-11-02 вместо старого входа:
+  - welcome (Apple и Google пока плейсхолдеры) → почта;
+  - новая почта → код → пароль → ник → имя → профиль (аватар, шрифт,
+    цвет; фон перекрашивается в выбранный) → «Всё готово»;
+    зарегистрированная почта → пароль;
+  - на каждом шаге ← →, данные сохраняются; фон — `EventGradient` в
+    чёрном и `Brand.accent`.
+
+  Сервер умеет только `sign-up`/`sign-in` по нику. Поэтому код, проверка
+  ника и вход по почте работают на `DemoAuthFlowSource`, финальная
+  регистрация — настоящая. `ServerAuthFlowSource` честно отвечает «не
+  поддерживается»: **в production войти нельзя, пока сервер не получит
+  контракт** из `docs/backend-changes.md`. Сессия пускает в приложение
+  через `SessionController.adopt()`, когда доиграл последний экран.
+  В настройках «Пройти онбординг» проигрывает весь поток без сервера
+  (`RehearsalAuthFlowSource`, `showOnboardingRehearsal`), а «Пройти вход» —
+  только вход: любая почта ведёт к паролю, `wrongpass` — ошибка.
+  Пароль из автозаполнения отправляется сам через 0.4 с; «забыл пароль?»
+  пока честно не поддерживается.
+- **Имена людей — капсом и жирно** везде (`shownName`, `nameStyle`,
+  `NameText`, `lib/shared/ui/person_name.dart`); сервер хранит как введено.
+- **Без нативных диалогов ввода.** Имя меняется полем-капсулой (`PillField`,
+  `lib/shared/ui/pill_field.dart`), `askText` удалён.
+- **Кнопка** светится при нажатии (`PillButton`, §9.5).
+- **Уведомления** — одна плашка сверху в стиле кнопки
+  (`showToast`, `lib/shared/ui/top_toast.dart`, §9.10), Snackbar не
+  используются.
+- **Старый UI удалён** 2026-11-02: экраны прототипа v18, старый вход,
+  `druna_theme.dart`, `druna_widgets.dart` и лого «ü». Значения старой темы,
+  на которые ещё опираются «Друзья» и профиль, временно в
+  `lib/app/app_theme.dart`. Как работали старые экраны — `docs/legacy/`.
 - **Слой данных** (`ApiClient`, `DrunaRepository`, модели, `SessionController`,
   `TokenStore`) сохранён целиком: группы, события и профиль снова подключатся к
   нему, когда для них появится новый UI.
@@ -85,7 +115,7 @@ Backend находится в отдельном репозитории DrunaSer
 - друзья: список, поиск, заявка, входящие/исходящие, принять, отклонить,
   удалить — с UI на странице «Друзья»;
 - конфигурация API через `--dart-define`/`--dart-define-from-file`;
-- unit/widget-тесты API-клиента, моделей, входа, календаря, аватаров,
+- unit/widget-тесты API-клиента, моделей, онбординга, календаря, аватаров,
   страницы друзей и листания страниц.
 
 Не реализовано, потому что этого нет в текущем backend-контракте:
@@ -103,12 +133,13 @@ UI не должен показывать ложный успех для эти�
 
 ```text
 lib/
-  app/             DrunaApp, HomePager (плоскость страниц), состояние сессии
+  app/             DrunaApp, HomePager (плоскость страниц), состояние сессии,
+                   временная тема (app_theme.dart)
   core/api/        Dio-клиент, envelope, refresh и ApiException
   core/config/     APP_ENV, API_BASE_URL и DEMO_DATA
   core/storage/    модель токенов и secure storage
-  core/theme/      старая тема; нужна только входу, уйдёт с ним
-  features/auth/   старые welcome, sign-in и sign-up (до перерисовки)
+  features/onboarding/ вход и регистрация: шаги, контроллер, правила полей,
+                   источники (демо и сервер), поле, ячейки кода, Apple/Google
   features/calendar/ новый календарь: месяц и день (демо-данные)
   features/event_page/ форма события: просмотр и правка, заголовок,
                      время, повтор, присутствие, анимированный фон
@@ -119,14 +150,19 @@ lib/
   features/settings/ профиль и настройки с параметрами для тестирования
   models/          доменные модели и DTO mapping
   repositories/    типизированные операции DrunaServer
-  shared/ui/       PersonAvatar, PillButton и ActionPill, блоки страниц,
-                   нативные диалоги, старые виджеты входа
+  shared/ui/       PersonAvatar и его стиль (цвета, шрифты, центровка), пикеры
+                   профиля, PillField, имя капсом и жирно, PillButton и
+                   ActionPill, уведомление, OKLab, бренд
+                   (лого, стрелка, цвет), блоки страниц, нативные диалоги
 test/              unit- и widget-тесты
-assets/fonts/      Onest и Unbounded (вариативные, OFL; Unbounded — только заголовок формы события)
+assets/branding/   логотип и стрелка онбординга (SVG, flutter_svg)
+assets/fonts/      Onest и Unbounded; avatar/ — шрифты буквы аватара (OFL) (вариативные, OFL; Unbounded — только заголовок формы события)
 shaders/           фон формы события (event_gradient.frag)
-config/            development и production example build config
+config/            development, offline (без сервера) и production example build config
+scripts/           dev_server.sh: DrunaServer в Docker для телефона в LAN
 context/           исходное ТЗ, API guide и архив прототипа v18
 docs/design-system.md    дизайн-система и журнал дизайн-решений
+docs/avatar.md     цвета и шрифты аватара: как менять и подгонять
 docs/legacy/       снимок поведения клиента до замены UI
 docs/backend-changes.md  журнал недостающих endpoint и изменений DTO
 ```
@@ -156,10 +192,37 @@ docs/backend-changes.md  журнал недостающих endpoint и изм�
 |---|---|
 | iOS Simulator, backend на Mac | `http://localhost:22000` |
 | Android Emulator, backend на Mac | `http://10.0.2.2:22000` |
-| Физический телефон в той же LAN | `http://192.168.0.102:22000` |
+| Физический телефон в той же LAN | `http://192.168.0.102:22000` (IP Mac меняется по DHCP: `ipconfig getifaddr en0`) |
 | Production | реальный `https://...` endpoint |
 
 Для LAN backend должен слушать `0.0.0.0`, а firewall должен пропускать порт.
+
+Сервер для телефона в той же Wi-Fi поднимает `scripts/dev_server.sh`:
+
+- запускает Docker Desktop;
+- собирает и поднимает DrunaServer из `../DrunaServer` через
+  `docker compose up -d --build`;
+- ждёт `/ping/` и проверяет, что сервер отвечает по LAN-IP Mac;
+- прописывает этот адрес в `config/development.json` — IP выдаёт роутер,
+  он меняется.
+
+**Без сервера вообще** — `config/offline.json` (`OFFLINE=true`):
+
+```bash
+flutter run -d <DEVICE_ID> --dart-define-from-file=config/offline.json
+```
+
+- онбординг целиком на устройстве: код `123456`, аккаунт и сессия хранятся
+  локально (`OfflineAccounts`, `lib/app/offline_accounts.dart`), вход в
+  созданный аккаунт — с любым паролем;
+- профиль и правка имени — локальные;
+- друзья, их занятость, приглашения и календарь — на демо-данных;
+- ping и проверка refresh в настройках честно не проходят.
+
+В production флаг игнорируется (`AppConfig.offline`).
+
+Остановить — `scripts/dev_server.sh stop`. Docker Desktop должен быть
+разрешён во входящих соединениях фаервола macOS.
 Локальный HTTP допустим только для разработки; production обязан использовать
 HTTPS. Не коммитьте production secrets или реальные пользовательские токены.
 
@@ -212,7 +275,9 @@ flutter run \
   `1246EEFE-E718-4DE2-AE96-2DE0DD2EF254`;
 - debug-сборка iOS Simulator успешно собрана, установлена и запущена;
 - `flutter analyze` проходит без замечаний;
-- `flutter test` проходит (на 2026-11-01 — 189 тестов). В тестах
+- `flutter test`: на 2026-11-02 — 245 тестов, 244 проходят. Падает
+  `calendar_month_test.dart` «pinned top weeks run on under the top»: он
+  зависит от текущей даты и падает и на коммите `55179fa`, до онбординга. В тестах
   progressive blur выключен (`test/flutter_test_config.dart`, `EdgeBlur`).
 
 Android SDK и Chrome в этом окружении не установлены. Android-сборка не была
@@ -290,15 +355,21 @@ flutter build ios \
    физическом устройстве.
 6. Проверить адаптивность, клавиатуру, локальный HTTP/ATS и сетевые ошибки на
    нескольких размерах iPhone/Android.
+7. Серверный вход по почте: endpoint из `docs/backend-changes.md` («Вход и
+   регистрация по почте») и `ServerAuthFlowSource` на них. До этого в
+   production войти нельзя.
+8. Associated Domains (`webcredentials:`) и `apple-app-site-association`,
+   Android `assetlinks.json` — иначе система не предлагает сохранить пароль.
 
 Приоритет P1 — качество продукта:
 
 1. Добавить integration tests для auth, events, friends и groups с mock server.
 2. Добавить устойчивое периодическое обновление уведомлений и lifecycle handling;
    сейчас обновление основано на открытии экрана и ручном refresh.
-3. Перерисовать по Figma вход и сплэш, затем удалить `druna_theme.dart` и
-   `druna_widgets.dart`; вернуть группы, профиль и события на сервере в новом
-   UI (`docs/design-system.md`, §10.1).
+3. Перевести «Друзья» и профиль на свои стили и удалить `app_theme.dart`;
+   вернуть группы, профиль и события на сервере в новом UI
+   (`docs/design-system.md`, §10.1). Подключить Sign in with Apple и Google
+   (§9.9, правила провайдеров).
 4. Добавить accessibility labels, Dynamic Type/text scaling, contrast audit и
    локализацию вместо строк, зашитых в виджеты.
 5. Добавить observability: безопасное логирование request ID, crash reporting и

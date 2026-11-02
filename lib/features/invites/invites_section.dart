@@ -12,6 +12,7 @@ import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/page_parts.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -177,7 +178,8 @@ class InvitesSection extends StatelessWidget {
       colors: colors,
       day: invite.start,
       title: invite.title.trim().isEmpty ? 'Без названия' : invite.title,
-      subtitle: [when, if (others.isNotEmpty) peopleLabel(others)].join(' · '),
+      subtitle: when,
+      names: others.isEmpty ? null : peopleLabel(others),
       people: others,
       status: organizer ? 'Организую' : rsvpLabel(status),
       waiting: status == RsvpStatus.pending && !past,
@@ -333,6 +335,7 @@ class _InviteCard extends StatelessWidget {
     required this.day,
     required this.title,
     required this.subtitle,
+    required this.names,
     required this.people,
     required this.status,
     required this.waiting,
@@ -345,6 +348,9 @@ class _InviteCard extends StatelessWidget {
   final DateTime day;
   final String title;
   final String subtitle;
+
+  /// Who else goes, after [subtitle]: set bold, like every name.
+  final String? names;
   final List<FriendInfo> people;
   final String status;
 
@@ -359,7 +365,7 @@ class _InviteCard extends StatelessWidget {
     final soft = ink.withValues(alpha: 0.75);
     return Semantics(
       button: true,
-      label: '$title, ${eventDateLabel(day)}, $subtitle, $status',
+      label: [title, eventDateLabel(day), subtitle, ?names, status].join(', '),
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -407,8 +413,12 @@ class _InviteCard extends StatelessWidget {
                       const SizedBox(width: 8),
                     ],
                     Expanded(
-                      child: Text(
-                        subtitle,
+                      child: NameText(
+                        parts: [
+                          subtitle,
+                          if (names != null) ...[' · ', names!],
+                        ],
+                        names: const {2},
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

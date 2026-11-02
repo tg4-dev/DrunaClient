@@ -5,11 +5,18 @@ import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/invites/invite.dart';
+import 'package:druna_app/features/onboarding/onboarding_flow.dart';
+import 'package:druna_app/features/settings/avatar_tuning_page.dart';
 import 'package:druna_app/features/invites/invites_section.dart';
 import 'package:druna_app/features/invites/invites_store.dart';
 import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/page_parts.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
+import 'package:druna_app/shared/ui/top_toast.dart';
+import 'package:druna_app/features/onboarding/onboarding_rules.dart';
+import 'package:druna_app/shared/ui/pill_field.dart';
+import 'package:druna_app/shared/ui/profile_pickers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -49,10 +56,7 @@ class SettingsPage extends StatelessWidget {
   final VoidCallback onResetFriends;
 
   @override
-  Widget build(BuildContext context) {
-    // Its own messenger: the other pages of the plane are mounted too.
-    return ScaffoldMessenger(child: _page());
-  }
+  Widget build(BuildContext context) => _page();
 
   Widget _page() {
     return Scaffold(
@@ -70,7 +74,13 @@ class SettingsPage extends StatelessWidget {
               // everything else is inset by [PageStyle.gutter].
               padding: const EdgeInsets.only(top: 8, bottom: 40),
               children: [
-                _inset(_ProfileHeader(session: session, own: own)),
+                _inset(
+                  _ProfileHeader(
+                    session: session,
+                    settings: settings,
+                    own: own,
+                  ),
+                ),
                 const SizedBox(height: 28),
                 if (invites != null) ...[
                   InvitesSection(
@@ -85,18 +95,6 @@ class SettingsPage extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      BlockSection(
-                        icon: CupertinoIcons.paintbrush_fill,
-                        title: 'Мой цвет',
-                        children: [
-                          _ColorPicker(
-                            selected: settings.ownColorSlot,
-                            current: own,
-                            onPick: (slot) => settings.ownColorSlot = slot,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
                       _ServerSection(session: session, config: config),
                       if (settings.allowDemo) ...[
                         const SizedBox(height: 12),
@@ -104,6 +102,30 @@ class SettingsPage extends StatelessWidget {
                           icon: CupertinoIcons.lab_flask_solid,
                           title: 'Демо-данные',
                           children: [
+                            _ActionRow(
+                              title: 'Пройти онбординг',
+                              subtitle:
+                                  'Регистрация без сервера, аккаунт не '
+                                  'создаётся; demo@druna.app — вход',
+                              onTap: () => showOnboardingRehearsal(context),
+                            ),
+                            _ActionRow(
+                              title: 'Пройти вход',
+                              subtitle:
+                                  'Любая почта ведёт ко входу; пароль '
+                                  'wrongpass — ошибка',
+                              onTap: () => showOnboardingRehearsal(
+                                context,
+                                signIn: true,
+                              ),
+                            ),
+                            _ActionRow(
+                              title: 'Подгонка аватаров',
+                              subtitle:
+                                  'Для разработчика: шрифты буквы, '
+                                  'docs/avatar.md',
+                              onTap: () => showAvatarTuning(context),
+                            ),
                             _SwitchRow(
                               title: 'Демо-друзья',
                               subtitle: '12 друзей и заявка, без сервера',
@@ -198,77 +220,63 @@ Widget _inset(Widget child) => Padding(
 );
 
 void _toast(BuildContext context, String message) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  showToast(context, message);
 }
 
 String _errorText(Object error) =>
     error is ApiException ? error.message : 'Не получилось';
 
-/// The user on top of the page: a large avatar in their colour with a ring,
-/// the name (a tap renames), the username and the email.
+/// The user on top of the page (design-system §9.3, §9.11): the avatar as
+/// it is, the name in a field of the app's own style, the username and the
+/// email, then the same pickers of font and colour as in the onboarding.
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.session, required this.own});
+  const _ProfileHeader({
+    required this.session,
+    required this.settings,
+    required this.own,
+  });
 
   final SessionController session;
+  final AppSettings settings;
   final Color own;
 
-  static const _avatar = 96.0;
+  static const _avatar = 120.0;
   static const _ring = 3.0;
   static const _ringGap = 4.0;
-
-  static const _name = TextStyle(
-    color: Colors.white,
-    fontSize: 26,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.4,
-  );
-
-  Future<void> _rename(BuildContext context, String current) async {
-    final name = await askText(
-      context,
-      title: 'Как тебя зовут?',
-      confirmLabel: 'Сохранить',
-      initial: current,
-      placeholder: 'Имя',
-    );
-    if (name == null || name == current) return;
-    try {
-      await session.rename(name);
-    } catch (error) {
-      if (context.mounted) _toast(context, _errorText(error));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final profile = session.profile;
+    final font = ownFontFor(settings);
+    final name = profile == null
+        ? ''
+        : (profile.name.isEmpty ? profile.username : profile.name);
     const outer = _avatar + (_ring + _ringGap) * 2;
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Column(
         children: [
-          Container(
-            width: outer,
-            height: outer,
-            padding: const EdgeInsets.all(_ringGap),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Color.lerp(own, Colors.white, 0.55)!,
-                width: _ring,
+          TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: Color.lerp(own, Colors.white, 0.55)),
+            duration: ProfilePickerStyle.recolor,
+            builder: (context, ring, child) => Container(
+              width: outer,
+              height: outer,
+              padding: const EdgeInsets.all(_ringGap),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: ring ?? own, width: _ring),
               ),
+              child: child,
             ),
-            child: PersonAvatar(
-              id: profile?.id ?? 0,
-              name: profile?.name ?? '',
-              username: profile?.username ?? '?',
+            child: AvatarPreview(
               color: own,
+              font: font,
+              name: name.isEmpty ? '?' : name,
               size: _avatar,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
           if (profile == null)
             _ActionRow(
               title: 'Профиль не загружен',
@@ -282,40 +290,12 @@ class _ProfileHeader extends StatelessWidget {
               },
             )
           else ...[
-            Semantics(
-              button: true,
-              label: 'Имя: ${profile.name}. Изменить',
-              excludeSemantics: true,
-              child: GestureDetector(
-                key: const ValueKey('profile-name'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _rename(context, profile.name),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 44),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          profile.name.isEmpty
-                              ? profile.username
-                              : profile.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _name,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(
-                        CupertinoIcons.pencil,
-                        size: 18,
-                        color: SheetStyle.muted,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            _NameField(
+              key: ValueKey('profile-name-${profile.id}'),
+              session: session,
+              name: profile.name,
             ),
+            const SizedBox(height: 8),
             Text(
               '@${profile.username}',
               style: SheetStyle.value.copyWith(fontSize: 15),
@@ -325,10 +305,132 @@ class _ProfileHeader extends StatelessWidget {
               Text(profile.email, style: _subtitle),
             ],
           ],
+          const SizedBox(height: 20),
+          FontPicker(
+            name: name.isEmpty ? '?' : name,
+            selected: font,
+            onPick: (font) => settings.ownFontId = font.id,
+          ),
+          const SizedBox(height: 14),
+          ColorPicker(
+            selected:
+                settings.ownColorSlot ??
+                avatarPalette.indexOf(own).clamp(0, avatarPalette.length - 1),
+            onPick: (slot) => settings.ownColorSlot = slot,
+          ),
         ],
       ),
     );
   }
+}
+
+/// The name in the app's field: bold, drawn in capitals. A change shows ✓
+/// at the right; it, or the keyboard's return, saves through the server
+/// (`PATCH /users/me`) or, without one, on the device.
+class _NameField extends StatefulWidget {
+  const _NameField({required this.session, required this.name, super.key});
+
+  final SessionController session;
+  final String name;
+
+  @override
+  State<_NameField> createState() => _NameFieldState();
+}
+
+class _NameFieldState extends State<_NameField> {
+  late final _name = UpperCaseNameController(text: widget.name);
+  final _focus = FocusNode();
+  var _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(() => setState(() {}));
+    _focus.addListener(() => setState(() {}));
+  }
+
+  @override
+  void didUpdateWidget(covariant _NameField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Renamed elsewhere (a refresh): show it unless the user is typing.
+    if (oldWidget.name != widget.name && !_focus.hasFocus) {
+      _name.text = widget.name;
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  bool get _changed => _name.text.trim() != widget.name.trim();
+
+  /// ✓ or «готово»: saves a change; with none, just ends the editing.
+  Future<void> _save() async {
+    if (_busy) return;
+    if (!_changed) {
+      _focus.unfocus();
+      return;
+    }
+    final problem = nameError(_name.text);
+    if (problem != null) {
+      showToast(context, problem, error: true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await widget.session.rename(_name.text);
+      if (!mounted) return;
+      HapticFeedback.selectionClick();
+      _focus.unfocus();
+      showToast(context, 'Имя сохранено');
+    } catch (error) {
+      if (mounted) showToast(context, _errorText(error), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PillField(
+    fieldKey: const ValueKey('profile-name-field'),
+    controller: _name,
+    focusNode: _focus,
+    hint: 'ИМЯ',
+    width: null,
+    style: PillFieldStyle.name,
+    hintStyle: PillFieldStyle.nameHint,
+    keyboardType: TextInputType.name,
+    textCapitalization: TextCapitalization.words,
+    autofillHints: const [AutofillHints.givenName],
+    textInputAction: TextInputAction.done,
+    keepFocus: false,
+    onSubmitted: _save,
+    trailing: _busy
+        ? const CupertinoActivityIndicator(color: Colors.white)
+        : _changed || _focus.hasFocus
+        ? Semantics(
+            button: true,
+            label: _changed ? 'Сохранить имя' : 'Готово',
+            excludeSemantics: true,
+            child: GestureDetector(
+              key: const ValueKey('profile-name-save'),
+              behavior: HitTestBehavior.opaque,
+              onTap: _save,
+              child: const SizedBox.square(
+                dimension: 44,
+                child: Icon(
+                  CupertinoIcons.checkmark_alt,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+          )
+        : null,
+  );
 }
 
 class _LogoutBlock extends StatelessWidget {
@@ -579,94 +681,6 @@ class _SwitchRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// The user's colour: the sixteen of the palette in two rows, the current
-/// one ringed like a picked friend. Repaints the calendar at once.
-class _ColorPicker extends StatelessWidget {
-  const _ColorPicker({
-    required this.selected,
-    required this.current,
-    required this.onPick,
-  });
-
-  /// The picked slot; null while the colour follows the avatar.
-  final int? selected;
-  final Color current;
-  final ValueChanged<int?> onPick;
-
-  static const _dot = 32.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 8, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Им рисуются мои события и аватар', style: _subtitle),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cell = constraints.maxWidth / 8;
-              return Wrap(
-                children: [
-                  for (var slot = 0; slot < avatarPalette.length; slot++)
-                    SizedBox(
-                      width: cell,
-                      height: cell.clamp(44.0, 56.0),
-                      child: Semantics(
-                        button: true,
-                        selected: avatarPalette[slot] == current,
-                        label: 'Цвет ${slot + 1}',
-                        excludeSemantics: true,
-                        child: GestureDetector(
-                          key: ValueKey('own-color-$slot'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            onPick(slot);
-                          },
-                          child: Center(child: _swatch(avatarPalette[slot])),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          // Dimmed by the row itself while the colour already follows it.
-          _ActionRow(
-            title: 'Как у аватара',
-            subtitle: 'Цвет, который даёт мой аккаунт',
-            onTap: selected == null ? null : () => onPick(null),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _swatch(Color color) {
-    final picked = color == current;
-    return AnimatedContainer(
-      duration: SheetStyle.fade,
-      width: _dot + 8,
-      height: _dot + 8,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: picked
-              ? Color.lerp(color, Colors.white, 0.55)!
-              : Colors.transparent,
-          width: 3,
-        ),
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }

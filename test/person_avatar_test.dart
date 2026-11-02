@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/avatar_style.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,17 +22,17 @@ void main() {
   });
 
   group('avatarColorFor', () {
-    test('has sixteen distinct colours', () {
-      expect(avatarPalette, hasLength(16));
-      expect(avatarPalette.toSet(), hasLength(16));
+    test('has eight distinct colours', () {
+      expect(avatarPalette, hasLength(8));
+      expect(avatarPalette.toSet(), hasLength(8));
     });
 
     test('is the same for the same person', () {
       expect(avatarColorFor(id: 7), avatarColorFor(id: 7));
-      expect(avatarColorFor(id: 23), avatarColorFor(id: 7));
+      expect(avatarColorFor(id: 15), avatarColorFor(id: 7));
       expect({
-        for (var id = 1; id <= 16; id++) avatarColorFor(id: id),
-      }, hasLength(16));
+        for (var id = 1; id <= 8; id++) avatarColorFor(id: id),
+      }, hasLength(8));
       expect(
         avatarColorFor(id: 0, username: 'Alina'),
         avatarColorFor(id: 0, username: 'alina'),
@@ -42,7 +43,7 @@ void main() {
       final a = avatarSlotFor(101);
       final b = avatarSlotFor(102);
       final distance = (a - b).abs();
-      expect(distance < 16 - distance ? distance : 16 - distance, 7);
+      expect(distance < 8 - distance ? distance : 8 - distance, 3);
     });
 
     test('spreads usernames over the palette', () {
@@ -59,7 +60,9 @@ void main() {
     expect(avatarInkFor(const Color(0xFF4C5BFF)), Colors.white);
   });
 
-  testWidgets('draws the initial on the palette colour', (tester) async {
+  testWidgets('draws the initial on a 45° gradient of the palette colour', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
@@ -67,9 +70,35 @@ void main() {
       ),
     );
 
-    expect(find.text('М'), findsOneWidget);
-    final box = tester.widget<Container>(find.byType(Container));
-    final decoration = box.decoration! as BoxDecoration;
-    expect(decoration.color, avatarColorFor(id: 3));
+    final letter = tester.widget<AvatarLetter>(find.byType(AvatarLetter));
+    expect(letter.letter, 'М');
+    expect(letter.font, defaultAvatarFont);
+    final box = tester.widget<DecoratedBox>(find.byType(DecoratedBox).first);
+    final gradient =
+        (box.decoration as BoxDecoration).gradient! as LinearGradient;
+    expect(gradient.begin, Alignment.topLeft);
+    expect(gradient.end, Alignment.bottomRight);
+    expect(gradient.colors.first, avatarColorFor(id: 3));
+    expect(gradient.colors.last, avatarShade(avatarColorFor(id: 3)));
+  });
+
+  testWidgets('the user\'s own avatar takes their colour and font', (
+    tester,
+  ) async {
+    final lobster = avatarFontById('lobster');
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: OwnAvatar(
+          id: 3,
+          color: avatarPalette[5],
+          font: lobster,
+          child: const PersonAvatar(id: 3, name: 'Марк'),
+        ),
+      ),
+    );
+    final letter = tester.widget<AvatarLetter>(find.byType(AvatarLetter));
+    expect(letter.font, lobster);
+    expect(letter.letter, 'м');
   });
 }

@@ -26,6 +26,15 @@ abstract final class PillStyle {
   /// Pressed, the button swells a little, as on iOS 26.
   static const pressedScale = 1.06;
   static const press = Duration(milliseconds: 120);
+
+  /// Pressed, a soft light glows from the centre while the finger stays,
+  /// and dies away after it lifts.
+  static const glow = Color(0x52FFFFFF);
+
+  /// On a light fill white would not show: there the glow is a shade.
+  static const glowOnLight = Color(0x1A000000);
+  static const glowIn = Duration(milliseconds: 140);
+  static const glowOut = Duration(milliseconds: 450);
   static const resize = Duration(milliseconds: 200);
   static const fade = Duration(milliseconds: 180);
 
@@ -44,21 +53,32 @@ class PillSurface extends StatelessWidget {
   const PillSurface({
     required this.child,
     this.fill = PillStyle.fill,
+    this.glow = 0,
+    this.radius,
     super.key,
   });
 
   final Color fill;
+
+  /// Corners; null — a capsule (half the height). A block of several rows
+  /// (the colour picker) takes its own.
+  final double? radius;
+
+  /// 0..1: how strongly the press glows (see [PillStyle.glow]).
+  final double glow;
   final Widget child;
 
   @override
   Widget build(BuildContext context) =>
-      CustomPaint(painter: _PillPainter(fill), child: child);
+      CustomPaint(painter: _PillPainter(fill, glow, radius), child: child);
 }
 
 class _PillPainter extends CustomPainter {
-  const _PillPainter(this.fill);
+  const _PillPainter(this.fill, this.glow, this.corner);
 
   final Color fill;
+  final double glow;
+  final double? corner;
 
   static const _rim = LinearGradient(
     begin: Alignment.topCenter,
@@ -69,11 +89,28 @@ class _PillPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final radius = Radius.circular(size.height / 2);
+    final radius = Radius.circular(corner ?? size.height / 2);
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, radius),
       Paint()..color = fill,
     );
+    if (glow > 0) {
+      final light = fill.a > 0.5 && fill.computeLuminance() > 0.5;
+      final color = light ? PillStyle.glowOnLight : PillStyle.glow;
+      // A radial gradient from the centre, clear at the edge; it fills
+      // the capsule, so it needs no clip.
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, radius),
+        Paint()
+          ..shader = RadialGradient(
+            radius: 0.5 * size.width / size.shortestSide,
+            colors: [
+              color.withValues(alpha: color.a * glow),
+              color.withValues(alpha: 0),
+            ],
+          ).createShader(rect),
+      );
+    }
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect.deflate(PillStyle.rimWidth / 2), radius),
       Paint()
@@ -85,7 +122,9 @@ class _PillPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PillPainter oldDelegate) =>
-      oldDelegate.fill != fill;
+      oldDelegate.fill != fill ||
+      oldDelegate.glow != glow ||
+      oldDelegate.corner != corner;
 }
 
 /// A [PillSurface] that presses. Give it an [icon], a [text] or both; a
@@ -131,12 +170,43 @@ class PillButton extends StatefulWidget {
   State<PillButton> createState() => _PillButtonState();
 }
 
-class _PillButtonState extends State<PillButton> {
+class _PillButtonState extends State<PillButton>
+    with SingleTickerProviderStateMixin {
   var _pressed = false;
+  late final _glow = AnimationController(
+    vsync: this,
+    duration: PillStyle.glowIn,
+    reverseDuration: PillStyle.glowOut,
+  );
+
+  /// Lights up quickly; on release drops fast, then a long soft tail.
+  late final _glowCurve = CurvedAnimation(
+    parent: _glow,
+    curve: Curves.easeOut,
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  @override
+  void dispose() {
+    _glowCurve.dispose();
+    _glow.dispose();
+    super.dispose();
+  }
 
   void _press(bool pressed) {
     if (widget.onPressed == null || pressed == _pressed) return;
     setState(() => _pressed = pressed);
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return;
+    if (pressed) {
+      _glow.forward();
+    } else if (_glow.isForwardOrCompleted && _glow.value < 1) {
+      // A quick tap: the glow still reaches full, so it is seen.
+      _glow.forward().then((_) {
+        if (mounted && !_pressed) _glow.reverse();
+      });
+    } else {
+      _glow.reverse();
+    }
   }
 
   @override
@@ -175,9 +245,24 @@ class _PillButtonState extends State<PillButton> {
               child: TweenAnimationBuilder<Color?>(
                 tween: ColorTween(end: widget.fill),
                 duration: reduce ? Duration.zero : PillStyle.fade,
-                child: Center(widthFactor: 1, child: _content(reduce)),
-                builder: (context, fill, child) =>
-                    PillSurface(fill: fill ?? widget.fill, child: child!),
+                // The ink crossfades with the fill (a title lighting up).
+                child: TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: widget.color),
+                  duration: reduce ? Duration.zero : PillStyle.fade,
+                  builder: (context, color, _) => Center(
+                    widthFactor: 1,
+                    child: _content(reduce, color ?? widget.color),
+                  ),
+                ),
+                builder: (context, fill, child) => AnimatedBuilder(
+                  animation: _glowCurve,
+                  child: child,
+                  builder: (context, child) => PillSurface(
+                    fill: fill ?? widget.fill,
+                    glow: _glowCurve.value,
+                    child: child!,
+                  ),
+                ),
               ),
             ),
           ),
@@ -186,10 +271,10 @@ class _PillButtonState extends State<PillButton> {
     );
   }
 
-  Widget _content(bool reduce) {
+  Widget _content(bool reduce, Color color) {
     final icon = widget.icon == null
         ? null
-        : Icon(widget.icon, color: widget.color, size: widget.iconSize);
+        : Icon(widget.icon, color: color, size: widget.iconSize);
     final text =
         widget.child ?? (widget.text == null ? null : Text(widget.text!));
     if (text == null) return icon!;
@@ -201,9 +286,7 @@ class _PillButtonState extends State<PillButton> {
           horizontal: icon == null ? PillStyle.padding : PillStyle.padding - 4,
         ),
         child: DefaultTextStyle(
-          style: (widget.textStyle ?? PillStyle.title).copyWith(
-            color: widget.color,
-          ),
+          style: (widget.textStyle ?? PillStyle.title).copyWith(color: color),
           maxLines: 1,
           softWrap: false,
           overflow: TextOverflow.ellipsis,

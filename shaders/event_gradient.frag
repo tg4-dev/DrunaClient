@@ -3,7 +3,8 @@
 
 precision mediump float;
 
-// The event page's background (lib/features/event_page/event_gradient.dart):
+// The event page's and the onboarding's background
+// (lib/features/event_page/event_gradient.dart):
 // a plain radial gradient. The colours are its stops, from the centre out —
 // an ellipse stretched along the diagonal from the top left to the bottom
 // right. The stops slide along the scale in a loop, so the colours flow
@@ -20,11 +21,11 @@ uniform vec4 uC2;
 uniform vec4 uC3;
 uniform vec4 uC4;
 uniform vec4 uC5;
+// The black the bottom of the page fades into, in OKLab: the event page's
+// warm #0A0605, the onboarding's pure black.
+uniform vec3 uDark;
 
 out vec4 fragColor;
-
-// The black the bottom of the page fades into, in OKLab (#0A0605).
-const vec3 DARK = vec3(0.105, 0.006, 0.004);
 
 vec3 toSrgb(vec3 c) {
   c = clamp(c, 0.0, 1.0);
@@ -108,7 +109,7 @@ void main() {
   }
   // Black rising from the bottom, for the text over it.
   float y = frag.y / uSize.y;
-  lab = mix(lab, DARK, 0.8 * smoothstep(0.38, 1.0, y));
+  lab = mix(lab, uDark, 0.8 * smoothstep(0.38, 1.0, y));
 
   fragColor = vec4(fromOklab(lab), 1.0);
 }

@@ -87,6 +87,10 @@ class MonthCalendarState extends State<MonthCalendar>
   late final ScrollController _scroll;
   late final AnimationController _rowSnap;
   late DateTime _visibleMonth;
+
+  /// Another month than today's is on screen.
+  bool get _awayFromToday =>
+      _visibleMonth.year != _today.year || _visibleMonth.month != _today.month;
   late DateTime _today;
   late final ValueNotifier<double> _rows = ValueNotifier(monthRowLevels[1]);
   double _pinchStartHeight = monthRowLevels[1];
@@ -591,7 +595,8 @@ class MonthCalendarState extends State<MonthCalendar>
               sigma: chromeBlurSigma,
               gradient: _edgeBlur(
                 height: constraints.maxHeight,
-                top: above,
+                // Reaches 15% further down than the shaded top (2026-11-02).
+                top: above * topBlurReach,
                 bottom: widget.bottomBlur,
               ),
               child: Stack(
@@ -678,10 +683,14 @@ class MonthCalendarState extends State<MonthCalendar>
               SizedBox(width: PillStyle.size, child: widget.leading),
               Expanded(
                 child: Center(
+                  // Away from this month the title lights up: a tap brings
+                  // today back.
                   child: PillButton(
                     key: const ValueKey('month-title'),
                     label: '${monthTitle(_visibleMonth)}, к сегодня',
                     onPressed: widget.onTitleTap ?? scrollToToday,
+                    fill: _awayFromToday ? Colors.white : PillStyle.fill,
+                    color: _awayFromToday ? Colors.black : Colors.white,
                     child: Text(monthTitle(_visibleMonth)),
                   ),
                 ),
@@ -745,6 +754,9 @@ const chromeBlurSigma = 24.0;
 
 /// Full blur at the top edge fading out [top] below it, and at the bottom
 /// edge fading out [bottom] above it; none between.
+/// How far down the top blur reaches, against the pinned top's height.
+const topBlurReach = 1.15;
+
 LinearGradientBlur _edgeBlur({
   required double height,
   required double top,

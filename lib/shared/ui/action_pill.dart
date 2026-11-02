@@ -45,6 +45,7 @@ class ActionPill extends StatelessWidget {
     required this.onPressed,
     this.kind = ActionPillKind.confirm,
     this.size = ActionPillSize.large,
+    this.filled = false,
     super.key,
   });
 
@@ -56,6 +57,10 @@ class ActionPill extends StatelessWidget {
   final ActionPillKind kind;
   final ActionPillSize size;
 
+  /// The row's main action, filled white with a dark icon: ✓ of an
+  /// incoming friend request beside a plain ✕.
+  final bool filled;
+
   @override
   Widget build(BuildContext context) => PillButton(
     icon: icon,
@@ -64,6 +69,11 @@ class ActionPill extends StatelessWidget {
     width: size.width,
     height: size.height,
     iconSize: size.icon,
-    color: kind == ActionPillKind.destructive ? SheetStyle.today : Colors.white,
+    fill: filled ? Colors.white : PillStyle.fill,
+    color: filled
+        ? Colors.black
+        : kind == ActionPillKind.destructive
+        ? SheetStyle.today
+        : Colors.white,
   );
 }

@@ -1,7 +1,7 @@
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:druna_app/features/event_page/event_style.dart';
+import 'package:druna_app/shared/ui/oklab.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -14,11 +14,26 @@ import 'package:flutter/widgets.dart';
 /// Someone joining: the loop runs on, fast but eased, to where the scale
 /// starts at the centre; the new colour goes in there and grows on a
 /// spring, then everything turns as before. Someone leaving fades out.
+///
+/// The onboarding uses it too: black and the brand colour, a surge on every
+/// step (design-system §9.9).
 class EventGradient extends StatefulWidget {
-  const EventGradient({required this.colors, super.key});
+  const EventGradient({
+    required this.colors,
+    this.dark = EventPageStyle.dark,
+    this.surge = 0,
+    super.key,
+  });
 
   /// Only the first [maxColors] are drawn.
   final List<Color> colors;
+
+  /// What the bottom of the screen fades into.
+  final Color dark;
+
+  /// Each change runs the loop on, fast but eased, to its next start — the
+  /// same run as when someone joins, without a new colour.
+  final int surge;
 
   static const maxColors = 6;
 
@@ -48,10 +63,43 @@ class EventGradient extends StatefulWidget {
 class _Slot {
   _Slot(this.color, {this.weight = 0}) : lab = oklab(color);
 
-  final Color color;
+  Color color;
 
   /// [color] in OKLab, worked out once, not per pixel.
-  final (double, double, double) lab;
+  (double, double, double) lab;
+
+  /// While turning into another colour: from where, and how far (0..1).
+  (double, double, double)? _from;
+  (double, double, double)? _to;
+  var _turned = 0.0;
+
+  /// Turns into [next] smoothly, in place: no leaving and joining.
+  void recolor(Color next, {required bool still}) {
+    color = next;
+    if (still) {
+      lab = oklab(next);
+      _from = null;
+      return;
+    }
+    _from = lab;
+    _to = oklab(next);
+    _turned = 0;
+  }
+
+  void turn(double dt, double seconds) {
+    final from = _from;
+    final to = _to;
+    if (from == null || to == null) return;
+    _turned = (_turned + dt / seconds).clamp(0.0, 1.0);
+    final t = Curves.easeInOutCubic.transform(_turned);
+    lab = (
+      from.$1 + (to.$1 - from.$1) * t,
+      from.$2 + (to.$2 - from.$2) * t,
+      from.$3 + (to.$3 - from.$3) * t,
+    );
+    if (_turned >= 1) _from = null;
+  }
+
   double weight;
   double velocity = 0;
   double target = 1;
@@ -65,6 +113,9 @@ class _EventGradientState extends State<EventGradient>
   /// One loop of the scale, in phase units (the shader slides the stops by
   /// a quarter of the phase).
   static const _loop = 4.0;
+
+  /// How long a colour takes to turn into another ([_Slot.recolor]).
+  static const _recolor = 0.6;
 
   /// A slightly bouncy spring for the weights: damping ratio about 0.6.
   static const _stiffness = 40.0;
@@ -116,7 +167,30 @@ class _EventGradientState extends State<EventGradient>
   @override
   void didUpdateWidget(covariant EventGradient oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.surge != oldWidget.surge && !_still && _runTo == null) {
+      _startRun();
+    }
     final next = widget.colors.take(EventGradient.maxColors).toList();
+    // The same number of colours, some of them different: those turn into
+    // the new ones in place (the onboarding's background follows the
+    // user's colour) instead of leaving and joining.
+    final old = oldWidget.colors.take(EventGradient.maxColors).toList();
+    if (old.length == next.length &&
+        _slots.length == old.length &&
+        _waiting.isEmpty &&
+        !_listEquals(old, next)) {
+      for (var i = 0; i < old.length; i++) {
+        if (old[i] == next[i]) continue;
+        for (final slot in _slots) {
+          if (slot.color == old[i]) {
+            slot.recolor(next[i], still: _still);
+            break;
+          }
+        }
+      }
+      if (_still) _repaint.ping();
+      return;
+    }
     // Who left fades out where they are.
     for (final slot in _slots) {
       final stays = next.contains(slot.color);
@@ -186,6 +260,7 @@ class _EventGradientState extends State<EventGradient>
       _phase += dt * _speed;
     }
     for (final slot in _slots) {
+      slot.turn(dt, _recolor);
       final pull =
           _stiffness * (slot.target - slot.weight) - _damping * slot.velocity;
       slot.velocity += pull * dt;
@@ -203,10 +278,11 @@ class _EventGradientState extends State<EventGradient>
     return RepaintBoundary(
       child: CustomPaint(
         painter: _shader == null
-            ? _PlainPainter(widget.colors, _repaint)
+            ? _PlainPainter(widget.colors, widget.dark, _repaint)
             : _ShaderPainter(
                 shader: _shader!,
                 slots: _slots,
+                dark: oklab(widget.dark),
                 phase: () => _phase,
                 repaint: _repaint,
               ),
@@ -225,12 +301,16 @@ class _ShaderPainter extends CustomPainter {
     required this.shader,
     required this.slots,
     required this.phase,
+    required this.dark,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
   final ui.FragmentShader shader;
   final List<_Slot> slots;
   final double Function() phase;
+
+  /// [EventGradient.dark] in OKLab.
+  final (double, double, double) dark;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -247,53 +327,49 @@ class _ShaderPainter extends CustomPainter {
       put(lab.$3);
       put(slot?.weight ?? 0);
     }
+    put(dark.$1);
+    put(dark.$2);
+    put(dark.$3);
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
   }
 
   @override
-  bool shouldRepaint(covariant _ShaderPainter old) => old.shader != shader;
+  bool shouldRepaint(covariant _ShaderPainter old) =>
+      old.shader != shader || old.dark != dark;
 }
 
 /// Without the shader: the same colours as a still radial gradient.
 class _PlainPainter extends CustomPainter {
-  _PlainPainter(this.colors, Listenable repaint) : super(repaint: repaint);
+  _PlainPainter(this.colors, this.dark, Listenable repaint)
+    : super(repaint: repaint);
 
   final List<Color> colors;
+  final Color dark;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final stops = colors.isEmpty ? [EventPageStyle.dark] : colors;
+    final stops = colors.isEmpty ? [dark] : colors;
     canvas.drawRect(
       rect,
       Paint()
         ..shader = RadialGradient(
           center: const Alignment(0.6, -0.8),
           radius: 1.4,
-          colors: [...stops, EventPageStyle.dark],
+          colors: [...stops, dark],
         ).createShader(rect),
     );
   }
 
   @override
-  bool shouldRepaint(covariant _PlainPainter old) => old.colors != colors;
+  bool shouldRepaint(covariant _PlainPainter old) =>
+      old.colors != colors || old.dark != dark;
 }
 
-/// [color] in OKLab (L, a, b): the shader mixes there, so a blend of two
-/// colours keeps its lightness and hue instead of going grey.
-(double, double, double) oklab(Color color) {
-  double linear(double c) =>
-      c <= 0.04045 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
-  final r = linear(color.r);
-  final g = linear(color.g);
-  final b = linear(color.b);
-  double cbrt(double v) => math.pow(math.max(v, 0), 1 / 3).toDouble();
-  final l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  final m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  final s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return (
-    0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
-    1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
-  );
+bool _listEquals(List<Color> a, List<Color> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
