@@ -22,33 +22,180 @@ class OwnEventColor extends InheritedWidget {
   bool updateShouldNotify(OwnEventColor oldWidget) => oldWidget.color != color;
 }
 
-/// A friend's event keeps the friend's colour; the user's take [own].
-Color eventColor(CalendarEvent event, Color own) => event.color ?? own;
+/// A friend's event keeps the friend's colour; the user's take [own]. An
+/// invite's single colour is the middle of its gradient.
+Color eventColor(CalendarEvent event, Color own) {
+  final invite = event.invite;
+  if (invite != null) return mixedColor(invite.colors);
+  return event.color ?? own;
+}
 
 /// Text on an event: white on dark colours, black on light ones.
 Color eventInk(Color background) => avatarInkFor(background);
 
+/// Text on [event] as it is drawn: an unanswered invite is see-through
+/// over black, so its text is judged against the darker colour.
+Color eventInkFor(CalendarEvent event, Color own) {
+  final color = eventColor(event, own);
+  final invite = event.invite;
+  return eventInk(
+    invite != null && invite.pending
+        ? Color.lerp(Colors.black, color, pendingInviteAlpha)!
+        : color,
+  );
+}
+
+/// The average of [colors], for text and bands over a gradient.
+Color mixedColor(List<Color> colors) {
+  if (colors.isEmpty) return calendarEventColor;
+  var r = 0.0, g = 0.0, b = 0.0;
+  for (final color in colors) {
+    r += color.r;
+    g += color.g;
+    b += color.b;
+  }
+  final n = colors.length;
+  return Color.from(alpha: 1, red: r / n, green: g / n, blue: b / n);
+}
+
+/// How much of the colour an invite without the user's answer keeps.
+const pendingInviteAlpha = 0.4;
+
+/// The fill of an event: its colour, or for an invite the colours of the
+/// people in it, left to right (design-system §9.8). An invite the user has
+/// not answered is see-through; [PendingInviteRim] goes around it.
+BoxDecoration eventFill(
+  CalendarEvent event,
+  Color own, {
+  BorderRadius? radius,
+}) {
+  final invite = event.invite;
+  if (invite == null || invite.colors.length < 2) {
+    final color = eventColor(event, own);
+    return BoxDecoration(
+      color: invite != null && invite.pending
+          ? color.withValues(alpha: pendingInviteAlpha)
+          : color,
+      borderRadius: radius,
+    );
+  }
+  final alpha = invite.pending ? pendingInviteAlpha : 1.0;
+  return BoxDecoration(
+    borderRadius: radius,
+    gradient: LinearGradient(
+      colors: [for (final c in invite.colors) c.withValues(alpha: alpha)],
+    ),
+  );
+}
+
 /// An event picked up or being drawn: a soft glow in its own colour and an
-/// edge a shade lighter, instead of a foreign outline.
+/// edge a shade lighter, instead of a foreign outline. With [colors], an
+/// invite being drawn: the gradient of the people in it.
 BoxDecoration liftedEventDecoration(
   BorderRadius radius, {
   Color color = calendarEventColor,
+  List<Color>? colors,
 }) {
+  final gradient = colors != null && colors.length > 1 ? colors : null;
+  final base = gradient == null ? color : mixedColor(gradient);
   return BoxDecoration(
-    color: color,
+    color: gradient == null ? base : null,
+    gradient: gradient == null ? null : LinearGradient(colors: gradient),
     borderRadius: radius,
     border: Border.all(
-      color: Color.lerp(color, Colors.white, 0.28)!,
+      color: Color.lerp(base, Colors.white, 0.28)!,
       width: 1.5,
     ),
     boxShadow: [
       BoxShadow(
-        color: color.withValues(alpha: 0.55),
+        color: base.withValues(alpha: 0.55),
         blurRadius: 18,
         spreadRadius: 1,
       ),
     ],
   );
+}
+
+/// What makes an event an invite on the calendar (lib/features/invites).
+@immutable
+class EventInvite {
+  const EventInvite({
+    required this.id,
+    required this.colors,
+    this.pending = false,
+    this.mine = false,
+  });
+
+  final String id;
+
+  /// The people in it, organizer first: the event's gradient.
+  final List<Color> colors;
+
+  /// The user has not answered yet.
+  final bool pending;
+
+  /// The user organizes it.
+  final bool mine;
+}
+
+/// A dashed edge around an invite the user has not answered, in the colour
+/// of its middle.
+class PendingInviteRim extends StatelessWidget {
+  const PendingInviteRim({
+    required this.color,
+    required this.radius,
+    required this.child,
+    super.key,
+  });
+
+  final Color color;
+  final double radius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    foregroundPainter: _DashedRim(color: color, radius: radius),
+    child: child,
+  );
+}
+
+class _DashedRim extends CustomPainter {
+  const _DashedRim({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  static const _dash = 4.0;
+  static const _gap = 3.0;
+  static const _width = 1.5;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final rect = (Offset.zero & size).deflate(_width / 2);
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          rect,
+          Radius.circular(radius.clamp(0, rect.shortestSide / 2).toDouble()),
+        ),
+      );
+    final paint = Paint()
+      ..color = Color.lerp(color, Colors.white, 0.35)!
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _width;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        canvas.drawPath(metric.extractPath(distance, distance + _dash), paint);
+        distance += _dash + _gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRim old) =>
+      old.color != color || old.radius != radius;
 }
 
 /// Shortest timed event; a shorter or inverted span grows to this.
@@ -65,6 +212,7 @@ class CalendarEvent {
     this.seriesId,
     this.color,
     this.ownerId,
+    this.invite,
   });
 
   final String id;
@@ -86,6 +234,9 @@ class CalendarEvent {
   /// The friend this event belongs to; null for the user's own events.
   final int? ownerId;
 
+  /// Set when the event is an invite with other people in it.
+  final EventInvite? invite;
+
   String get sourceId => seriesId ?? id;
 
   CalendarEvent copyWith({
@@ -100,6 +251,7 @@ class CalendarEvent {
     bool clearSeries = false,
     Color? color,
     int? ownerId,
+    EventInvite? invite,
   }) {
     return CalendarEvent(
       id: id ?? this.id,
@@ -111,6 +263,7 @@ class CalendarEvent {
       seriesId: clearSeries ? null : seriesId ?? this.seriesId,
       color: color ?? this.color,
       ownerId: ownerId ?? this.ownerId,
+      invite: invite ?? this.invite,
     );
   }
 }
@@ -451,6 +604,7 @@ class CalendarEventIndex {
       seriesId: event.id,
       color: event.color,
       ownerId: event.ownerId,
+      invite: event.invite,
     );
   }
 }

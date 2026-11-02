@@ -8,6 +8,9 @@ final monthBarSnapThreshold = (monthRowLevels[0] + monthRowLevels[1]) / 2;
 
 final monthDetailThreshold = (monthRowLevels[1] + monthRowLevels[2]) / 2;
 
+/// From here chips are tall, with the title on two lines.
+final monthFullThreshold = (monthRowLevels[2] + monthRowLevels[3]) / 2;
+
 /// The day number's circle sits [dayNumberTop] below the week line and the
 /// first chip as far below the circle: equal space on both sides of "today".
 const dayNumberTop = 6.0;
@@ -23,12 +26,16 @@ class EventDensity {
     required this.showTime,
     required this.itemHeight,
     required this.gap,
+    this.titleLines = 1,
   });
 
   final bool bars;
   final bool showTime;
   final double itemHeight;
   final double gap;
+
+  /// Two in the tallest month: the title wraps, as in Apple Calendar.
+  final int titleLines;
 
   bool get showTitle => !bars;
 
@@ -43,6 +50,7 @@ class EventDensity {
       showTime: b.showTime,
       itemHeight: a.itemHeight + (b.itemHeight - a.itemHeight) * t,
       gap: a.gap + (b.gap - a.gap) * t,
+      titleLines: b.titleLines,
     );
   }
 
@@ -52,10 +60,11 @@ class EventDensity {
       other.bars == bars &&
       other.showTime == showTime &&
       other.itemHeight == itemHeight &&
-      other.gap == gap;
+      other.gap == gap &&
+      other.titleLines == titleLines;
 
   @override
-  int get hashCode => Object.hash(bars, showTime, itemHeight, gap);
+  int get hashCode => Object.hash(bars, showTime, itemHeight, gap, titleLines);
 }
 
 const barDensity = EventDensity(
@@ -79,6 +88,14 @@ const detailDensity = EventDensity(
   gap: 3,
 );
 
+const fullDensity = EventDensity(
+  bars: false,
+  showTime: true,
+  itemHeight: 46,
+  gap: 4,
+  titleLines: 2,
+);
+
 /// Friends' chips carry no titles, so they stop at the middle density.
 EventDensity friendDensityFor(EventDensity density) =>
     density.itemHeight > titleDensity.itemHeight ? titleDensity : density;
@@ -86,7 +103,8 @@ EventDensity friendDensityFor(EventDensity density) =>
 EventDensity densityForRowHeight(double height) {
   if (height <= monthBarSnapThreshold) return barDensity;
   if (height < monthDetailThreshold) return titleDensity;
-  return detailDensity;
+  if (height < monthFullThreshold) return detailDensity;
+  return fullDensity;
 }
 
 int monthEventCapacity(double rowHeight, EventDensity density) {

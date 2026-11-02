@@ -9,7 +9,7 @@ import 'package:druna_app/models/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:progressive_blur/progressive_blur.dart';
+import 'package:druna_app/shared/ui/edge_blur.dart';
 
 /// A vertical pull of this many points takes the mode all the way across.
 const dayModePullRange = 280.0;
@@ -39,6 +39,7 @@ class DayDetail extends StatefulWidget {
     required this.onShowFriends,
     required this.onModeDrag,
     required this.onModeSettle,
+    this.inviteColors,
     this.metrics,
     this.onEventTap,
     this.onCreateRange,
@@ -74,6 +75,9 @@ class DayDetail extends StatefulWidget {
 
   /// The pull let go, with its speed in modes per second.
   final ValueChanged<double> onModeSettle;
+
+  /// Colours of an invite drawn in friends' rows ([DayTimeline]).
+  final List<Color>? inviteColors;
 
   @override
   State<DayDetail> createState() => _DayDetailState();
@@ -241,9 +245,9 @@ class _DayDetailState extends State<DayDetail>
                 // Under the friends column the timeline blurs towards the
                 // screen edge (`progressive_blur` blurs its child).
                 Positioned.fill(
-                  child: ProgressiveBlurWidget(
+                  child: EdgeBlur(
                     sigma: FriendColumnStyle.blurSigma,
-                    linearGradientBlur: LinearGradientBlur(
+                    gradient: LinearGradientBlur(
                       values: const [1, 0],
                       stops: [
                         0,
@@ -266,6 +270,7 @@ class _DayDetailState extends State<DayDetail>
                       onMoveEvent: widget.onMoveEvent,
                       mode: widget.mode,
                       friends: view,
+                      inviteColors: widget.inviteColors,
                     ),
                   ),
                 ),

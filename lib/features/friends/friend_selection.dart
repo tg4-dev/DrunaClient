@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:druna_app/app/app_settings.dart';
 import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/foundation.dart';
 
 /// Which friends the calendar shows, and how often each was picked. Kept
@@ -110,4 +111,4 @@ class FriendSelection extends ChangeNotifier {
 
 /// Name to show, falling back to the username.
 String friendName(FriendInfo friend) =>
-    friend.name.trim().isEmpty ? friend.username : friend.name.trim();
+    friend.name.trim().isEmpty ? friend.username : shownName(friend.name);

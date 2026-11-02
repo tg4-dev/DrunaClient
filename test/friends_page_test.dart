@@ -14,32 +14,32 @@ void main() {
   testWidgets('shows two demo friends and an incoming request', (tester) async {
     await pumpPage(tester, DemoFriendsSource(delay: Duration.zero));
 
-    expect(find.text('Алина Смирнова'), findsOneWidget);
-    expect(find.text('Марк Ли'), findsOneWidget);
+    expect(find.text('АЛИНА СМИРНОВА'), findsOneWidget);
+    expect(find.text('МАРК ЛИ'), findsOneWidget);
     expect(find.text('12 друзей'), findsOneWidget);
     expect(find.text('Заявки'), findsOneWidget);
-    expect(find.text('Ника Орлова'), findsOneWidget);
+    expect(find.text('НИКА ОРЛОВА'), findsOneWidget);
   });
 
   testWidgets('✓ turns the request into a friend', (tester) async {
     await pumpPage(tester, DemoFriendsSource(delay: Duration.zero));
 
-    await tester.tap(find.bySemanticsLabel('Принять заявку от Ника Орлова'));
+    await tester.tap(find.bySemanticsLabel('Принять заявку от НИКА ОРЛОВА'));
     await tester.pumpAndSettle();
 
     expect(find.text('13 друзей'), findsOneWidget);
     expect(find.text('Заявки'), findsNothing);
-    expect(find.text('Ника Орлова'), findsOneWidget);
+    expect(find.text('НИКА ОРЛОВА'), findsOneWidget);
   });
 
   testWidgets('✕ drops the request', (tester) async {
     await pumpPage(tester, DemoFriendsSource(delay: Duration.zero));
 
-    await tester.tap(find.bySemanticsLabel('Отклонить заявку от Ника Орлова'));
+    await tester.tap(find.bySemanticsLabel('Отклонить заявку от НИКА ОРЛОВА'));
     await tester.pumpAndSettle();
 
     expect(find.text('12 друзей'), findsOneWidget);
-    expect(find.text('Ника Орлова'), findsNothing);
+    expect(find.text('НИКА ОРЛОВА'), findsNothing);
   });
 
   testWidgets('search finds people and sends a request', (tester) async {
@@ -49,8 +49,8 @@ void main() {
     await tester.pump(FriendsStyle.searchDebounce);
     await tester.pumpAndSettle();
 
-    expect(find.text('Максим Белов'), findsOneWidget);
-    await tester.tap(find.bySemanticsLabel('Добавить Максим Белов в друзья'));
+    expect(find.text('МАКСИМ БЕЛОВ'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Добавить МАКСИМ БЕЛОВ в друзья'));
     await tester.pumpAndSettle();
     expect(find.text('Заявка отправлена'), findsOneWidget);
   });

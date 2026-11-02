@@ -13,7 +13,12 @@ export 'package:druna_app/features/calendar/chip_motion.dart'
     show chipFoldGap, friendsFoldAt, myFoldAt;
 
 /// Month chips are pills: fully rounded at every density.
-double monthChipRadius(EventDensity density) => density.itemHeight / 2;
+/// Pills, except the tall two-line chips: a pill that tall would round
+/// the text away.
+double monthChipRadius(EventDensity density) =>
+    math.min(density.itemHeight / 2, monthChipMaxRadius);
+
+const monthChipMaxRadius = 14.0;
 
 /// Room for the title inside a pill, clear of its round ends.
 double monthChipPadding(EventDensity density) =>
@@ -166,6 +171,7 @@ class MonthWeekGrid extends StatelessWidget {
                 mode: mode,
                 rowHeight: size.height,
                 columnWidth: columnWidth,
+                onEventTap: onEventTap,
               );
         return Stack(
           clipBehavior: Clip.hardEdge,
@@ -221,9 +227,12 @@ class MonthWeekGrid extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // Friends' busy time takes no taps; the invites among
+                      // it open their page ([_FriendChips]).
                       if (friendChips != null)
                         Positioned.fill(
                           child: IgnorePointer(
+                            ignoring: !friendsShown,
                             child: Opacity(
                               opacity: t <= 0 ? 0 : 1,
                               child: ClipRect(child: friendChips),
@@ -437,7 +446,9 @@ class _WeekLayer {
         BandChip(
           left: first * columnWidth + (before ? 0 : 2),
           right: (last + 1) * columnWidth - (after ? 0 : 2),
-          color: event.color ?? calendarEventColor,
+          color: event.invite != null
+              ? mixedColor(event.invite!.colors)
+              : event.color ?? calendarEventColor,
         ),
       );
     }
@@ -628,6 +639,7 @@ class _FriendChips extends StatefulWidget {
     required this.mode,
     required this.rowHeight,
     required this.columnWidth,
+    this.onEventTap,
   });
 
   final _WeekLayer layer;
@@ -635,6 +647,9 @@ class _FriendChips extends StatefulWidget {
   final ValueListenable<double> mode;
   final double rowHeight;
   final double columnWidth;
+
+  /// For the invites among friends' busy time.
+  final void Function(CalendarEvent event, Rect rect)? onEventTap;
 
   @override
   State<_FriendChips> createState() => _FriendChipsState();
@@ -758,12 +773,17 @@ class _FriendChipsState extends State<_FriendChips> {
             child: child,
           ),
         ),
-        child: _MonthEventBlock(
-          event: item.event,
-          density: density,
-          continuesBefore: item.continuesBefore,
-          continuesAfter: item.continuesAfter,
-          showTitle: false,
+        // Busy time is only a colour; an invite has a title and opens.
+        child: IgnorePointer(
+          ignoring: item.event.invite == null || leaving,
+          child: _MonthEventBlock(
+            event: item.event,
+            density: density,
+            continuesBefore: item.continuesBefore,
+            continuesAfter: item.continuesAfter,
+            showTitle: item.event.invite != null,
+            onTap: item.event.invite == null ? null : widget.onEventTap,
+          ),
         ),
       ),
     );
@@ -916,8 +936,8 @@ class _MonthEventBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = eventColor(event, OwnEventColor.of(context));
-    final ink = eventInk(color);
+    final own = OwnEventColor.of(context);
+    final ink = eventInkFor(event, own);
     final corner = Radius.circular(monthChipRadius(density));
     final radius = BorderRadius.horizontal(
       left: continuesBefore ? Radius.zero : corner,
@@ -938,19 +958,50 @@ class _MonthEventBlock extends StatelessWidget {
         onLongPressStart: onHoldStart == null
             ? null
             : (details) => onHoldStart!(event, details.globalPosition),
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: color, borderRadius: radius),
-          child: density.showTitle && showTitle
-              ? Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: monthChipPadding(density),
-                  ),
-                  child: density.showTime && !event.allDay
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
+        child: _InviteRim(
+          event: event,
+          own: own,
+          radius: monthChipRadius(density),
+          child: DecoratedBox(
+            decoration: eventFill(event, own, radius: radius),
+            child: density.showTitle && showTitle && density.titleLines > 1
+                ? _TallChipText(event: event, ink: ink, density: density)
+                : density.showTitle && showTitle
+                ? Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: monthChipPadding(density),
+                    ),
+                    child: density.showTime && !event.allDay
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                eventDisplayTitle(event),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: ink,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.1,
+                                ),
+                              ),
+                              Text(
+                                clockLabel(event.start),
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: ink,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
                               eventDisplayTitle(event),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -958,39 +1009,104 @@ class _MonthEventBlock extends StatelessWidget {
                                 color: ink,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                height: 1.1,
+                                height: 1,
                               ),
-                            ),
-                            Text(
-                              clockLabel(event.start),
-                              maxLines: 1,
-                              style: TextStyle(
-                                color: ink,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                height: 1.1,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            eventDisplayTitle(event),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: ink,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              height: 1,
                             ),
                           ),
-                        ),
-                )
-              : const SizedBox.expand(),
+                  )
+                : const SizedBox.expand(),
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// The tallest chip: the title on up to two lines, the start time under
+/// it. Clipped and laid out at its own height, so it reads cleanly while the
+/// chip grows into it.
+class _TallChipText extends StatelessWidget {
+  const _TallChipText({
+    required this.event,
+    required this.ink,
+    required this.density,
+  });
+
+  final CalendarEvent event;
+  final Color ink;
+  final EventDensity density;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        minHeight: 0,
+        maxHeight: double.infinity,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            monthChipPadding(density),
+            5,
+            monthChipPadding(density) - 2,
+            0,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                eventDisplayTitle(event),
+                maxLines: density.titleLines,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: ink,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
+                ),
+              ),
+              if (!event.allDay)
+                Text(
+                  clockLabel(event.start),
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: ink.withValues(alpha: 0.8),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    height: 1.15,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The dashed edge of an invite the user has not answered; other events
+/// pass through.
+class _InviteRim extends StatelessWidget {
+  const _InviteRim({
+    required this.event,
+    required this.own,
+    required this.radius,
+    required this.child,
+  });
+
+  final CalendarEvent event;
+  final Color own;
+  final double radius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final invite = event.invite;
+    if (invite == null || !invite.pending) return child;
+    return PendingInviteRim(
+      color: eventColor(event, own),
+      radius: radius,
+      child: child,
     );
   }
 }

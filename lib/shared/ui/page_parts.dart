@@ -1,5 +1,5 @@
 import 'package:druna_app/features/calendar/sheet_style.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 
 /// Pieces shared by the pages on the home plane (friends, settings): the
@@ -93,13 +93,11 @@ class BlockMessage extends StatelessWidget {
             const SizedBox(height: 6),
             Text(body, style: SheetStyle.row),
             if (action != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: CupertinoButton(
-                  padding: const EdgeInsets.only(top: 8),
-                  minimumSize: const Size(44, 44),
-                  onPressed: onAction,
-                  child: Text(action!, style: PageStyle.action),
+              Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: PillButton(text: action, onPressed: onAction),
                 ),
               ),
           ],

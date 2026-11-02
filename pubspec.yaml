@@ -42,6 +42,7 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.5.6
   progressive_blur: ^0.0.2
+  flutter_svg: ^2.3.2
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +54,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  fake_async: ^1.3.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -64,6 +66,39 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # The event page: Unbounded for its title only, Onest for everything
+  # else on it (docs/design-system.md §3). Both OFL.
+  fonts:
+    - family: Unbounded
+      fonts:
+        - asset: assets/fonts/Unbounded-Variable.ttf
+    - family: Onest
+      fonts:
+        - asset: assets/fonts/Onest-Variable.ttf
+    # The avatar letter's fonts (lib/shared/ui/avatar_style.dart,
+    # docs/avatar.md). All OFL, with Cyrillic.
+    - family: PlayfairDisplay
+      fonts:
+        - asset: assets/fonts/avatar/PlayfairDisplay-Variable.ttf
+    - family: Lobster
+      fonts:
+        - asset: assets/fonts/avatar/Lobster-Regular.ttf
+    - family: Oswald
+      fonts:
+        - asset: assets/fonts/avatar/Oswald-Variable.ttf
+    - family: Comfortaa
+      fonts:
+        - asset: assets/fonts/avatar/Comfortaa-Variable.ttf
+
+  # The event page's and the onboarding's moving background
+  # (event_gradient.dart).
+  shaders:
+    - shaders/event_gradient.frag
+
+  # The logo and the onboarding's arrow (lib/shared/ui/brand.dart).
+  assets:
+    - assets/branding/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

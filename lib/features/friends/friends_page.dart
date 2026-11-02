@@ -8,6 +8,8 @@ import 'package:druna_app/shared/ui/action_pill.dart';
 import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/page_parts.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
+import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -21,10 +23,9 @@ abstract final class FriendsStyle {
   static const leave = Duration(milliseconds: 180);
   static const fade = Duration(milliseconds: 140);
 
-  static const name = TextStyle(
-    color: Colors.white,
-    fontSize: 17,
-    fontWeight: FontWeight.w600,
+  /// Bold, like every name in the app (design-system §3).
+  static final name = nameStyle(
+    const TextStyle(color: Colors.white, fontSize: 17),
   );
 
   static const username = TextStyle(
@@ -51,9 +52,6 @@ class FriendsPage extends StatefulWidget {
 class _FriendsPageState extends State<FriendsPage> {
   final _query = TextEditingController();
 
-  /// The page's own messenger: every page of the home plane is mounted at
-  /// once, and a shared one would show the snackbar on all of them.
-  final _messenger = GlobalKey<ScaffoldMessengerState>();
   Timer? _debounce;
 
   List<FriendInfo>? _friends;
@@ -195,14 +193,11 @@ class _FriendsPageState extends State<FriendsPage> {
     final message = error is ApiException
         ? error.message
         : 'Не получилось. Попробуй ещё раз.';
-    _messenger.currentState
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    showToast(context, message, error: true);
   }
 
   @override
-  Widget build(BuildContext context) =>
-      ScaffoldMessenger(key: _messenger, child: _page(context));
+  Widget build(BuildContext context) => _page(context);
 
   Widget _page(BuildContext context) {
     final friends = _friends;
@@ -369,7 +364,7 @@ class _FriendsPageState extends State<FriendsPage> {
 }
 
 String _displayName(FriendInfo person) =>
-    person.name.trim().isEmpty ? person.username : person.name.trim();
+    person.name.trim().isEmpty ? person.username : shownName(person.name);
 
 /// "1 друг", "3 друга", "11 друзей".
 String friendsCountLabel(int count) {
@@ -596,6 +591,7 @@ class _RequestButtons extends StatelessWidget {
           icon: Icons.check_rounded,
           label: 'Принять заявку от $name',
           size: ActionPillSize.compact,
+          filled: true,
           onPressed: enabled ? onAccept : null,
         ),
       ],

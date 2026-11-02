@@ -3,6 +3,8 @@ import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/repeat_rule.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
+import 'package:druna_app/features/event_page/date_grid.dart';
+import 'package:druna_app/features/event_page/picker_scope.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -18,8 +20,23 @@ class EventRepeatBlock extends StatefulWidget {
     required this.rule,
     required this.day,
     required this.onChanged,
+    this.decoration,
+    this.picked = SheetStyle.today,
+    this.pickedInk = Colors.white,
+    this.pickers,
     super.key,
   });
+
+  /// Closes the open wheel or month when the page is tapped elsewhere.
+  final PickerScope? pickers;
+
+  /// The block's background; the event sheet's grey by default. On the
+  /// event page's gradient it is see-through.
+  final BoxDecoration? decoration;
+
+  /// The picked weekdays and the text on them.
+  final Color picked;
+  final Color pickedInk;
 
   final RepeatRule? rule;
 
@@ -37,7 +54,27 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
   FixedExtentScrollController? _unit;
 
   @override
+  void initState() {
+    super.initState();
+    widget.pickers?.addListener(_closePicker);
+  }
+
+  @override
+  void didUpdateWidget(covariant EventRepeatBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pickers != widget.pickers) {
+      oldWidget.pickers?.removeListener(_closePicker);
+      widget.pickers?.addListener(_closePicker);
+    }
+  }
+
+  void _closePicker() {
+    if (_open != null) setState(() => _open = null);
+  }
+
+  @override
   void dispose() {
+    widget.pickers?.removeListener(_closePicker);
     _count?.dispose();
     _unit?.dispose();
     super.dispose();
@@ -108,7 +145,7 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
   Widget build(BuildContext context) {
     final rule = widget.rule;
     return DecoratedBox(
-      decoration: SheetStyle.blockDecoration,
+      decoration: widget.decoration ?? SheetStyle.blockDecoration,
       child: Padding(
         padding: SheetStyle.blockPadding,
         child: Column(
@@ -187,7 +224,7 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
               ),
               Reveal(
                 open: _open == _Open.interval,
-                child: _intervalPicker(rule),
+                child: _keep(_intervalPicker(rule)),
               ),
             ],
           ),
@@ -236,7 +273,7 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
                     ),
                     Reveal(
                       open: _open == _Open.until,
-                      child: _untilPicker(rule),
+                      child: _keep(_untilPicker(rule)),
                     ),
                   ],
                 ),
@@ -259,6 +296,8 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
               key: ValueKey('weekday-$weekday'),
               label: weekdayLabels[weekday - 1],
               selected: selected.contains(weekday),
+              picked: widget.picked,
+              pickedInk: widget.pickedInk,
               onTap: () => _toggleWeekday(rule, weekday),
             ),
         ],
@@ -313,21 +352,25 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
     );
   }
 
+  /// Taps inside an open picker stay there instead of closing it.
+  Widget _keep(Widget picker) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () {},
+    child: picker,
+  );
+
+  /// The event page's month (design-system §9.1); not before the first
+  /// day of the event.
   Widget _untilPicker(RepeatRule rule) {
     final first = dateOnly(widget.day);
     final until = rule.until ?? first;
-    return SizedBox(
-      height: SheetStyle.pickerHeight,
-      child: CupertinoTheme(
-        data: SheetStyle.pickerTheme,
-        child: CupertinoDatePicker(
-          mode: CupertinoDatePickerMode.date,
-          dateOrder: DatePickerDateOrder.dmy,
-          minimumDate: first,
-          initialDateTime: until.isBefore(first) ? first : until,
-          onDateTimeChanged: (value) =>
-              widget.onChanged(rule.copyWith(until: dateOnly(value))),
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: DateGrid(
+        key: const ValueKey('repeat-until-grid'),
+        selected: until.isBefore(first) ? first : until,
+        firstDay: first,
+        onPicked: (day) => widget.onChanged(rule.copyWith(until: day)),
       ),
     );
   }
@@ -469,12 +512,16 @@ class _WeekdayChip extends StatelessWidget {
   const _WeekdayChip({
     required this.label,
     required this.selected,
+    required this.picked,
+    required this.pickedInk,
     required this.onTap,
     super.key,
   });
 
   final String label;
   final bool selected;
+  final Color picked;
+  final Color pickedInk;
   final VoidCallback onTap;
 
   @override
@@ -494,12 +541,12 @@ class _WeekdayChip extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: selected ? SheetStyle.today : SheetStyle.chip,
+            color: selected ? picked : SheetStyle.chip,
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: selected ? pickedInk : Colors.white,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),

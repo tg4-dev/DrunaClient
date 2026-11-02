@@ -101,10 +101,15 @@ class DayEventLayer extends StatelessWidget {
             AnimatedOpacity(
               opacity: event.id == dimmedEventId ? 0.35 : 1,
               duration: const Duration(milliseconds: 160),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: eventColor(event, OwnEventColor.of(context)),
-                  borderRadius: radius,
+              child: _rimmed(
+                event,
+                OwnEventColor.of(context),
+                DecoratedBox(
+                  decoration: eventFill(
+                    event,
+                    OwnEventColor.of(context),
+                    radius: radius,
+                  ),
                 ),
               ),
             ),
@@ -117,6 +122,17 @@ class DayEventLayer extends StatelessWidget {
   Widget _moving(int lane, Widget child) {
     final motion = this.motion;
     return motion == null ? child : motion(lane, child);
+  }
+
+  /// An invite the user has not answered gets a dashed edge.
+  Widget _rimmed(CalendarEvent event, Color own, Widget child) {
+    final invite = event.invite;
+    if (invite == null || !invite.pending) return child;
+    return PendingInviteRim(
+      color: eventColor(event, own),
+      radius: timelineEventRadius.x,
+      child: child,
+    );
   }
 }
 
@@ -209,7 +225,7 @@ class DayTitleOverlay extends StatelessWidget {
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,
                   style: timelineTitleStyle.copyWith(
-                    color: eventInk(eventColor(event, own)),
+                    color: eventInkFor(event, own),
                   ),
                 ),
               ),

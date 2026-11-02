@@ -60,7 +60,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder alinaFinder() => find.bySemanticsLabel('Алина Смирнова');
+  Finder alinaFinder() => find.bySemanticsLabel('АЛИНА СМИРНОВА');
   const hint = 'Выбери друзей, чтобы увидеть их занятость';
 
   testWidgets('opens on friends’ calendar with the friend bar', (tester) async {
@@ -171,7 +171,7 @@ void main() {
     await tester.pumpAndSettle();
     // The page already had friends, so it keeps them and says why.
     expect(find.text('Демо: нет соединения с сервером.'), findsOneWidget);
-    expect(find.text('Марк Ли'), findsWidgets);
+    expect(find.text('МАРК ЛИ'), findsWidgets);
   });
 
   testWidgets('zooming the month never slides the plane', (tester) async {
@@ -202,12 +202,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings-button')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('own-color-10')));
+    await tester.ensureVisible(find.byKey(const ValueKey('color-6')));
+    await tester.tap(find.byKey(const ValueKey('color-6')));
     await tester.pumpAndSettle();
-    expect(settings.ownColorSlot, 10);
+    expect(settings.ownColorSlot, 6);
 
     final calendar = tester.element(find.byType(CalendarScreen));
-    expect(OwnEventColor.of(calendar), avatarPalette[10]);
+    expect(OwnEventColor.of(calendar), avatarPalette[6]);
   });
 
   testWidgets('an open day keeps horizontal swipes for itself', (tester) async {

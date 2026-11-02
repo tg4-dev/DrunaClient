@@ -4,16 +4,27 @@ import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
+import 'package:druna_app/features/invites/invite.dart';
+import 'package:druna_app/features/onboarding/onboarding_flow.dart';
+import 'package:druna_app/features/settings/avatar_tuning_page.dart';
+import 'package:druna_app/features/invites/invites_section.dart';
+import 'package:druna_app/features/invites/invites_store.dart';
 import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
 import 'package:druna_app/shared/ui/page_parts.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
+import 'package:druna_app/shared/ui/top_toast.dart';
+import 'package:druna_app/features/onboarding/onboarding_rules.dart';
+import 'package:druna_app/shared/ui/pill_field.dart';
+import 'package:druna_app/shared/ui/profile_pickers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// "Настройки": the page right of the month. The account, the server the
-/// build talks to, and switches that make testing easier.
+/// The page right of the month: the user's profile on top (name, the
+/// invites, their colour), then the server the build talks to and switches
+/// that make testing easier (design-system §9.3).
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     required this.session,
@@ -21,8 +32,18 @@ class SettingsPage extends StatelessWidget {
     required this.config,
     required this.onResetDemo,
     required this.onResetFriends,
+    this.invites,
+    this.onOpenInvite,
+    this.onResetInvites,
     super.key,
   });
+
+  /// The user's invites for the «События» block; none without it.
+  final InvitesStore? invites;
+  final ValueChanged<String>? onOpenInvite;
+
+  /// Puts the demo invites back as they were at launch.
+  final VoidCallback? onResetInvites;
 
   final SessionController session;
   final AppSettings settings;
@@ -35,10 +56,7 @@ class SettingsPage extends StatelessWidget {
   final VoidCallback onResetFriends;
 
   @override
-  Widget build(BuildContext context) {
-    // Its own messenger: the other pages of the plane are mounted too.
-    return ScaffoldMessenger(child: _page());
-  }
+  Widget build(BuildContext context) => _page();
 
   Widget _page() {
     return Scaffold(
@@ -47,110 +65,378 @@ class SettingsPage extends StatelessWidget {
         bottom: false,
         child: ListenableBuilder(
           listenable: Listenable.merge([session, settings]),
-          builder: (context, _) => ListView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(
-              PageStyle.gutter,
-              8,
-              PageStyle.gutter,
-              40,
-            ),
-            children: [
-              const SizedBox(
-                height: 50,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Настройки', style: PageStyle.title),
+          builder: (context, _) {
+            final own = ownColorFor(settings, session.profile);
+            final invites = this.invites;
+            return ListView(
+              physics: const BouncingScrollPhysics(),
+              // No side margins: the invite shelves run to the screen edges;
+              // everything else is inset by [PageStyle.gutter].
+              padding: const EdgeInsets.only(top: 8, bottom: 40),
+              children: [
+                _inset(
+                  _ProfileHeader(
+                    session: session,
+                    settings: settings,
+                    own: own,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              _AccountSection(session: session, settings: settings),
-              const SizedBox(height: 12),
-              _ServerSection(session: session, config: config),
-              if (settings.allowDemo) ...[
-                const SizedBox(height: 12),
-                BlockSection(
-                  icon: CupertinoIcons.lab_flask_solid,
-                  title: 'Демо-данные',
-                  children: [
-                    _SwitchRow(
-                      title: 'Демо-друзья',
-                      subtitle: '12 друзей и заявка, без сервера',
-                      value: settings.demoFriends,
-                      onChanged: (value) => settings.demoFriends = value,
-                    ),
-                    _SwitchRow(
-                      title: 'Нет сети',
-                      subtitle:
-                          'Демо отвечает ошибкой: проверить экраны ошибок',
-                      value: settings.demoOffline,
-                      onChanged: settings.demoFriends
-                          ? (value) => settings.demoOffline = value
-                          : null,
-                    ),
-                    _SwitchRow(
-                      title: 'Демо-расписания друзей',
-                      subtitle: 'Занятость выбранных друзей в календаре',
-                      value: settings.demoSchedules,
-                      onChanged: (value) => settings.demoSchedules = value,
-                    ),
-                    _ActionRow(
-                      title: 'Сбросить выбор друзей',
-                      subtitle: 'Кто выбран в нижней панели и как часто',
-                      onTap: () {
-                        onResetFriends();
-                        _toast(context, 'Выбор друзей сброшен');
-                      },
-                    ),
-                    _ActionRow(
-                      title: 'Сбросить демо-друзей',
-                      onTap: settings.demoFriends
-                          ? () {
-                              onResetDemo();
-                              _toast(context, 'Демо-друзья сброшены');
-                            }
-                          : null,
-                    ),
-                  ],
+                const SizedBox(height: 28),
+                if (invites != null) ...[
+                  InvitesSection(
+                    store: invites,
+                    me: meAsPerson(session.profile),
+                    own: own,
+                    onOpen: (id) => onOpenInvite?.call(id),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                _inset(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _ServerSection(session: session, config: config),
+                      if (settings.allowDemo) ...[
+                        const SizedBox(height: 12),
+                        BlockSection(
+                          icon: CupertinoIcons.lab_flask_solid,
+                          title: 'Демо-данные',
+                          children: [
+                            _ActionRow(
+                              title: 'Пройти онбординг',
+                              subtitle:
+                                  'Регистрация без сервера, аккаунт не '
+                                  'создаётся; demo@druna.app — вход',
+                              onTap: () => showOnboardingRehearsal(context),
+                            ),
+                            _ActionRow(
+                              title: 'Пройти вход',
+                              subtitle:
+                                  'Любая почта ведёт ко входу; пароль '
+                                  'wrongpass — ошибка',
+                              onTap: () => showOnboardingRehearsal(
+                                context,
+                                signIn: true,
+                              ),
+                            ),
+                            _ActionRow(
+                              title: 'Подгонка аватаров',
+                              subtitle:
+                                  'Для разработчика: шрифты буквы, '
+                                  'docs/avatar.md',
+                              onTap: () => showAvatarTuning(context),
+                            ),
+                            _SwitchRow(
+                              title: 'Демо-друзья',
+                              subtitle: '12 друзей и заявка, без сервера',
+                              value: settings.demoFriends,
+                              onChanged: (value) =>
+                                  settings.demoFriends = value,
+                            ),
+                            _SwitchRow(
+                              title: 'Нет сети',
+                              subtitle:
+                                  'Демо отвечает ошибкой: проверить экраны ошибок',
+                              value: settings.demoOffline,
+                              onChanged: settings.demoFriends
+                                  ? (value) => settings.demoOffline = value
+                                  : null,
+                            ),
+                            _SwitchRow(
+                              title: 'Демо-расписания друзей',
+                              subtitle:
+                                  'Занятость выбранных друзей в календаре',
+                              value: settings.demoSchedules,
+                              onChanged: (value) =>
+                                  settings.demoSchedules = value,
+                            ),
+                            _ActionRow(
+                              title: 'Сбросить выбор друзей',
+                              subtitle:
+                                  'Кто выбран в нижней панели и как часто',
+                              onTap: () {
+                                onResetFriends();
+                                _toast(context, 'Выбор друзей сброшен');
+                              },
+                            ),
+                            _ActionRow(
+                              title: 'Сбросить демо-друзей',
+                              onTap: settings.demoFriends
+                                  ? () {
+                                      onResetDemo();
+                                      _toast(context, 'Демо-друзья сброшены');
+                                    }
+                                  : null,
+                            ),
+                            _ActionRow(
+                              title: 'Сбросить демо-приглашения',
+                              subtitle: 'Приглашения работают с демо-друзьями',
+                              onTap:
+                                  settings.demoFriends && onResetInvites != null
+                                  ? () {
+                                      onResetInvites!();
+                                      _toast(
+                                        context,
+                                        'Демо-приглашения сброшены',
+                                      );
+                                    }
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      BlockSection(
+                        icon: CupertinoIcons.wand_stars,
+                        title: 'Анимации',
+                        children: [
+                          _SwitchRow(
+                            title:
+                                'Замедлить в '
+                                '${AppSettings.slowMotionFactor.round()} раз',
+                            subtitle: 'Чтобы разглядеть переходы',
+                            value: settings.slowMotion,
+                            onChanged: (value) => settings.slowMotion = value,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _LogoutBlock(session: session),
+                    ],
+                  ),
                 ),
               ],
-              const SizedBox(height: 12),
-              BlockSection(
-                icon: CupertinoIcons.wand_stars,
-                title: 'Анимации',
-                children: [
-                  _SwitchRow(
-                    title:
-                        'Замедлить в '
-                        '${AppSettings.slowMotionFactor.round()} раз',
-                    subtitle: 'Чтобы разглядеть переходы',
-                    value: settings.slowMotion,
-                    onChanged: (value) => settings.slowMotion = value,
-                  ),
-                ],
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
+Widget _inset(Widget child) => Padding(
+  padding: const EdgeInsets.symmetric(horizontal: PageStyle.gutter),
+  child: child,
+);
+
 void _toast(BuildContext context, String message) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  showToast(context, message);
 }
 
 String _errorText(Object error) =>
     error is ApiException ? error.message : 'Не получилось';
 
-class _AccountSection extends StatelessWidget {
-  const _AccountSection({required this.session, required this.settings});
+/// The user on top of the page (design-system §9.3, §9.11): the avatar as
+/// it is, the name in a field of the app's own style, the username and the
+/// email, then the same pickers of font and colour as in the onboarding.
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({
+    required this.session,
+    required this.settings,
+    required this.own,
+  });
 
   final SessionController session;
   final AppSettings settings;
+  final Color own;
+
+  static const _avatar = 120.0;
+  static const _ring = 3.0;
+  static const _ringGap = 4.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = session.profile;
+    final font = ownFontFor(settings);
+    final name = profile == null
+        ? ''
+        : (profile.name.isEmpty ? profile.username : profile.name);
+    const outer = _avatar + (_ring + _ringGap) * 2;
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        children: [
+          TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: Color.lerp(own, Colors.white, 0.55)),
+            duration: ProfilePickerStyle.recolor,
+            builder: (context, ring, child) => Container(
+              width: outer,
+              height: outer,
+              padding: const EdgeInsets.all(_ringGap),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: ring ?? own, width: _ring),
+              ),
+              child: child,
+            ),
+            child: AvatarPreview(
+              color: own,
+              font: font,
+              name: name.isEmpty ? '?' : name,
+              size: _avatar,
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (profile == null)
+            _ActionRow(
+              title: 'Профиль не загружен',
+              subtitle: 'Нажми, чтобы запросить снова',
+              onTap: () async {
+                try {
+                  await session.refreshProfile();
+                } catch (error) {
+                  if (context.mounted) _toast(context, _errorText(error));
+                }
+              },
+            )
+          else ...[
+            _NameField(
+              key: ValueKey('profile-name-${profile.id}'),
+              session: session,
+              name: profile.name,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '@${profile.username}',
+              style: SheetStyle.value.copyWith(fontSize: 15),
+            ),
+            if (profile.email.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(profile.email, style: _subtitle),
+            ],
+          ],
+          const SizedBox(height: 20),
+          FontPicker(
+            name: name.isEmpty ? '?' : name,
+            selected: font,
+            onPick: (font) => settings.ownFontId = font.id,
+          ),
+          const SizedBox(height: 14),
+          ColorPicker(
+            selected:
+                settings.ownColorSlot ??
+                avatarPalette.indexOf(own).clamp(0, avatarPalette.length - 1),
+            onPick: (slot) => settings.ownColorSlot = slot,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The name in the app's field: bold, drawn in capitals. A change shows ✓
+/// at the right; it, or the keyboard's return, saves through the server
+/// (`PATCH /users/me`) or, without one, on the device.
+class _NameField extends StatefulWidget {
+  const _NameField({required this.session, required this.name, super.key});
+
+  final SessionController session;
+  final String name;
+
+  @override
+  State<_NameField> createState() => _NameFieldState();
+}
+
+class _NameFieldState extends State<_NameField> {
+  late final _name = UpperCaseNameController(text: widget.name);
+  final _focus = FocusNode();
+  var _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(() => setState(() {}));
+    _focus.addListener(() => setState(() {}));
+  }
+
+  @override
+  void didUpdateWidget(covariant _NameField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Renamed elsewhere (a refresh): show it unless the user is typing.
+    if (oldWidget.name != widget.name && !_focus.hasFocus) {
+      _name.text = widget.name;
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  bool get _changed => _name.text.trim() != widget.name.trim();
+
+  /// ✓ or «готово»: saves a change; with none, just ends the editing.
+  Future<void> _save() async {
+    if (_busy) return;
+    if (!_changed) {
+      _focus.unfocus();
+      return;
+    }
+    final problem = nameError(_name.text);
+    if (problem != null) {
+      showToast(context, problem, error: true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await widget.session.rename(_name.text);
+      if (!mounted) return;
+      HapticFeedback.selectionClick();
+      _focus.unfocus();
+      showToast(context, 'Имя сохранено');
+    } catch (error) {
+      if (mounted) showToast(context, _errorText(error), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PillField(
+    fieldKey: const ValueKey('profile-name-field'),
+    controller: _name,
+    focusNode: _focus,
+    hint: 'ИМЯ',
+    width: null,
+    style: PillFieldStyle.name,
+    hintStyle: PillFieldStyle.nameHint,
+    keyboardType: TextInputType.name,
+    textCapitalization: TextCapitalization.words,
+    autofillHints: const [AutofillHints.givenName],
+    textInputAction: TextInputAction.done,
+    keepFocus: false,
+    onSubmitted: _save,
+    trailing: _busy
+        ? const CupertinoActivityIndicator(color: Colors.white)
+        : _changed || _focus.hasFocus
+        ? Semantics(
+            button: true,
+            label: _changed ? 'Сохранить имя' : 'Готово',
+            excludeSemantics: true,
+            child: GestureDetector(
+              key: const ValueKey('profile-name-save'),
+              behavior: HitTestBehavior.opaque,
+              onTap: _save,
+              child: const SizedBox.square(
+                dimension: 44,
+                child: Icon(
+                  CupertinoIcons.checkmark_alt,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+          )
+        : null,
+  );
+}
+
+class _LogoutBlock extends StatelessWidget {
+  const _LogoutBlock({required this.session});
+
+  final SessionController session;
 
   Future<void> _logout(BuildContext context) async {
     final confirmed = await confirmAction(
@@ -165,76 +451,16 @@ class _AccountSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profile = session.profile;
-    final own = ownColorFor(settings, profile);
-    return BlockSection(
-      icon: CupertinoIcons.person_crop_circle_fill,
-      title: 'Аккаунт',
-      children: [
-        if (profile == null)
-          _ActionRow(
-            title: 'Профиль не загружен',
-            subtitle: 'Нажми, чтобы запросить снова',
-            onTap: () async {
-              try {
-                await session.refreshProfile();
-              } catch (error) {
-                if (context.mounted) _toast(context, _errorText(error));
-              }
-            },
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                PersonAvatar(
-                  id: profile.id,
-                  name: profile.name,
-                  username: profile.username,
-                  color: own,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        profile.name.isEmpty ? profile.username : profile.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        [
-                          '@${profile.username}',
-                          if (profile.email.isNotEmpty) profile.email,
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _subtitle,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        _ColorPicker(
-          selected: settings.ownColorSlot,
-          current: own,
-          onPick: (slot) => settings.ownColorSlot = slot,
-        ),
-        _ActionRow(
+    return DecoratedBox(
+      decoration: SheetStyle.blockDecoration,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
+        child: _ActionRow(
           title: 'Выйти',
           color: SheetStyle.today,
           onTap: () => _logout(context),
         ),
-      ],
+      ),
     );
   }
 }
@@ -455,95 +681,6 @@ class _SwitchRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// The user's colour: the sixteen of the palette in two rows, the current
-/// one ringed like a picked friend. Repaints the calendar at once.
-class _ColorPicker extends StatelessWidget {
-  const _ColorPicker({
-    required this.selected,
-    required this.current,
-    required this.onPick,
-  });
-
-  /// The picked slot; null while the colour follows the avatar.
-  final int? selected;
-  final Color current;
-  final ValueChanged<int?> onPick;
-
-  static const _dot = 32.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 8, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Мой цвет', style: _title),
-          const Text('Им рисуются мои события и аватар', style: _subtitle),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cell = constraints.maxWidth / 8;
-              return Wrap(
-                children: [
-                  for (var slot = 0; slot < avatarPalette.length; slot++)
-                    SizedBox(
-                      width: cell,
-                      height: cell.clamp(44.0, 56.0),
-                      child: Semantics(
-                        button: true,
-                        selected: avatarPalette[slot] == current,
-                        label: 'Цвет ${slot + 1}',
-                        excludeSemantics: true,
-                        child: GestureDetector(
-                          key: ValueKey('own-color-$slot'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            onPick(slot);
-                          },
-                          child: Center(child: _swatch(avatarPalette[slot])),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          // Dimmed by the row itself while the colour already follows it.
-          _ActionRow(
-            title: 'Как у аватара',
-            subtitle: 'Цвет, который даёт мой аккаунт',
-            onTap: selected == null ? null : () => onPick(null),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _swatch(Color color) {
-    final picked = color == current;
-    return AnimatedContainer(
-      duration: SheetStyle.fade,
-      width: _dot + 8,
-      height: _dot + 8,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: picked
-              ? Color.lerp(color, Colors.white, 0.55)!
-              : Colors.transparent,
-          width: 3,
-        ),
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }

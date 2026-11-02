@@ -1,5 +1,6 @@
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/avatar_style.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
@@ -58,6 +59,7 @@ class AppSettings extends ChangeNotifier {
   static const _demoSchedulesKey = 'settings.demo_schedules';
   static const _slowMotionKey = 'settings.slow_motion';
   static const _ownColorKey = 'settings.own_color';
+  static const _ownFontKey = 'settings.own_font';
 
   /// How much slower every animation runs with [slowMotion].
   static const slowMotionFactor = 5.0;
@@ -73,6 +75,7 @@ class AppSettings extends ChangeNotifier {
   bool _demoSchedules;
   bool _slowMotion = false;
   int? _ownColorSlot;
+  String? _ownFontId;
   bool _disposed = false;
 
   /// Friends come from [DemoFriendsSource] instead of the server.
@@ -90,7 +93,8 @@ class AppSettings extends ChangeNotifier {
 
   /// The colour the user picked for themselves, as a slot of
   /// [avatarPalette]; null — the one their id gives. Kept on this device
-  /// only: the server has no field for it yet.
+  /// only: the server has no field for it yet. A slot of the old palette of
+  /// 16 past its end is dropped.
   int? get ownColorSlot => _ownColorSlot;
 
   set ownColorSlot(int? slot) {
@@ -98,6 +102,16 @@ class AppSettings extends ChangeNotifier {
     _ownColorSlot = valid ? slot : null;
     notifyListeners();
     _storage.setString(_ownColorKey, valid ? '$slot' : '');
+  }
+
+  /// The font of the user's avatar letter ([AvatarFont.id]); null — the
+  /// default. On this device only, like the colour.
+  String? get ownFontId => _ownFontId;
+
+  set ownFontId(String? id) {
+    _ownFontId = id;
+    notifyListeners();
+    _storage.setString(_ownFontKey, id ?? '');
   }
 
   Future<void> load() async {
@@ -112,6 +126,8 @@ class AppSettings extends ChangeNotifier {
     _ownColorSlot = slot != null && slot >= 0 && slot < avatarPalette.length
         ? slot
         : null;
+    final font = await _storage.getString(_ownFontKey);
+    _ownFontId = font == null || font.isEmpty ? null : font;
     if (_disposed) return;
     _applySlowMotion();
     notifyListeners();
@@ -159,3 +175,7 @@ Color ownColorFor(AppSettings settings, UserProfile? profile) {
   if (profile == null) return calendarEventColor;
   return avatarColorFor(id: profile.id, username: profile.username);
 }
+
+/// The user's avatar font: the one they picked, else the default.
+AvatarFont ownFontFor(AppSettings settings) =>
+    avatarFontById(settings.ownFontId);

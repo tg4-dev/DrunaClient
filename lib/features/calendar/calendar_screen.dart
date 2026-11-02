@@ -3,16 +3,18 @@ import 'package:druna_app/features/calendar/day_detail.dart';
 import 'package:druna_app/features/calendar/day_friends.dart';
 import 'package:druna_app/features/calendar/day_timeline.dart';
 import 'package:druna_app/features/calendar/day_title_layout.dart';
-import 'package:druna_app/features/calendar/event_sheet.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
+import 'package:druna_app/features/event_page/event_page.dart';
+import 'package:druna_app/features/event_page/event_subject.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/features/friends/friends_store.dart';
+import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/models/models.dart';
-import 'package:druna_app/shared/ui/glass.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -32,6 +34,9 @@ class CalendarFriends {
     required this.onModeSettle,
     this.me,
     this.schedulesAvailable = true,
+    this.invites,
+    this.onOpenInvite,
+    this.onSendInvite,
   });
 
   final FriendsStore store;
@@ -52,6 +57,17 @@ class CalendarFriends {
   /// The user, for their avatar on top of the open day's column.
   final UserProfile? me;
   final bool schedulesAvailable;
+
+  /// The user's invites as events, in everyone's colours; shown in both
+  /// modes (design-system §9.8).
+  final ValueListenable<List<CalendarEvent>>? invites;
+
+  /// A tap on an invite opens its page.
+  final ValueChanged<String>? onOpenInvite;
+
+  /// Sends a new invite; throws if it failed. Without it a hold in friends'
+  /// calendar makes the user's own event, as before.
+  final Future<void> Function(InviteDraft draft)? onSendInvite;
 }
 
 class CalendarScreen extends StatefulWidget {
@@ -111,6 +127,11 @@ class _CalendarScreenState extends State<CalendarScreen>
   final _leaving = <_Editor>[];
 
   var _reportedBusy = false;
+
+  /// [_events] or friends' busy time with the invites added, rebuilt only
+  /// when either list changes: the month indexes whatever list it gets.
+  final _mine = _Joined();
+  final _theirs = _Joined();
 
   /// Two fingers zoom the month: the plane must not slide meanwhile.
   var _pinching = false;
@@ -205,6 +226,10 @@ class _CalendarScreenState extends State<CalendarScreen>
       day: day,
       now: DateTime.now(),
     );
+    if (_inviting) {
+      _openInviteEditor(event);
+      return;
+    }
     setState(() => _events = [..._events, event]);
     _openEditor(event, isNew: true);
   }
@@ -218,8 +243,56 @@ class _CalendarScreenState extends State<CalendarScreen>
       start: start,
       end: end,
     );
+    if (_inviting) {
+      _openInviteEditor(event);
+      return;
+    }
     setState(() => _events = [..._events, event]);
     _openEditor(event, isNew: true);
+  }
+
+  /// The picked friends, in the order they were picked.
+  List<FriendInfo> _invitees() {
+    final friends = widget.friends;
+    final all = friends?.store.friends;
+    if (friends == null || all == null) return const [];
+    final byId = {for (final friend in all) friend.id: friend};
+    return [for (final id in friends.selection.selected) ?byId[id]];
+  }
+
+  /// In friends' calendar with friends picked, a hold invites them instead
+  /// of making the user's own event.
+  bool get _inviting =>
+      widget.friends?.onSendInvite != null &&
+      widget.mode.value > calendarModeHalfway &&
+      _invitees().isNotEmpty;
+
+  /// The user's colour, then each picked friend's: an invite's gradient.
+  List<Color>? _inviteColors(BuildContext context) {
+    if (widget.friends?.onSendInvite == null) return null;
+    final invitees = _invitees();
+    if (invitees.isEmpty) return null;
+    return [
+      OwnEventColor.of(context),
+      for (final person in invitees)
+        avatarColorFor(id: person.id, username: person.username),
+    ];
+  }
+
+  void _openInviteEditor(CalendarEvent event) {
+    if (widget.friends?.onSendInvite == null) return;
+    setState(() => _editor = _Editor(NewInvite(event, _invitees())));
+  }
+
+  /// An invite opens its page over the plane; the user's own events open
+  /// here, to view.
+  void _onEventTap(CalendarEvent event, Rect rect) {
+    final invite = event.invite;
+    if (invite != null) {
+      widget.friends?.onOpenInvite?.call(invite.id);
+      return;
+    }
+    _openEditor(event, isNew: false);
   }
 
   /// Moving an occurrence on the timeline moves its series by the same time.
@@ -247,7 +320,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   void _openEditor(CalendarEvent event, {required bool isNew}) {
-    setState(() => _editor = _Editor(event, isNew: isNew));
+    setState(() => _editor = _Editor(OwnEvent(event, isNew: isNew)));
   }
 
   void _dropEditor(_Editor editor) {
@@ -255,11 +328,20 @@ class _CalendarScreenState extends State<CalendarScreen>
     _leaving.remove(editor);
   }
 
+  /// The page is leaving: it keeps playing its exit, but no longer holds
+  /// the screen.
+  void _dismissEditor(_Editor editor) {
+    if (!identical(_editor, editor)) return;
+    _editor = null;
+    _leaving.add(editor);
+  }
+
   /// An edited occurrence is stored as its series, moved back to the series'
-  /// first day by as many days as the occurrence was from it. A sheet saved by
-  /// a swipe keeps playing its exit, but no longer holds the screen.
+  /// first day by as many days as the occurrence was from it.
   void _saveEditor(_Editor editor, CalendarEvent updated) {
-    final opened = editor.event;
+    final subject = editor.subject;
+    if (subject is! OwnEvent) return;
+    final opened = subject.event;
     var stored = updated;
     if (updated.seriesId != null) {
       CalendarEvent? source;
@@ -282,22 +364,19 @@ class _CalendarScreenState extends State<CalendarScreen>
         for (final item in _events)
           if (item.id == stored.id) stored else item,
       ];
-      if (identical(_editor, editor)) {
-        _editor = null;
-        _leaving.add(editor);
-      }
     });
   }
 
-  void _cancelEditor(_Editor editor) {
+  /// Removes the event, with its whole series.
+  void _deleteEditor(_Editor editor) {
+    final subject = editor.subject;
+    if (subject is! OwnEvent) return;
+    final id = subject.event.sourceId;
     setState(() {
-      if (editor.isNew) {
-        _events = [
-          for (final item in _events)
-            if (item.id != editor.event.id) item,
-        ];
-      }
-      _dropEditor(editor);
+      _events = [
+        for (final item in _events)
+          if (item.id != id) item,
+      ];
     });
   }
 
@@ -342,23 +421,26 @@ class _CalendarScreenState extends State<CalendarScreen>
     // Each layer is built once per state change and handed to the animation
     // as a child, so open/close frames only move and fade it.
     final friends = widget.friends;
+    final invites = friends?.invites;
+    final mine = _mine.of(_events, invites?.value);
     MonthCalendar monthWith(List<CalendarEvent> friendEvents) => MonthCalendar(
       key: _monthKey,
       focus: DateTime.now(),
-      events: _events,
-      friendEvents: friendEvents,
+      events: mine,
+      friendEvents: _theirs.of(friendEvents, invites?.value),
+      inviteColors: _inviteColors(context),
       mode: widget.mode,
       onShowMine: friends?.onShowMine,
       onPinchChanged: (pinching) {
         if (pinching != _pinching) setState(() => _pinching = pinching);
       },
       onDayTap: _open,
-      onEventTap: (event, rect) => _openEditor(event, isNew: false),
+      onEventTap: _onEventTap,
       onCreate: _createEvent,
       onMove: _moveEvent,
       leading: widget.onOpenFriends == null
           ? null
-          : GlassButton(
+          : PillButton(
               key: const ValueKey('friends-button'),
               icon: CupertinoIcons.person_2,
               label: 'Друзья',
@@ -366,7 +448,7 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
       trailing: widget.onOpenSettings == null
           ? null
-          : GlassButton(
+          : PillButton(
               key: const ValueKey('settings-button'),
               icon: CupertinoIcons.gear_alt,
               label: 'Настройки',
@@ -379,12 +461,22 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
     final Widget month = friends == null
         ? monthWith(const [])
-        : ValueListenableBuilder<List<CalendarEvent>>(
-            valueListenable: friends.events,
-            builder: (context, events, _) => monthWith(events),
+        : ListenableBuilder(
+            // The picked friends set an invite's colours; invites come and
+            // go by themselves.
+            listenable: Listenable.merge([
+              friends.events,
+              friends.selection,
+              friends.store,
+              ?invites,
+            ]),
+            builder: (context, _) => monthWith(friends.events.value),
           );
     return Scaffold(
       backgroundColor: Colors.black,
+      // The calendar has no fields; the event page over it handles the
+      // keyboard itself and keeps its gradient running under it.
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           AnimatedBuilder(
@@ -456,12 +548,13 @@ class _CalendarScreenState extends State<CalendarScreen>
               veil: _veil,
               week: from,
               day: day,
-              events: _events,
+              events: mine,
+              inviteColors: _inviteColors(context),
               metrics: _dayMetrics,
               friends: friends,
               mode: widget.mode,
               onVisibleDay: (next) => _visibleDay = next,
-              onEventTap: (event, rect) => _openEditor(event, isNew: false),
+              onEventTap: _onEventTap,
               onCreateRange: _createRange,
               onMoveEvent: _moveEventTo,
               onClose: _close,
@@ -475,11 +568,13 @@ class _CalendarScreenState extends State<CalendarScreen>
           for (final editor in [..._leaving, ?_editor])
             Positioned.fill(
               key: editor.key,
-              child: EventDurationSheet(
-                event: editor.event,
-                leaving: !identical(editor, _editor),
+              child: EventPage(
+                subject: editor.subject,
+                me: meAsPerson(widget.friends?.me),
                 onSave: (updated) => _saveEditor(editor, updated),
-                onCancel: () => _cancelEditor(editor),
+                onDelete: () => _deleteEditor(editor),
+                onSendInvite: widget.friends?.onSendInvite,
+                onClosing: () => setState(() => _dismissEditor(editor)),
                 onGone: () => setState(() => _dropEditor(editor)),
               ),
             ),
@@ -498,6 +593,7 @@ class _ExpandedDay extends StatelessWidget {
     required this.events,
     required this.metrics,
     required this.friends,
+    this.inviteColors,
     required this.mode,
     required this.onVisibleDay,
     required this.onEventTap,
@@ -518,6 +614,9 @@ class _ExpandedDay extends StatelessWidget {
   final DateTime day;
   final List<CalendarEvent> events;
   final DayScrollMetrics metrics;
+
+  /// Colours of an invite being drawn in friends' calendar.
+  final List<Color>? inviteColors;
 
   /// With friends the day shows their rows and switches modes with the
   /// month (see [DayDetail]); without, only the user's events.
@@ -575,6 +674,7 @@ class _ExpandedDay extends StatelessWidget {
               onShowFriends: friends.onShowFriends,
               onModeDrag: friends.onModeDrag,
               onModeSettle: friends.onModeSettle,
+              inviteColors: inviteColors,
             ),
           );
     final sheet = FadeTransition(
@@ -882,13 +982,29 @@ class _MyAvatar extends StatelessWidget {
   }
 }
 
-/// One open editor sheet; the key keeps its state while it leaves.
+/// One open event page; the key keeps its state while it leaves.
 class _Editor {
-  _Editor(this.event, {required this.isNew});
+  _Editor(this.subject);
 
-  final CalendarEvent event;
-  final bool isNew;
+  final EventSubject subject;
   final key = UniqueKey();
+}
+
+/// Two lists as one, the same list object while neither changes.
+class _Joined {
+  List<CalendarEvent>? _a;
+  List<CalendarEvent>? _b;
+  List<CalendarEvent> _joined = const [];
+
+  List<CalendarEvent> of(List<CalendarEvent> a, List<CalendarEvent>? b) {
+    if (b == null || b.isEmpty) return a;
+    if (!identical(a, _a) || !identical(b, _b)) {
+      _a = a;
+      _b = b;
+      _joined = [...a, ...b];
+    }
+    return _joined;
+  }
 }
 
 /// The bottom blur and shade reach this share of the way from the screen
