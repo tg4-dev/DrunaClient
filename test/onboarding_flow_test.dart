@@ -166,16 +166,16 @@ void main() {
       });
     });
 
-    test('the username is checked 0.8 s after typing stops', () {
+    test('the username is checked 0.2 s after typing stops', () {
       fakeAsync((async) {
         final source = _FakeSource();
         final flow = _controller(source);
         flow.username.text = 'ali';
-        async.elapse(const Duration(milliseconds: 500));
+        async.elapse(const Duration(milliseconds: 150));
         flow.username.text = 'alice';
-        async.elapse(const Duration(milliseconds: 700));
+        async.elapse(const Duration(milliseconds: 150));
         expect(source.checked, isEmpty);
-        async.elapse(const Duration(milliseconds: 100));
+        async.elapse(const Duration(milliseconds: 50));
         expect(source.checked, ['alice']);
         expect(flow.usernameCheck, UsernameCheck.available);
 
@@ -197,12 +197,13 @@ void main() {
         final source = _FakeSource(delay: const Duration(seconds: 1));
         final flow = _controller(source);
         flow.username.text = 'alice';
-        async.elapse(const Duration(milliseconds: 1300));
+        // Checked from 0.2 s, the answer due at 1.2 s.
+        async.elapse(const Duration(milliseconds: 1100));
         expect(flow.usernameCheck, UsernameCheck.checking);
         flow.username.text = 'alice2';
         // The answer for "alice" arrives now and is dropped; the check of
         // "alice2" has not started yet.
-        async.elapse(const Duration(milliseconds: 600));
+        async.elapse(const Duration(milliseconds: 150));
         expect(flow.usernameCheck, UsernameCheck.idle);
         expect(flow.error, isNull);
         flow.dispose();
@@ -306,23 +307,37 @@ void main() {
       );
     });
 
-    test('a known email signs in with its password', () async {
-      var finished = 0;
-      final source = _FakeSource(registered: {'old@mail.ru'});
-      final flow = OnboardingController(
-        source: source,
-        onFinished: () async => finished++,
-      );
-      flow.start();
-      flow.email.text = 'old@mail.ru';
-      await flow.submit();
-      flow.signInPassword.text = 'wrong';
-      await flow.submit();
-      expect(flow.error, 'Неверный пароль');
-      flow.signInPassword.text = 'secret123';
-      await flow.submit();
-      expect(finished, 1);
-      flow.dispose();
+    test('a known email signs in, then «Всё готово» with its avatar', () {
+      fakeAsync((async) {
+        var finished = 0;
+        final source = _FakeSource(registered: {'old@mail.ru'});
+        final flow = OnboardingController(
+          source: source,
+          onFinished: () async => finished++,
+          knownColorSlot: 5,
+          knownFont: avatarFontById('lobster'),
+        );
+        flow.start();
+        flow.email.text = 'old@mail.ru';
+        flow.submit();
+        async.flushMicrotasks();
+        flow.signInPassword.text = 'wrong';
+        flow.submit();
+        async.flushMicrotasks();
+        expect(flow.error, 'Неверный пароль');
+        flow.signInPassword.text = 'secret123';
+        flow.submit();
+        async.flushMicrotasks();
+        // The account's name, this device's colour and font.
+        expect(flow.step, OnboardingStep.done);
+        expect(flow.name.text, 'Аня');
+        expect(flow.colorSlot, 5);
+        expect(flow.profileFont.id, 'lobster');
+        expect(finished, 0);
+        async.elapse(OnboardingController.doneHold);
+        expect(finished, 1);
+        flow.dispose();
+      });
     });
 
     test('a password filled whole signs in by itself, typing does not', () {
@@ -360,6 +375,8 @@ void main() {
         flow.signInPassword.text = 'secret123';
         async.elapse(OnboardingController.autoSignInPause);
         expect(source.signIns, ['wrong-one', 'secret123']);
+        expect(flow.step, OnboardingStep.done);
+        async.elapse(OnboardingController.doneHold);
         expect(finished, 1);
         flow.dispose();
       });
@@ -458,7 +475,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Вход по Email'));
       await tester.pumpAndSettle();
-      expect(find.text('Введи почту,\nотправим код'), findsOneWidget);
+      expect(find.text('Введи почту,\nвсё проверим'), findsOneWidget);
 
       final email = find.byKey(const ValueKey('email-field'));
       expect(
@@ -768,6 +785,87 @@ void main() {
     },
   );
 
+  testWidgets('a long password fits the field whole', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OnboardingFlow(source: _FakeSource(), onFinished: () async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Вход по Email'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('email-field')),
+      'alice@mail.ru',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('code-field')), '123456');
+    await tester.pumpAndSettle();
+    TextField field() =>
+        tester.widget<TextField>(find.byKey(const ValueKey('password')));
+    expect(tester.getSize(find.byKey(const ValueKey('password'))).width, 300);
+
+    // The test font draws every character as a square of its size.
+    await tester.enterText(
+      find.byKey(const ValueKey('password')),
+      'kQ2-vbnx7a-Pwe9',
+    );
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Показать пароль').first);
+    await tester.pump();
+    expect(field().style!.fontSize, lessThan(20));
+    final painter = TextPainter(
+      text: TextSpan(text: 'kQ2-vbnx7a-Pwe9', style: field().style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    expect(painter.width, lessThanOrEqualTo(300 - 88));
+    painter.dispose();
+
+    await tester.enterText(find.byKey(const ValueKey('password')), 'se');
+    await tester.pump();
+    expect(field().style!.fontSize, 20);
+  });
+
+  testWidgets('a sign-in ends on «Всё готово» with the name', (tester) async {
+    var finished = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OnboardingFlow(
+          source: _FakeSource(registered: {'old@mail.ru'}),
+          onFinished: () async => finished++,
+          knownColorSlot: 3,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Вход по Email'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('email-field')),
+      'old@mail.ru',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('sign-in-password')),
+      'secret123',
+    );
+    await tester.pump(OnboardingController.autoSignInPause);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1600));
+    expect(find.text('АНЯ, всё готово', findRichText: true), findsOneWidget);
+    expect(tester.getSize(find.byType(AvatarPreview)).width, 140);
+    final background = tester.widget<OnboardingBackground>(
+      find.byType(OnboardingBackground),
+    );
+    expect(background.accent, avatarPalette[3]);
+    expect(finished, 0);
+    await tester.pump(OnboardingController.doneHold);
+    await tester.pumpAndSettle();
+    expect(finished, 1);
+  });
+
   testWidgets('the arrows stay above a keyboard or sheet of any height', (
     tester,
   ) async {
@@ -1008,11 +1106,15 @@ class _FakeSource implements AuthFlowSource {
   final List<String> signIns = [];
 
   @override
-  Future<void> signIn({required String email, required String password}) async {
+  Future<String?> signIn({
+    required String email,
+    required String password,
+  }) async {
     signIns.add(password);
     if (password != 'secret123') {
       throw const AuthFlowException('Неверный пароль');
     }
+    return 'Аня';
   }
 
   @override

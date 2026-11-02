@@ -460,6 +460,10 @@ class _PasswordFieldState extends State<_PasswordField> {
     hint: widget.hint,
     focusNode: widget.focusNode,
     obscure: _hidden,
+    // As wide as the email, and the text shrinks to fit: iOS's strong
+    // password (20 characters) shows whole, hidden or not.
+    width: OnboardingStyle.emailWidth,
+    fitText: true,
     // A plain keyboard: with «visiblePassword» iOS stops treating the field
     // as a password and offers the email in it.
     keyboardType: TextInputType.text,

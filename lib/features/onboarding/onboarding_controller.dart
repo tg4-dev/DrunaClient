@@ -38,6 +38,8 @@ class OnboardingController extends ChangeNotifier {
     required this.source,
     required this.onFinished,
     this.onProfile,
+    this.knownColorSlot,
+    this.knownFont,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now {
     _onText(email, _emailChanged);
@@ -69,6 +71,11 @@ class OnboardingController extends ChangeNotifier {
   /// profile step ([AppSettings]). Null — nowhere (the rehearsal).
   final void Function(int colorSlot, AvatarFont font)? onProfile;
 
+  /// The colour and the font this device keeps for its user: a sign-in
+  /// shows them on «Всё готово». Null — the defaults.
+  final int? knownColorSlot;
+  final AvatarFont? knownFont;
+
   /// The clock; tests pass their own.
   final DateTime Function() now;
 
@@ -80,7 +87,7 @@ class OnboardingController extends ChangeNotifier {
   static const resendAfter = 60;
 
   /// The username is checked this long after the last keystroke.
-  static const usernamePause = Duration(milliseconds: 800);
+  static const usernamePause = Duration(milliseconds: 200);
 
   /// A password that came whole (autofill, paste) signs in after this: the
   /// dots show in the field first.
@@ -343,8 +350,9 @@ class OnboardingController extends ChangeNotifier {
   Future<void> _submitSignIn() async {
     if (signInPassword.text.isEmpty) return;
     await _request(() async {
+      final String? known;
       try {
-        await source.signIn(
+        known = await source.signIn(
           email: normalizeEmail(email.text),
           password: signInPassword.text,
         );
@@ -358,7 +366,15 @@ class OnboardingController extends ChangeNotifier {
       }
       // The system may now offer to save the email and password.
       TextInput.finishAutofillContext();
-      await onFinished();
+      // «Всё готово» as after a registration, with the account's name and
+      // the avatar this device knows.
+      if (known != null && known.trim().isNotEmpty) name.text = known;
+      final slot = knownColorSlot;
+      if (slot != null && slot >= 0 && slot < avatarPalette.length) {
+        _colorSlot = slot;
+      }
+      _font = knownFont ?? _font;
+      _finish();
     });
   }
 
@@ -405,10 +421,15 @@ class OnboardingController extends ChangeNotifier {
       }
       TextInput.finishAutofillContext();
       onProfile?.call(_colorSlot, _font);
-      _go(OnboardingStep.done);
-      _doneTimer = Timer(doneHold, () {
-        if (!_disposed) onFinished();
-      });
+      _finish();
+    });
+  }
+
+  /// «Всё готово», then the app.
+  void _finish() {
+    _go(OnboardingStep.done);
+    _doneTimer = Timer(doneHold, () {
+      if (!_disposed) onFinished();
     });
   }
 

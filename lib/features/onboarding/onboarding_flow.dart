@@ -17,9 +17,12 @@ import 'package:flutter/services.dart';
 /// ([RehearsalAuthFlowSource]): no account is made, and the end — or ✕ on
 /// the welcome screen — brings the user back where they were. [signIn]:
 /// every email has an account, so the flow goes to the password.
+/// [colorSlot] and [font] — the user's own, for «Всё готово» after it.
 Future<void> showOnboardingRehearsal(
   BuildContext context, {
   bool signIn = false,
+  int? colorSlot,
+  AvatarFont? font,
 }) {
   final navigator = Navigator.of(context);
   return navigator.push(
@@ -30,6 +33,8 @@ Future<void> showOnboardingRehearsal(
         source: RehearsalAuthFlowSource(signInOnly: signIn),
         onFinished: () async => navigator.pop(),
         onClose: navigator.pop,
+        knownColorSlot: colorSlot,
+        knownFont: font,
       ),
       transitionsBuilder: (context, animation, _, child) =>
           FadeTransition(opacity: animation, child: child),
@@ -47,6 +52,8 @@ class OnboardingFlow extends StatefulWidget {
     required this.onFinished,
     this.onClose,
     this.onProfile,
+    this.knownColorSlot,
+    this.knownFont,
     super.key,
   });
 
@@ -62,6 +69,10 @@ class OnboardingFlow extends StatefulWidget {
   /// The account is made: keep the picked colour and font.
   final void Function(int colorSlot, AvatarFont font)? onProfile;
 
+  /// This device's colour and font for its user, shown after a sign-in.
+  final int? knownColorSlot;
+  final AvatarFont? knownFont;
+
   @override
   State<OnboardingFlow> createState() => _OnboardingFlowState();
 }
@@ -72,6 +83,8 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     source: widget.source,
     onFinished: widget.onFinished,
     onProfile: widget.onProfile,
+    knownColorSlot: widget.knownColorSlot,
+    knownFont: widget.knownFont,
   );
   var _step = OnboardingStep.welcome;
   Timer? _keyboardCheck;

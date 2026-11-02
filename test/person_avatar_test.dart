@@ -55,9 +55,8 @@ void main() {
     });
   });
 
-  test('ink is black on light colours and white on dark ones', () {
-    expect(avatarInkFor(const Color(0xFFFFD60A)), Colors.black);
-    expect(avatarInkFor(const Color(0xFF4C5BFF)), Colors.white);
+  test('the letter is white on every colour, yellow too', () {
+    expect(avatarInk, Colors.white);
   });
 
   testWidgets('draws the initial on a 45° gradient of the palette colour', (

@@ -48,9 +48,8 @@ String avatarInitial(String name, [String username = '']) {
   return '?';
 }
 
-/// Black on light colours (yellow, lime), white on the rest.
-Color avatarInkFor(Color background) =>
-    background.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+/// The letter is white on every colour, yellow too (design-system §2.3).
+const avatarInk = Colors.white;
 
 /// A person: a circle in a 45° gradient of their colour and the first letter
 /// of their name in their font (docs/avatar.md). There are no photos
@@ -100,7 +99,7 @@ class PersonAvatar extends StatelessWidget {
           letter: font.cased(avatarInitial(name, username)),
           font: font,
           size: size,
-          color: avatarInkFor(color),
+          color: avatarInk,
         ),
       ),
     );

@@ -83,7 +83,8 @@ Backend находится в отдельном репозитории DrunaSer
   В настройках «Пройти онбординг» проигрывает весь поток без сервера
   (`RehearsalAuthFlowSource`, `showOnboardingRehearsal`), а «Пройти вход» —
   только вход: любая почта ведёт к паролю, `wrongpass` — ошибка.
-  Пароль из автозаполнения отправляется сам через 0.4 с; «забыл пароль?»
+  Пароль из автозаполнения отправляется сам через 0.4 с, после входа —
+  «Всё готово»; «забыл пароль?»
   пока честно не поддерживается.
 - **Имена людей — капсом и жирно** везде (`shownName`, `nameStyle`,
   `NameText`, `lib/shared/ui/person_name.dart`); сервер хранит как введено.
@@ -275,9 +276,11 @@ flutter run \
   `1246EEFE-E718-4DE2-AE96-2DE0DD2EF254`;
 - debug-сборка iOS Simulator успешно собрана, установлена и запущена;
 - `flutter analyze` проходит без замечаний;
-- `flutter test`: на 2026-11-02 — 245 тестов, 244 проходят. Падает
-  `calendar_month_test.dart` «pinned top weeks run on under the top»: он
-  зависит от текущей даты и падает и на коммите `55179fa`, до онбординга. В тестах
+- `flutter test`: на 2026-11-02 — 247 тестов, 245 проходят. Падают
+  `calendar_month_test.dart` «pinned top weeks run on under the top» (зависит
+  от текущей даты, падает и на коммите `55179fa`) и `invites_flow_test.dart`
+  «in friends’ calendar a hold invites the picked friends» (RenderFlex
+  overflow, падает и на `b649972`). В тестах
   progressive blur выключен (`test/flutter_test_config.dart`, `EdgeBlur`).
 
 Android SDK и Chrome в этом окружении не установлены. Android-сборка не была

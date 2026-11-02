@@ -8,6 +8,9 @@ abstract final class PillFieldStyle {
   static const height = 50.0;
   static const fieldWidth = 258.0;
 
+  /// [PillField.fitText] shrinks the text down to this size, no further.
+  static const fitMinSize = 12.0;
+
   /// A field that hugs its text is never narrower than this.
   static const nameWidth = 178.0;
   static const fade = Duration(milliseconds: 180);
@@ -57,6 +60,7 @@ class PillField extends StatelessWidget {
     this.style,
     this.hintStyle,
     this.keepFocus = true,
+    this.fitText = false,
     super.key,
   });
 
@@ -84,10 +88,47 @@ class PillField extends StatelessWidget {
   /// True: return and a tap outside leave the focus where it is.
   final bool keepFocus;
 
+  /// A text too long for the field gets smaller instead of scrolling, down
+  /// to [PillFieldStyle.fitMinSize]: a strong password from the system fits
+  /// whole. Needs a fixed [width].
+  final bool fitText;
+
   static const _slot = 44.0;
 
   @override
   Widget build(BuildContext context) {
+    if (!fitText || width == null) return _build(context, style);
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => _build(context, _fitted(context)),
+    );
+  }
+
+  /// [style], smaller if the text would not fit between the side slots.
+  TextStyle _fitted(BuildContext context) {
+    final base = style ?? PillFieldStyle.field;
+    final length = controller.text.characters.length;
+    if (length == 0) return base;
+    // A hidden password is drawn as dots.
+    final shown = obscure ? '•' * length : controller.text;
+    final painter = TextPainter(
+      text: TextSpan(text: shown, style: base),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final natural = painter.width;
+    painter.dispose();
+    // Room for the cursor at the end.
+    final room = width! - 2 * _slot - 4;
+    if (natural <= room) return base;
+    final size = base.fontSize ?? PillFieldStyle.field.fontSize!;
+    return base.copyWith(
+      fontSize: (size * room / natural).clamp(PillFieldStyle.fitMinSize, size),
+    );
+  }
+
+  Widget _build(BuildContext context, TextStyle? style) {
     final field = TextField(
       key: fieldKey,
       controller: controller,

@@ -94,6 +94,8 @@ class _DrunaAppState extends State<DrunaApp> {
             SessionState.signedOut => OnboardingFlow(
               source: _authFlowSource(),
               onFinished: session.adopt,
+              knownColorSlot: settings.ownColorSlot,
+              knownFont: ownFontFor(settings),
               onProfile: (slot, font) {
                 settings
                   ..ownColorSlot = slot

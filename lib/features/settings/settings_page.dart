@@ -107,7 +107,11 @@ class SettingsPage extends StatelessWidget {
                               subtitle:
                                   'Регистрация без сервера, аккаунт не '
                                   'создаётся; demo@druna.app — вход',
-                              onTap: () => showOnboardingRehearsal(context),
+                              onTap: () => showOnboardingRehearsal(
+                                context,
+                                colorSlot: settings.ownColorSlot,
+                                font: ownFontFor(settings),
+                              ),
                             ),
                             _ActionRow(
                               title: 'Пройти вход',
@@ -117,6 +121,8 @@ class SettingsPage extends StatelessWidget {
                               onTap: () => showOnboardingRehearsal(
                                 context,
                                 signIn: true,
+                                colorSlot: settings.ownColorSlot,
+                                font: ownFontFor(settings),
                               ),
                             ),
                             _ActionRow(

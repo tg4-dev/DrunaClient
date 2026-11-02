@@ -1,6 +1,5 @@
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/repeat_rule.dart';
-import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 
 /// The user's events before their profile (and so their colour) is known.
@@ -31,7 +30,8 @@ Color eventColor(CalendarEvent event, Color own) {
 }
 
 /// Text on an event: white on dark colours, black on light ones.
-Color eventInk(Color background) => avatarInkFor(background);
+Color eventInk(Color background) =>
+    background.computeLuminance() > 0.5 ? Colors.black : Colors.white;
 
 /// Text on [event] as it is drawn: an unanswered invite is see-through
 /// over black, so its text is judged against the darker colour.
