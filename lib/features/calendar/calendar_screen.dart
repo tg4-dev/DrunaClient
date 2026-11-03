@@ -8,6 +8,8 @@ import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
+import 'package:druna_app/features/calendar_sync/calendar_sync_sheet.dart';
 import 'package:druna_app/features/event_page/event_page.dart';
 import 'package:druna_app/features/event_page/event_subject.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
@@ -17,6 +19,7 @@ import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -82,9 +85,14 @@ class CalendarScreen extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenFriends,
     this.friends,
+    this.sync,
     this.mode = myEventsMode,
     super.key,
   });
+
+  /// The device's calendar: its events among the user's, the user's own
+  /// mirrored to it, and its menu behind "Мои события" (§9.12).
+  final CalendarSync? sync;
 
   /// Without it the calendar shows only the user's events and no bar.
   final CalendarFriends? friends;
@@ -139,10 +147,51 @@ class _CalendarScreenState extends State<CalendarScreen>
   /// Two fingers zoom the month: the plane must not slide meanwhile.
   var _pinching = false;
 
+  /// The menu of the device's calendar is on screen, and it is leaving.
+  var _syncShown = false;
+  var _syncLeaving = false;
+
+  /// The user's events with the device calendar's.
+  List<CalendarEvent> get _allEvents {
+    final device = widget.sync?.events.value ?? const [];
+    return device.isEmpty ? _events : [..._events, ...device];
+  }
+
+  /// The user's events have changed: the calendar «Druna» follows. A new
+  /// one waits until its page is closed.
+  void _mirror() {
+    final sync = widget.sync;
+    if (sync == null) return;
+    final subject = _editor?.subject;
+    final drafting = subject is OwnEvent && subject.isNew
+        ? subject.event.id
+        : null;
+    sync.mirror([
+      for (final event in _events)
+        if (event.id != drafting) event,
+    ]);
+  }
+
+  void _onDeviceEvents() => setState(() {});
+
+  /// Whether the device has a calendar is known only after it is asked.
+  late var _syncSupported = widget.sync?.supported ?? false;
+
+  void _onSync() {
+    final supported = widget.sync?.supported ?? false;
+    if (supported != _syncSupported) {
+      setState(() => _syncSupported = supported);
+    }
+  }
+
   /// Tells the parent after the frame, since it rebuilds in response.
   void _reportBusy() {
     final busy =
-        _pinching || _day != null || _editor != null || _leaving.isNotEmpty;
+        _pinching ||
+        _day != null ||
+        _editor != null ||
+        _leaving.isNotEmpty ||
+        (_syncShown && !_syncLeaving);
     if (busy == _reportedBusy) return;
     _reportedBusy = busy;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -156,10 +205,29 @@ class _CalendarScreenState extends State<CalendarScreen>
     _events = demoCalendarEvents(DateTime.now());
     _expand = AnimationController(vsync: this, duration: expandOpenDuration);
     _veil = CurvedAnimation(parent: _expand, curve: expandVeilCurve);
+    widget.sync?.events.addListener(_onDeviceEvents);
+    widget.sync?.addListener(_onSync);
+    // Whatever an earlier launch left in the calendar «Druna» and is not
+    // here any more goes.
+    _mirror();
+  }
+
+  @override
+  void didUpdateWidget(covariant CalendarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sync != widget.sync) {
+      oldWidget.sync?.events.removeListener(_onDeviceEvents);
+      oldWidget.sync?.removeListener(_onSync);
+      widget.sync?.events.addListener(_onDeviceEvents);
+      widget.sync?.addListener(_onSync);
+      _onSync();
+    }
   }
 
   @override
   void dispose() {
+    widget.sync?.events.removeListener(_onDeviceEvents);
+    widget.sync?.removeListener(_onSync);
     _veil.dispose();
     _expand.dispose();
     _dayMetrics.dispose();
@@ -298,8 +366,17 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   /// An invite opens its page over the plane; the user's own events open
-  /// here, to view.
+  /// here, to view; the device calendar's open where the user chose.
   void _onEventTap(CalendarEvent event, Rect rect) {
+    final sync = widget.sync;
+    if (event.external != null && sync != null) {
+      if (sync.tap == ExternalTap.druna) {
+        setState(() => _editor = _Editor(DeviceEventSubject(event)));
+      } else {
+        _showOnDevice(event);
+      }
+      return;
+    }
     final invite = event.invite;
     if (invite != null) {
       widget.friends?.onOpenInvite?.call(invite.id);
@@ -308,28 +385,38 @@ class _CalendarScreenState extends State<CalendarScreen>
     _openEditor(event, isNew: false);
   }
 
+  Future<void> _showOnDevice(CalendarEvent event) async {
+    try {
+      await widget.sync?.show(event);
+    } catch (_) {
+      if (mounted) showToast(context, 'Не получилось открыть', error: true);
+    }
+  }
+
   /// Moving an occurrence on the timeline moves its series by the same time.
   void _moveEventTo(CalendarEvent event, DateTime start) {
     final shift = start.difference(event.start);
-    if (shift == Duration.zero) return;
+    if (shift == Duration.zero || event.external != null) return;
     setState(() {
       _events = [
         for (final item in _events)
           if (item.id == event.sourceId) shiftEventBy(item, shift) else item,
       ];
     });
+    _mirror();
   }
 
   /// Moving one occurrence moves its whole series by the same days.
   void _moveEvent(CalendarEvent event, DateTime day) {
     final shift = calendarDaysBetween(eventFirstDay(event), day);
-    if (shift == 0) return;
+    if (shift == 0 || event.external != null) return;
     setState(() {
       _events = [
         for (final item in _events)
           if (item.id == event.sourceId) shiftEventDays(item, shift) else item,
       ];
     });
+    _mirror();
   }
 
   void _openEditor(CalendarEvent event, {required bool isNew}) {
@@ -347,6 +434,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     if (!identical(_editor, editor)) return;
     _editor = null;
     _leaving.add(editor);
+    _mirror();
   }
 
   /// An edited occurrence is stored as its series, moved back to the series'
@@ -378,6 +466,7 @@ class _CalendarScreenState extends State<CalendarScreen>
           if (item.id == stored.id) stored else item,
       ];
     });
+    _mirror();
   }
 
   /// Removes the event, with its whole series.
@@ -390,6 +479,18 @@ class _CalendarScreenState extends State<CalendarScreen>
         for (final item in _events)
           if (item.id != id) item,
       ];
+    });
+    _mirror();
+  }
+
+  /// "Мои события" is a button only where the device has a calendar.
+  bool get _syncMenu => _syncSupported;
+
+  void _openSync() {
+    if (_syncShown) return;
+    setState(() {
+      _syncShown = true;
+      _syncLeaving = false;
     });
   }
 
@@ -439,7 +540,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     MonthCalendar monthWith(List<CalendarEvent> friendEvents) => MonthCalendar(
       key: _monthKey,
       focus: DateTime.now(),
-      events: _events,
+      events: _allEvents,
       friendEvents: friendEvents,
       sharedEvents: invites?.value ?? const [],
       inviteColors: _inviteColors(context),
@@ -559,8 +660,11 @@ class _CalendarScreenState extends State<CalendarScreen>
                     onAddFriends: friends.onAddFriends,
                     me: _MyAvatar(
                       profile: friends.me,
-                      size: FriendBarStyle.stackAvatar,
+                      size: _syncMenu
+                          ? PillStyle.size - 2 * PillStyle.leadingInset
+                          : FriendBarStyle.stackAvatar,
                     ),
+                    onOpenMine: _syncMenu ? _openSync : null,
                   ),
                 ),
               ),
@@ -571,7 +675,7 @@ class _CalendarScreenState extends State<CalendarScreen>
               veil: _veil,
               week: from,
               day: day,
-              events: _events,
+              events: _allEvents,
               invites: invites,
               inviteColors: _inviteColors(context),
               invitePeople: _invitePeople(),
@@ -590,6 +694,17 @@ class _CalendarScreenState extends State<CalendarScreen>
               onPullEnd: _onPullEnd,
               onPullCancel: _onPullCancel,
             ),
+          if (_syncShown && widget.sync != null)
+            Positioned.fill(
+              child: CalendarSyncSheet(
+                sync: widget.sync!,
+                onClosing: () => setState(() => _syncLeaving = true),
+                onGone: () => setState(() {
+                  _syncShown = false;
+                  _syncLeaving = false;
+                }),
+              ),
+            ),
           for (final editor in [..._leaving, ?_editor])
             Positioned.fill(
               key: editor.key,
@@ -601,6 +716,12 @@ class _CalendarScreenState extends State<CalendarScreen>
                 onSendInvite: widget.friends?.onSendInvite,
                 onClosing: () => setState(() => _dismissEditor(editor)),
                 onGone: () => setState(() => _dropEditor(editor)),
+                onOpenExternal: switch (editor.subject) {
+                  DeviceEventSubject(:final event) => () => _showOnDevice(
+                    event,
+                  ),
+                  _ => null,
+                },
               ),
             ),
         ],

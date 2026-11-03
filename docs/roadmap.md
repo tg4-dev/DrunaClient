@@ -8,7 +8,8 @@
    на реальных данных; сверить фактические DTO с `context/FRONTEND_API.md`.
 2. Добавить test/staging `API_BASE_URL` и тестового пользователя без хранения
    пароля в Git.
-3. Заменить `com.example.drunaApp` на официальный bundle/application ID.
+3. Bundle/application ID — `dev.tg4.druna` (iOS и Android `applicationId`;
+   Kotlin-пакет и macOS остались `com.example`).
 4. Настроить Apple Development Team, provisioning profile и проверить запуск на
    физическом iPhone.
 5. Установить Android SDK, проверить debug build и запуск на Android Emulator и
@@ -18,8 +19,10 @@
 7. Серверный вход по почте: endpoint из `docs/backend-changes.md` («Вход и
    регистрация по почте») и `ServerAuthFlowSource` на них. До этого в
    production войти нельзя.
-8. Associated Domains (`webcredentials:`) и `apple-app-site-association`,
-   Android `assetlinks.json` — иначе система не предлагает сохранить пароль.
+8. Сохранение паролей системой: в iOS `webcredentials:druna.tg4.dev` уже
+   есть; серверу — `apple-app-site-association` и `assetlinks.json`
+   (`docs/backend-changes.md`). Проверить на физическом iPhone: Associated
+   Domains требует платную команду Apple.
 
 ## P1 — качество продукта
 
@@ -38,10 +41,15 @@
 ## P2 — после расширения backend
 
 1. Push notifications и управление device token.
-2. Calendar integrations Apple/Google/Outlook.
+2. Calendar integrations: календарь устройства на клиенте есть (импорт и
+   экспорт в «Druna», `lib/features/calendar_sync/`); нужна отправка
+   занятости на сервер — `docs/backend-changes.md`. Проверить на
+   физическом iPhone и Android.
 3. Опросы, гостевые приглашения и связанные экраны.
 4. Backend upload для аватаров вместо ручного URL.
 5. Offline cache и оптимистичные обновления, если это подтвердит продукт.
+6. Passkeys: сервер WebAuthn (`docs/backend-changes.md`), затем Flutter-плагин
+   и UI по дизайну автора.
 
 ## Release checklist
 

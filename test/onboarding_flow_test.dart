@@ -6,6 +6,7 @@ import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
 import 'package:druna_app/features/onboarding/auth_flow_source.dart';
 import 'package:druna_app/features/onboarding/onboarding_controller.dart';
 import 'package:druna_app/features/onboarding/onboarding_flow.dart';
@@ -18,6 +19,8 @@ import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/fake_device_calendar.dart';
 
 void main() {
   group('OnboardingController', () {
@@ -184,12 +187,29 @@ void main() {
         expect(flow.usernameCheck, UsernameCheck.idle);
         expect(flow.error, 'ник занят');
 
+        // Too short is not an error while typing, only on «готово».
         flow.username.text = 'al';
-        async.elapse(OnboardingController.usernamePause);
-        expect(flow.error, 'минимум 3 символа');
+        async.elapse(const Duration(seconds: 2));
+        expect(flow.error, isNull);
         expect(source.checked, ['alice', 'druna']);
         flow.dispose();
       });
+    });
+
+    test('a short username says so only on «готово»', () async {
+      final flow = _controller(_FakeSource());
+      await _toPassword(flow);
+      flow.password.text = 'secret12';
+      flow.repeat.text = 'secret12';
+      await flow.submit();
+      expect(flow.step, OnboardingStep.username);
+      flow.username.text = 'al';
+      await Future<void>.delayed(OnboardingController.usernamePause * 2);
+      expect(flow.error, isNull);
+      await flow.submit();
+      expect(flow.step, OnboardingStep.username);
+      expect(flow.error, 'минимум 3 символа');
+      flow.dispose();
     });
 
     test('a late answer for an old username is dropped', () {
@@ -220,6 +240,48 @@ void main() {
       flow.repeat.text = 'secret12';
       expect(flow.canSubmit, isTrue);
       flow.dispose();
+    });
+
+    test('with a device calendar, its step comes between name and profile', () {
+      fakeAsync((async) {
+        final storage = MemorySettingsStorage();
+        final sync = CalendarSync(
+          device: FakeDeviceCalendar(),
+          storage: storage,
+        );
+        sync.load();
+        async.flushMicrotasks();
+        final flow = OnboardingController(
+          source: _FakeSource(),
+          onFinished: () async {},
+          calendarSync: sync,
+        );
+        flow.start();
+        flow.email.text = 'new@mail.ru';
+        flow.submit();
+        async.flushMicrotasks();
+        flow.code.text = '123456';
+        async.flushMicrotasks();
+        flow.password.text = 'secret123';
+        flow.repeat.text = 'secret123';
+        flow.submit();
+        flow.username.text = 'alice';
+        async.elapse(OnboardingController.usernamePause);
+        flow.submit();
+        flow.name.text = 'Алиса';
+        flow.submit();
+        expect(flow.step, OnboardingStep.calendar);
+        // Optional: forward is lit without access.
+        expect(flow.canSubmit, isTrue);
+        flow.submit();
+        expect(flow.step, OnboardingStep.profile);
+        flow.goBack();
+        expect(flow.step, OnboardingStep.calendar);
+        flow.goBack();
+        expect(flow.step, OnboardingStep.name);
+        flow.dispose();
+        sync.dispose();
+      });
     });
 
     test('registers with the typed data, then waits for «Всё готово»', () {
@@ -767,7 +829,18 @@ void main() {
       TextField field(String key) =>
           tester.widget<TextField>(find.byKey(ValueKey(key)));
       expect(field('password').autofillHints, [AutofillHints.password]);
-      expect(field('password-repeat').autofillHints, isEmpty);
+      // Null, not empty: an empty list keeps it in the autofill group.
+      expect(field('password-repeat').autofillHints, isNull);
+      final repeat = tester.state<EditableTextState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('password-repeat')),
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(
+        repeat.textInputConfiguration.autofillConfiguration.enabled,
+        isFalse,
+      );
 
       await tester.enterText(
         find.byKey(const ValueKey('password')),

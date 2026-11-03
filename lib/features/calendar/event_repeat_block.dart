@@ -5,6 +5,7 @@ import 'package:druna_app/features/calendar/repeat_rule.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/event_page/date_grid.dart';
 import 'package:druna_app/features/event_page/picker_scope.dart';
+import 'package:druna_app/shared/ui/value_menu.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -194,7 +195,7 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
               const SizedBox(width: 12),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 190),
-                child: _Menu(
+                child: ValueMenu(
                   key: const ValueKey('repeat-menu'),
                   label: repeatPresetLabels[rule.preset]!,
                   options: {
@@ -246,7 +247,7 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
               const SizedBox(width: 12),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 150),
-                child: _Menu(
+                child: ValueMenu(
                   key: const ValueKey('repeat-until'),
                   label: rule.until == null ? 'Никогда' : 'В дату',
                   options: const {_never: 'Никогда', _onDate: 'В дату'},
@@ -371,74 +372,6 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
         selected: until.isBefore(first) ? first : until,
         firstDay: first,
         onPicked: (day) => widget.onChanged(rule.copyWith(until: day)),
-      ),
-    );
-  }
-}
-
-/// The current value with ⌃⌄, opening a native pull-down menu on iOS 26 and
-/// an action sheet or popup menu elsewhere.
-class _Menu extends StatelessWidget {
-  const _Menu({
-    required this.label,
-    required this.options,
-    required this.selected,
-    required this.onSelected,
-    this.dividerAfter = const {},
-    super.key,
-  });
-
-  final String label;
-  final Map<String, String> options;
-  final String selected;
-  final ValueChanged<String> onSelected;
-  final Set<String> dividerAfter;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = <AdaptivePopupMenuEntry>[
-      for (final entry in options.entries) ...[
-        AdaptivePopupMenuItem<String>(
-          label: entry.value,
-          value: entry.key,
-          selected: entry.key == selected,
-        ),
-        if (dividerAfter.contains(entry.key)) const AdaptivePopupMenuDivider(),
-      ],
-    ];
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      child: AdaptivePopupMenuButton.widget<String>(
-        items: items,
-        onSelected: (_, entry) => onSelected(entry.value!),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: AnimatedSwitcher(
-                  duration: SheetStyle.fade,
-                  child: Text(
-                    label,
-                    key: ValueKey(label),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: SheetStyle.value,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(
-                CupertinoIcons.chevron_up_chevron_down,
-                size: 14,
-                color: SheetStyle.muted,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

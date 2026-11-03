@@ -1,9 +1,13 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
+import 'package:druna_app/features/calendar_sync/device_calendar.dart';
 import 'package:druna_app/features/onboarding/onboarding_controller.dart';
 import 'package:druna_app/features/onboarding/onboarding_style.dart';
 import 'package:druna_app/features/onboarding/widgets/code_boxes.dart';
 import 'package:druna_app/shared/ui/pill_field.dart';
 import 'package:druna_app/features/onboarding/widgets/onboarding_parts.dart';
 import 'package:druna_app/shared/ui/person_name.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:druna_app/shared/ui/profile_pickers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -121,11 +125,17 @@ class StepGeometry {
       OnboardingStyle.navGap;
 }
 
+/// Steps without a keyboard, whose block stands under a title of two
+/// lines.
+bool tallStep(OnboardingStep step) =>
+    step == OnboardingStep.profile || step == OnboardingStep.calendar;
+
 /// The field block's height on [step]: two fields for a new password, the
 /// avatar with both pickers on the profile.
 double fieldHeightOf(OnboardingStep step) => switch (step) {
   OnboardingStep.password => 2 * OnboardingStyle.height + 10,
   OnboardingStep.profile => ProfileBlock.height,
+  OnboardingStep.calendar => CalendarBlock.height,
   _ => OnboardingStyle.height,
 };
 
@@ -300,6 +310,24 @@ class FormStepPage extends StatelessWidget {
         ),
         null,
       ),
+      OnboardingStep.calendar => (
+        Text(
+          'Подключим\nтвой календарь',
+          textAlign: TextAlign.center,
+          style: OnboardingStyle.title,
+          maxLines: 2,
+        ),
+        CalendarBlock(sync: c.calendarSync!),
+        ListenableBuilder(
+          listenable: c.calendarSync!,
+          builder: (context, _) => Text(
+            c.calendarSync!.connected
+                ? 'можно поменять в календаре'
+                : 'можно подключить позже',
+            style: OnboardingStyle.hint,
+          ),
+        ),
+      ),
       OnboardingStep.profile => (
         // «ГЛЕБ, настроим профиль»: the name bold, like everywhere.
         NameText(
@@ -324,7 +352,7 @@ class FormStepPage extends StatelessWidget {
           context,
           constraints.biggest,
           fieldHeight: fieldHeightOf(step),
-          tall: step == OnboardingStep.profile,
+          tall: tallStep(step),
         );
         return Stack(
           children: [
@@ -467,7 +495,13 @@ class _PasswordFieldState extends State<_PasswordField> {
     // A plain keyboard: with «visiblePassword» iOS stops treating the field
     // as a password and offers the email in it.
     keyboardType: TextInputType.text,
-    autofillHints: [?widget.autofillHint],
+    // Null, not an empty list: an empty list still enrols the field in the
+    // autofill group, and iOS then copies what is typed in the password
+    // into it as its confirmation.
+    autofillHints: switch (widget.autofillHint) {
+      final hint? => [hint],
+      null => null,
+    },
     textInputAction: widget.action,
     onSubmitted: widget.onSubmitted,
     trailing: Semantics(
@@ -616,4 +650,172 @@ class ProfileAvatar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The calendar step: before access, what it is for and the button that
+/// asks; after, the device's calendars to pick from, each in its colour.
+class CalendarBlock extends StatelessWidget {
+  const CalendarBlock({required this.sync, super.key});
+
+  final CalendarSync sync;
+
+  static const rows = 6;
+
+  /// From the screen's sides, as the titles.
+  static const gutter = 24.0;
+  static const row = OnboardingStyle.height;
+  static const inset = ProfilePickerStyle.colorInset;
+  static const height = rows * row + 2 * inset;
+
+  static const _dot = 12.0;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: height,
+    child: ListenableBuilder(
+      listenable: sync,
+      builder: (context, _) => AnimatedSwitcher(
+        duration: OnboardingStyle.fade,
+        child: sync.connected
+            ? _list()
+            : sync.access == CalendarAccess.denied
+            ? _pitch(
+                key: const ValueKey('calendar-denied'),
+                text: 'Доступ закрыт. Его можно дать в настройках',
+                button: PillButton(
+                  key: const ValueKey('calendar-settings'),
+                  icon: CupertinoIcons.gear_alt,
+                  text: 'Открыть настройки',
+                  height: OnboardingStyle.height,
+                  onPressed: sync.openSettings,
+                ),
+              )
+            : _pitch(
+                key: const ValueKey('calendar-ask'),
+                text:
+                    'Покажем события из ${_where()} рядом с твоими, '
+                    'а свои добавим в календарь «Druna»',
+                button: PillButton(
+                  key: const ValueKey('calendar-allow'),
+                  icon: CupertinoIcons.calendar,
+                  text: 'Разрешить доступ',
+                  height: OnboardingStyle.height,
+                  onPressed: sync.connect,
+                ),
+              ),
+      ),
+    ),
+  );
+
+  /// «Apple Календаря», «календаря устройства».
+  String _where() => deviceCalendarName() == 'Apple Календарь'
+      ? 'Apple Календаря'
+      : 'календаря устройства';
+
+  Widget _pitch({
+    required Key key,
+    required String text,
+    required Widget button,
+  }) => Center(
+    key: key,
+    child: SizedBox(
+      width: ProfilePickerStyle.width,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(text, textAlign: TextAlign.center, style: OnboardingStyle.hint),
+          const SizedBox(height: 16),
+          button,
+        ],
+      ),
+    ),
+  );
+
+  Widget _list() => Padding(
+    key: const ValueKey('calendar-list'),
+    padding: const EdgeInsets.symmetric(horizontal: gutter),
+    child: SizedBox(
+      height: height,
+      child: PillSurface(
+        radius: ProfilePickerStyle.colorRadius,
+        child: sync.calendars.isEmpty
+            ? Center(
+                child: Text(
+                  sync.syncing ? 'загружаем…' : 'календарей нет',
+                  style: OnboardingStyle.hint,
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.symmetric(vertical: inset),
+                children: [
+                  for (final calendar in sync.calendars)
+                    _CalendarRow(
+                      key: ValueKey('calendar-${calendar.id}'),
+                      calendar: calendar,
+                      on: sync.isOn(calendar.id),
+                      onChanged: (on) => sync.setCalendar(calendar.id, on),
+                    ),
+                ],
+              ),
+      ),
+    ),
+  );
+}
+
+/// A calendar in its colour, with the system's switch.
+class _CalendarRow extends StatelessWidget {
+  const _CalendarRow({
+    required this.calendar,
+    required this.on,
+    required this.onChanged,
+    super.key,
+  });
+
+  final DeviceCalendarInfo calendar;
+  final bool on;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: CalendarBlock.row,
+    child: Padding(
+      padding: const EdgeInsets.only(left: 20, right: 12),
+      child: Row(
+        children: [
+          Container(
+            width: CalendarBlock._dot,
+            height: CalendarBlock._dot,
+            decoration: BoxDecoration(
+              color: calendar.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  calendar.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OnboardingStyle.calendarName,
+                ),
+                if (calendar.account.isNotEmpty)
+                  Text(
+                    calendar.account,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OnboardingStyle.calendarAccount,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          AdaptiveSwitch(value: on, onChanged: onChanged),
+        ],
+      ),
+    ),
+  );
 }

@@ -346,6 +346,7 @@ class DayTimelineState extends State<DayTimeline>
     if (widget.onMoveEvent == null ||
         _friendsShown ||
         event.invite != null ||
+        event.external != null ||
         event.allDay ||
         _hold != null ||
         _pointers.length > 1) {

@@ -4,6 +4,7 @@ import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/calendar_screen.dart';
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
 import 'package:druna_app/features/event_page/event_page.dart';
 import 'package:druna_app/features/event_page/event_subject.dart';
 import 'package:druna_app/features/friends/friend_schedule.dart';
@@ -33,6 +34,7 @@ class HomePager extends StatefulWidget {
     required this.session,
     required this.settings,
     required this.config,
+    this.sync,
     this.demoDelay = const Duration(milliseconds: 300),
     super.key,
   });
@@ -40,6 +42,9 @@ class HomePager extends StatefulWidget {
   final SessionController session;
   final AppSettings settings;
   final AppConfig config;
+
+  /// The device's calendar; none in tests.
+  final CalendarSync? sync;
 
   /// How long demo friends take to answer; zero in tests.
   final Duration demoDelay;
@@ -118,6 +123,8 @@ class _HomePagerState extends State<HomePager> {
   }
 
   void _syncInvites() {
+    // The calendar «Druna» on the device wears the user's colour too.
+    widget.sync?.drunaColor = _ownColor;
     _inviteEvents.value = inviteEvents(
       _invites.invites,
       meId: _me.id,
@@ -148,6 +155,7 @@ class _HomePagerState extends State<HomePager> {
     widget.settings.addListener(_onSettings);
     widget.session.addListener(_onSession);
     _store.addListener(_dropMissingFriends);
+    widget.sync?.drunaColor = _ownColor;
   }
 
   /// Who the user was when the invites were last loaded.
@@ -320,6 +328,7 @@ class _HomePagerState extends State<HomePager> {
               final plane = _planeFor(width);
               final calendar = CalendarScreen(
                 mode: _mode,
+                sync: widget.sync,
                 onBusyChanged: (busy) => setState(() => _calendarBusy = busy),
                 onOpenSettings: () => _goTo(HomePager.settingsStop),
                 onOpenFriends: () => _goTo(HomePager.friendsStop),
@@ -379,6 +388,7 @@ class _HomePagerState extends State<HomePager> {
                           config: widget.config,
                           onResetDemo: _resetDemo,
                           onResetFriends: _selection.clear,
+                          calendarSync: widget.sync,
                           invites: _invites,
                           onOpenInvite: _showInvite,
                           onResetInvites: _resetInvites,

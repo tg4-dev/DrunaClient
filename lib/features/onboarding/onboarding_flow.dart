@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
 import 'package:druna_app/features/onboarding/auth_flow_source.dart';
 import 'package:druna_app/features/onboarding/done_page.dart';
 import 'package:druna_app/features/onboarding/onboarding_controller.dart';
@@ -23,6 +24,7 @@ Future<void> showOnboardingRehearsal(
   bool signIn = false,
   int? colorSlot,
   AvatarFont? font,
+  CalendarSync? calendarSync,
 }) {
   final navigator = Navigator.of(context);
   return navigator.push(
@@ -35,6 +37,7 @@ Future<void> showOnboardingRehearsal(
         onClose: navigator.pop,
         knownColorSlot: colorSlot,
         knownFont: font,
+        calendarSync: calendarSync,
       ),
       transitionsBuilder: (context, animation, _, child) =>
           FadeTransition(opacity: animation, child: child),
@@ -54,10 +57,14 @@ class OnboardingFlow extends StatefulWidget {
     this.onProfile,
     this.knownColorSlot,
     this.knownFont,
+    this.calendarSync,
     super.key,
   });
 
   final AuthFlowSource source;
+
+  /// The device's calendar for the step before the profile.
+  final CalendarSync? calendarSync;
 
   /// Tokens are saved: let the app in ([SessionController.adopt]).
   final Future<void> Function() onFinished;
@@ -85,6 +92,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     onProfile: widget.onProfile,
     knownColorSlot: widget.knownColorSlot,
     knownFont: widget.knownFont,
+    calendarSync: widget.calendarSync,
   );
   var _step = OnboardingStep.welcome;
   Timer? _keyboardCheck;
@@ -287,7 +295,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           context,
           constraints.biggest,
           fieldHeight: fieldHeightOf(step),
-          tall: step == OnboardingStep.profile,
+          tall: tallStep(step),
         );
         return _FollowTop(
           step: step,

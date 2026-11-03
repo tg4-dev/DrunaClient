@@ -83,6 +83,15 @@ abstract final class OnboardingStyle {
     decorationColor: Colors.white,
   );
 
+  /// A calendar on the calendar step: its name, and its account under it.
+  static final calendarName = onest(17, weight: FontWeight.w600, height: 1.2);
+  static final calendarAccount = onest(
+    13,
+    weight: FontWeight.w500,
+    color: Colors.white.withValues(alpha: 0.6),
+    height: 1.2,
+  );
+
   static final tagline = onest(
     22,
     weight: FontWeight.w500,

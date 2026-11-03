@@ -20,8 +20,8 @@ flutter run -d <DEVICE_ID> --dart-define-from-file=config/development.json
 - Без сервера: `--dart-define-from-file=config/offline.json` (код из письма —
   `123456`).
 - Android Emulator: `--dart-define=API_BASE_URL=http://10.0.2.2:22000`.
-- Production: скопируйте `config/production.example.json` в игнорируемый
-  `config/production.json` и укажите HTTPS-адрес.
+- Production (`https://druna.tg4.dev`): скопируйте
+  `config/production.example.json` в игнорируемый `config/production.json`.
 
 Указывайте `-d`: без него Flutter может собрать desktop-версию.
 

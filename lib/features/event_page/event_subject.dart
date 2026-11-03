@@ -2,7 +2,7 @@ import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/models/models.dart';
 
 /// What the event page shows: the user's own event, an invite being made,
-/// or an invite that already exists.
+/// an invite that already exists, or an event of the device's calendar.
 sealed class EventSubject {
   const EventSubject();
 }
@@ -29,4 +29,11 @@ final class SharedInvite extends EventSubject {
   const SharedInvite(this.id);
 
   final String id;
+}
+
+/// An event of the device's calendar: shown, but changed only there.
+final class DeviceEventSubject extends EventSubject {
+  const DeviceEventSubject(this.event);
+
+  final CalendarEvent event;
 }

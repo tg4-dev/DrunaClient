@@ -448,8 +448,9 @@ class MonthCalendarState extends State<MonthCalendar>
   }
 
   void _beginHold(CalendarEvent? event, Offset global) {
-    // An invite is not the user's to move: its page changes it.
-    if (event?.invite != null) return;
+    // An invite is not the user's to move: its page changes it. Neither is
+    // an event of the device's calendar.
+    if (event?.invite != null || event?.external != null) return;
     if (_holding || _pointers.length != 1) return;
     _holdPointer = _pointers.keys.single;
     final day = _dayAtGlobal(global);

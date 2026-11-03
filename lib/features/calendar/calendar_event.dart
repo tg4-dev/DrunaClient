@@ -292,6 +292,7 @@ class CalendarEvent {
     this.color,
     this.ownerId,
     this.invite,
+    this.external,
   });
 
   final String id;
@@ -316,6 +317,10 @@ class CalendarEvent {
   /// Set when the event is an invite with other people in it.
   final EventInvite? invite;
 
+  /// Set on events read from the device's calendar: Druna shows them in
+  /// their calendar's colour and does not change them.
+  final ExternalEvent? external;
+
   String get sourceId => seriesId ?? id;
 
   CalendarEvent copyWith({
@@ -331,6 +336,7 @@ class CalendarEvent {
     Color? color,
     int? ownerId,
     EventInvite? invite,
+    ExternalEvent? external,
   }) {
     return CalendarEvent(
       id: id ?? this.id,
@@ -343,8 +349,26 @@ class CalendarEvent {
       color: color ?? this.color,
       ownerId: ownerId ?? this.ownerId,
       invite: invite ?? this.invite,
+      external: external ?? this.external,
     );
   }
+}
+
+/// Where an event of the device's calendar lives there.
+@immutable
+class ExternalEvent {
+  const ExternalEvent({
+    required this.instanceId,
+    required this.calendarId,
+    required this.calendarName,
+  });
+
+  /// The occurrence, for the system's event screen.
+  final String instanceId;
+  final String calendarId;
+
+  /// «Работа», «Дом»: shown on the event's page.
+  final String calendarName;
 }
 
 /// Repairs spans no screen can draw: a timed end at or before its start, and
@@ -653,6 +677,7 @@ class CalendarEventIndex {
       color: event.color,
       ownerId: event.ownerId,
       invite: event.invite,
+      external: event.external,
     );
   }
 }

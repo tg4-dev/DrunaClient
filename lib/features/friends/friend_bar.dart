@@ -64,6 +64,7 @@ class FriendBar extends StatefulWidget {
     required this.onAddFriends,
     this.schedulesAvailable = true,
     this.me,
+    this.onOpenMine,
     super.key,
   });
 
@@ -84,6 +85,9 @@ class FriendBar extends StatefulWidget {
   /// The user's avatar: in the user's own mode it stands at the bottom
   /// left with "Мои события".
   final Widget? me;
+
+  /// Makes the corner with [me] a button: the menu of the user's calendar.
+  final VoidCallback? onOpenMine;
 
   @override
   State<FriendBar> createState() => _FriendBarState();
@@ -137,7 +141,9 @@ class _FriendBarState extends State<FriendBar> {
                       _MineCorner(
                         me: me,
                         mode: widget.mode,
+                        expanded: expanded,
                         width: constraints.maxWidth,
+                        onTap: widget.onOpenMine,
                       ),
                     if (widget.selection.selected.isEmpty)
                       _SwipeHint(
@@ -629,16 +635,21 @@ Offset _flyIn(double fold, double width) =>
     Offset(-(width + FriendBarStyle.flyOver) * (1 - fold), 0);
 
 /// In the user's own mode, bottom left: their avatar and "Мои события".
+/// With [onTap] it is a button that opens the menu of the user's calendar.
 class _MineCorner extends StatelessWidget {
   const _MineCorner({
     required this.me,
     required this.mode,
+    required this.expanded,
     required this.width,
+    this.onTap,
   });
 
   final Widget me;
   final ValueListenable<double> mode;
+  final bool expanded;
   final double width;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Positioned(
@@ -646,20 +657,36 @@ class _MineCorner extends StatelessWidget {
     top: 0,
     bottom: 0,
     child: IgnorePointer(
+      ignoring: onTap == null || expanded,
       child: ValueListenableBuilder<double>(
         valueListenable: mode,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox.square(dimension: FriendBarStyle.stackAvatar, child: me),
-            const SizedBox(width: FriendBarStyle.mineGap),
-            Text(
-              'Мои события',
-              textScaler: TextScaler.noScaling,
-              style: FriendBarStyle.mineCaption.copyWith(color: Colors.white),
-            ),
-          ],
-        ),
+        child: onTap != null
+            ? Center(
+                child: PillButton(
+                  key: const ValueKey('mine-button'),
+                  leading: me,
+                  text: 'Мои события',
+                  label: 'Мои события: календари',
+                  onPressed: onTap,
+                ),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox.square(
+                    dimension: FriendBarStyle.stackAvatar,
+                    child: me,
+                  ),
+                  const SizedBox(width: FriendBarStyle.mineGap),
+                  Text(
+                    'Мои события',
+                    textScaler: TextScaler.noScaling,
+                    style: FriendBarStyle.mineCaption.copyWith(
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
         builder: (context, t, row) => Transform.translate(
           offset: _flyIn(friendBarFold(t), width),
           child: row,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
 import 'package:druna_app/features/onboarding/auth_flow_source.dart';
 import 'package:druna_app/features/onboarding/onboarding_rules.dart';
 import 'package:druna_app/shared/ui/avatar_style.dart';
@@ -23,6 +24,10 @@ enum OnboardingStep {
   username,
   name,
 
+  /// The device's calendar: access and which of its calendars show. Only
+  /// where the device has one.
+  calendar,
+
   /// Profile setup: avatar font and colour.
   profile,
   done,
@@ -40,6 +45,7 @@ class OnboardingController extends ChangeNotifier {
     this.onProfile,
     this.knownColorSlot,
     this.knownFont,
+    this.calendarSync,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now {
     _onText(email, _emailChanged);
@@ -75,6 +81,12 @@ class OnboardingController extends ChangeNotifier {
   /// shows them on «Всё готово». Null — the defaults.
   final int? knownColorSlot;
   final AvatarFont? knownFont;
+
+  /// The device's calendar for the calendar step; without it, or on a
+  /// device without one, the step is skipped.
+  final CalendarSync? calendarSync;
+
+  bool get hasCalendarStep => calendarSync?.supported ?? false;
 
   /// The clock; tests pass their own.
   final DateTime Function() now;
@@ -163,7 +175,7 @@ class OnboardingController extends ChangeNotifier {
     OnboardingStep.username => usernameFocus,
     OnboardingStep.name => nameFocus,
     // No keyboard over the pickers.
-    OnboardingStep.profile => null,
+    OnboardingStep.calendar || OnboardingStep.profile => null,
   };
 
   var _step = OnboardingStep.welcome;
@@ -235,7 +247,8 @@ class OnboardingController extends ChangeNotifier {
       password.text.length >= minPassword && repeat.text.length >= minPassword,
     OnboardingStep.username => _usernameCheck == UsernameCheck.available,
     OnboardingStep.name => name.text.trim().isNotEmpty,
-    OnboardingStep.profile => true,
+    // Optional: forward goes on with or without the calendar.
+    OnboardingStep.calendar || OnboardingStep.profile => true,
   };
 
   /// «Вход по Email» on the welcome screen.
@@ -252,7 +265,9 @@ class OnboardingController extends ChangeNotifier {
       OnboardingStep.password => OnboardingStep.email,
       OnboardingStep.username => OnboardingStep.password,
       OnboardingStep.name => OnboardingStep.username,
-      OnboardingStep.profile => OnboardingStep.name,
+      OnboardingStep.calendar => OnboardingStep.name,
+      OnboardingStep.profile =>
+        hasCalendarStep ? OnboardingStep.calendar : OnboardingStep.name,
       OnboardingStep.welcome || OnboardingStep.done => _step,
     }, back: true);
   }
@@ -280,11 +295,17 @@ class OnboardingController extends ChangeNotifier {
           _scheduleUsernameCheck(Duration.zero);
         }
       case OnboardingStep.username:
-        if (_usernameCheck != UsernameCheck.available) return;
+        if (_usernameCheck != UsernameCheck.available) {
+          final problem = usernameError(username.text);
+          if (problem != null) _fail(problem);
+          return;
+        }
         _go(OnboardingStep.name);
       case OnboardingStep.name:
         final problem = nameError(name.text);
         if (problem != null) return _fail(problem);
+        _go(hasCalendarStep ? OnboardingStep.calendar : OnboardingStep.profile);
+      case OnboardingStep.calendar:
         _go(OnboardingStep.profile);
       case OnboardingStep.profile:
         await _register();
@@ -518,7 +539,10 @@ class OnboardingController extends ChangeNotifier {
     _usernameTimer = Timer(after, _checkUsername);
   }
 
+  /// A username still too short is not an error while it is being typed:
+  /// it waits, unchecked, and says so only on «готово».
   Future<void> _checkUsername() async {
+    if (normalizeUsername(username.text).length < minUsername) return;
     final problem = usernameError(username.text);
     if (problem != null) return _fail(problem);
     final request = ++_usernameRequest;

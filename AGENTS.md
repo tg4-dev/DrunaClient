@@ -50,8 +50,10 @@ Druna помогает вести личные события, добавлят�
   `docs/backend-changes.md`.
 - Без UI, только в `DrunaRepository`: личные и групповые события, свободное
   время, группы.
-- Нет совсем: опросы, гостевые приглашения, push, синхронизация внешних
-  календарей, загрузка аватара. UI не показывает ложный успех — честно пишет
+- Только на устройстве: календарь устройства (Apple Календарь / календарь
+  Android) — импорт событий и экспорт своих в календарь «Druna». Сервер о
+  них не знает, друзья их занятость не видят.
+- Нет совсем: опросы, гостевые приглашения, push, загрузка аватара. UI не показывает ложный успех — честно пишет
   «не поддерживается».
 
 ## Структура
@@ -64,6 +66,7 @@ lib/
   core/storage/    модель токенов и secure storage
   features/onboarding/ вход и регистрация: шаги, контроллер, источники
   features/calendar/   календарь: месяц и день
+  features/calendar_sync/ календарь устройства: доступ, импорт, «Druna», меню
   features/event_page/ форма события
   features/friends/    «Друзья», friend bar, занятость друзей
   features/invites/    приглашения
@@ -71,7 +74,8 @@ lib/
   models/          доменные модели и DTO mapping
   repositories/    типизированные операции DrunaServer
   shared/ui/       общие виджеты: PersonAvatar, PillButton, ActionPill,
-                   PillField, showToast, имя капсом, бренд, confirmAction
+                   PillField, showToast, имя капсом, бренд, confirmAction,
+                   строки настроек, меню значения
 test/              unit- и widget-тесты
 assets/            логотип, стрелка, шрифты (OFL)
 shaders/           фон формы события, полосы недели
@@ -137,7 +141,7 @@ git diff --check
 | iOS Simulator, backend на Mac | `http://localhost:22000` |
 | Android Emulator, backend на Mac | `http://10.0.2.2:22000` |
 | Телефон в той же LAN | `http://<IP Mac>:22000` (`ipconfig getifaddr en0`) |
-| Production | `https://...` |
+| Production | `https://druna.tg4.dev` |
 
 - `config/development.json` — `API_BASE_URL` и демо. Вне production демо
   включено по умолчанию и переключается в настройках; в production демо нет.

@@ -4,6 +4,7 @@ import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
 import 'package:druna_app/features/calendar/band_paint.dart';
+import 'package:druna_app/features/calendar_sync/device_calendar.dart';
 import 'package:druna_app/features/event_page/event_gradient.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +30,7 @@ Future<void> main() async {
       repository: repository,
       config: config,
       settingsStorage: PreferencesSettingsStorage(),
+      deviceCalendar: platformDeviceCalendar(),
     ),
   );
 }

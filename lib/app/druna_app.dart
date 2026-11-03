@@ -4,6 +4,8 @@ import 'package:druna_app/app/home_pager.dart';
 import 'package:druna_app/app/offline_accounts.dart';
 import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/config/app_config.dart';
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
+import 'package:druna_app/features/calendar_sync/device_calendar.dart';
 import 'package:druna_app/features/onboarding/auth_flow_source.dart';
 import 'package:druna_app/features/onboarding/onboarding_flow.dart';
 import 'package:druna_app/features/onboarding/welcome_page.dart';
@@ -19,6 +21,7 @@ class DrunaApp extends StatefulWidget {
     required this.config,
     this.settingsStorage,
     this.authFlowSource,
+    this.deviceCalendar,
     super.key,
   });
   final DrunaRepository repository;
@@ -31,6 +34,10 @@ class DrunaApp extends StatefulWidget {
   /// picks [DemoAuthFlowSource] or [ServerAuthFlowSource].
   final AuthFlowSource? authFlowSource;
 
+  /// The device's calendars; defaults to none, so tests touch no plugin
+  /// ([platformDeviceCalendar] in `main`).
+  final DeviceCalendar? deviceCalendar;
+
   @override
   State<DrunaApp> createState() => _DrunaAppState();
 }
@@ -38,6 +45,7 @@ class DrunaApp extends StatefulWidget {
 class _DrunaAppState extends State<DrunaApp> {
   late final SessionController session;
   late final AppSettings settings;
+  late final CalendarSync calendarSync;
 
   /// Without a server (`config/offline.json`): accounts on the device.
   OfflineAccounts? _offline;
@@ -51,6 +59,10 @@ class _DrunaAppState extends State<DrunaApp> {
       demoByDefault: widget.config.demoData || !widget.config.isProduction,
       allowDemo: !widget.config.isProduction,
     )..load();
+    calendarSync = CalendarSync(
+      device: widget.deviceCalendar ?? const NoDeviceCalendar(),
+      storage: settings.storage,
+    )..load();
     if (widget.config.offline) _offline = OfflineAccounts(settings.storage);
     session = SessionController(widget.repository, offline: _offline)
       ..restore();
@@ -59,6 +71,7 @@ class _DrunaAppState extends State<DrunaApp> {
   @override
   void dispose() {
     session.dispose();
+    calendarSync.dispose();
     settings.dispose();
     super.dispose();
   }
@@ -93,6 +106,7 @@ class _DrunaAppState extends State<DrunaApp> {
               onFinished: session.adopt,
               knownColorSlot: settings.ownColorSlot,
               knownFont: ownFontFor(settings),
+              calendarSync: calendarSync,
               onProfile: (slot, font) {
                 settings
                   ..ownColorSlot = slot
@@ -103,6 +117,7 @@ class _DrunaAppState extends State<DrunaApp> {
               session: session,
               settings: settings,
               config: widget.config,
+              sync: calendarSync,
             ),
           },
         ),

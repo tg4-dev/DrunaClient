@@ -14,6 +14,11 @@ abstract final class PillStyle {
   static const padding = 20.0;
   static const gap = 6.0;
 
+  /// A round [PillButton.leading] (an avatar) stands this far from the
+  /// capsule's edge, concentric with its end, and this far from the text.
+  static const leadingInset = 6.0;
+  static const leadingGap = 10.0;
+
   /// White over whatever is under the button: over black it is a grey,
   /// over a coloured event a lighter shade of that colour. No blur.
   static const fill = Color(0x24FFFFFF);
@@ -129,13 +134,15 @@ class _PillPainter extends CustomPainter {
 
 /// A [PillSurface] that presses. Give it an [icon], a [text] or both; a
 /// [child] replaces them (the month title animates between texts). With an
-/// icon alone and no [width] it is a circle.
+/// icon alone and no [width] it is a circle. [leading] — a round picture
+/// (an avatar) before the text, as tall as the capsule allows.
 class PillButton extends StatefulWidget {
   const PillButton({
     required this.onPressed,
     this.icon,
     this.text,
     this.child,
+    this.leading,
     this.label,
     this.width,
     this.height = PillStyle.size,
@@ -150,6 +157,7 @@ class PillButton extends StatefulWidget {
   final IconData? icon;
   final String? text;
   final Widget? child;
+  final Widget? leading;
 
   /// Read by VoiceOver; required in practice when there is no [text].
   final String? label;
@@ -278,6 +286,30 @@ class _PillButtonState extends State<PillButton>
     final text =
         widget.child ?? (widget.text == null ? null : Text(widget.text!));
     if (text == null) return icon!;
+    final leading = widget.leading;
+    if (leading != null) {
+      final size = widget.height - 2 * PillStyle.leadingInset;
+      return Padding(
+        padding: const EdgeInsets.only(
+          left: PillStyle.leadingInset,
+          right: PillStyle.padding,
+        ),
+        child: DefaultTextStyle(
+          style: (widget.textStyle ?? PillStyle.title).copyWith(color: color),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox.square(dimension: size, child: leading),
+              const SizedBox(width: PillStyle.leadingGap),
+              Flexible(child: text),
+            ],
+          ),
+        ),
+      );
+    }
     return AnimatedSize(
       duration: reduce ? Duration.zero : PillStyle.resize,
       curve: Curves.easeOutCubic,

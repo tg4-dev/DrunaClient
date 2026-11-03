@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "authentication": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/authentication/SKILL.md",
+      "computedHash": "68deff933b0d74b8065756bcfaa0bee3415785c1fb27bf8ccfe0e47b0c56b405"
+    },
+    "email-and-password-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/emailAndPassword/SKILL.md",
+      "computedHash": "863886759f729081e265941f4f72c503835d55a1f34f6d63cebe6571159fff4a"
+    }
+  }
+}
