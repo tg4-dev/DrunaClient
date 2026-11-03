@@ -70,7 +70,7 @@ class EventDensity {
 const barDensity = EventDensity(
   bars: true,
   showTime: false,
-  itemHeight: 5,
+  itemHeight: 6,
   gap: 2,
 );
 
@@ -170,6 +170,7 @@ class MonthWeekLayout {
     required this.spans,
     required this.columns,
     required this.barCapacity,
+    this.barCapacities,
   });
 
   final List<SpanPlacement> spans;
@@ -179,7 +180,21 @@ class MonthWeekLayout {
   /// lane is kept for "+N" so no bar can cover it.
   final int barCapacity;
 
-  bool showsSpan(SpanPlacement span) => span.lane < barCapacity;
+  /// The same per day, when days hold different numbers of lanes (a shared
+  /// cell's title takes the bottom of its days).
+  final List<int>? barCapacities;
+
+  bool showsSpan(SpanPlacement span) => span.lane < _barCapacityOf(span);
+
+  int _barCapacityOf(SpanPlacement span) {
+    final caps = barCapacities;
+    if (caps == null) return barCapacity;
+    var least = barCapacity;
+    for (var column = span.startColumn; column <= span.endColumn; column++) {
+      least = math.min(least, caps[column]);
+    }
+    return least;
+  }
 }
 
 MonthWeekLayout layoutWeek({
@@ -188,7 +203,10 @@ MonthWeekLayout layoutWeek({
   required int visibleStart,
   required int visibleEnd,
   required int capacity,
+  List<int>? columnCapacity,
 }) {
+  int capacityAt(int column) =>
+      math.min(capacity, columnCapacity?[column] ?? capacity);
   final segments = <_Segment>[];
   final timedByColumn = List<List<CalendarEvent>>.generate(7, (_) => []);
   for (final event in events) {
@@ -239,32 +257,180 @@ MonthWeekLayout layoutWeek({
     );
   }
 
-  var overflows = placed.any((span) => span.lane >= capacity);
+  var overflows = false;
   for (
     var column = visibleStart;
     column <= visibleEnd && !overflows;
     column++
   ) {
-    final bars = placed.where((span) => span.covers(column)).length;
-    overflows = bars + timedByColumn[column].length > capacity;
+    final bars = placed.where((span) => span.covers(column));
+    overflows =
+        bars.any((span) => span.lane >= capacityAt(column)) ||
+        bars.length + timedByColumn[column].length > capacityAt(column);
+  }
+  if (columnCapacity == null && placed.any((span) => span.lane >= capacity)) {
+    overflows = true;
   }
   final barCapacity = overflows ? capacity - 1 : capacity;
+  final barCapacities = columnCapacity == null
+      ? null
+      : [
+          for (var column = 0; column < 7; column++)
+            math.max(0, capacityAt(column) - (overflows ? 1 : 0)),
+        ];
+  final layout = MonthWeekLayout(
+    spans: placed,
+    barCapacity: barCapacity,
+    barCapacities: barCapacities,
+    columns: const [],
+  );
 
   return MonthWeekLayout(
     spans: placed,
     barCapacity: barCapacity,
+    barCapacities: barCapacities,
     columns: [
       for (var column = 0; column < 7; column++)
         _columnLayout(
           column: column,
           visible: column >= visibleStart && column <= visibleEnd,
           spans: placed,
+          shows: layout.showsSpan,
           timed: timedByColumn[column],
-          capacity: capacity,
-          barCapacity: barCapacity,
+          capacity: capacityAt(column),
         ),
     ],
   );
+}
+
+/// One shared event's cell in a week (design-system §9.8): the days it
+/// covers, top to bottom in its run of overlapping cells. [eventId] is null
+/// for the "+N" piece that stands for [more] cells that did not fit.
+class SharedPiece {
+  const SharedPiece({
+    required this.eventId,
+    required this.startColumn,
+    required this.endColumn,
+    required this.slot,
+    required this.slots,
+    this.continuesBefore = false,
+    this.continuesAfter = false,
+    this.more = 0,
+  });
+
+  final String? eventId;
+  final int startColumn;
+  final int endColumn;
+
+  /// Its place in the stack of the run, 0 on top, out of [slots].
+  final int slot;
+  final int slots;
+  final bool continuesBefore;
+  final bool continuesAfter;
+  final int more;
+
+  bool covers(int column) => column >= startColumn && column <= endColumn;
+}
+
+/// At most this many cells stack in a day; the last becomes "+N" when more
+/// would.
+const sharedMaxSlots = 2;
+
+/// Shared events as cells of a week: an event over several days is one
+/// cell across them. Cells that overlap form a run and stack top to
+/// bottom, each in its own gradient — never blended. A run needing more
+/// than [sharedMaxSlots] keeps the first and puts "+N" under it, per day.
+List<SharedPiece> layoutSharedWeek({
+  required List<CalendarEvent> events,
+  required List<DateTime> days,
+  required int visibleStart,
+  required int visibleEnd,
+}) {
+  final segments = <_Segment>[
+    for (final event in events)
+      ?_segmentFor(
+        event: event,
+        days: days,
+        visibleStart: visibleStart,
+        visibleEnd: visibleEnd,
+      ),
+  ];
+  if (segments.isEmpty) return const [];
+  segments.sort((a, b) {
+    final byStart = a.startColumn.compareTo(b.startColumn);
+    if (byStart != 0) return byStart;
+    final byLength = (b.endColumn - b.startColumn).compareTo(
+      a.endColumn - a.startColumn,
+    );
+    if (byLength != 0) return byLength;
+    return a.eventId.compareTo(b.eventId);
+  });
+  final placed = <SpanPlacement>[];
+  for (final segment in segments) {
+    placed.add(
+      SpanPlacement(
+        eventId: segment.eventId,
+        startColumn: segment.startColumn,
+        endColumn: segment.endColumn,
+        lane: _freeLane(placed, segment.startColumn, segment.endColumn),
+        continuesBefore: segment.continuesBefore,
+        continuesAfter: segment.continuesAfter,
+      ),
+    );
+  }
+  // Runs of cells that touch the same days, left to right.
+  final runs = <List<SpanPlacement>>[];
+  var runEnd = -1;
+  for (final span in placed) {
+    if (runs.isEmpty || span.startColumn > runEnd) {
+      runs.add([span]);
+      runEnd = span.endColumn;
+    } else {
+      runs.last.add(span);
+      if (span.endColumn > runEnd) runEnd = span.endColumn;
+    }
+  }
+  final pieces = <SharedPiece>[];
+  for (final run in runs) {
+    final lanes = run.map((span) => span.lane).reduce(math.max) + 1;
+    final slots = math.min(lanes, sharedMaxSlots);
+    final overflows = lanes > sharedMaxSlots;
+    final kept = overflows ? sharedMaxSlots - 1 : sharedMaxSlots;
+    for (final span in run) {
+      if (span.lane >= kept) continue;
+      pieces.add(
+        SharedPiece(
+          eventId: span.eventId,
+          startColumn: span.startColumn,
+          endColumn: span.endColumn,
+          slot: span.lane,
+          slots: slots,
+          continuesBefore: span.continuesBefore,
+          continuesAfter: span.continuesAfter,
+        ),
+      );
+    }
+    if (!overflows) continue;
+    final first = run.map((span) => span.startColumn).reduce(math.min);
+    final last = run.map((span) => span.endColumn).reduce(math.max);
+    for (var column = first; column <= last; column++) {
+      final hidden = run
+          .where((span) => span.lane >= kept && span.covers(column))
+          .length;
+      if (hidden == 0) continue;
+      pieces.add(
+        SharedPiece(
+          eventId: null,
+          startColumn: column,
+          endColumn: column,
+          slot: kept,
+          slots: slots,
+          more: hidden,
+        ),
+      );
+    }
+  }
+  return pieces;
 }
 
 class EventDaySlice {
@@ -382,19 +548,19 @@ ColumnLayout _columnLayout({
   required int column,
   required bool visible,
   required List<SpanPlacement> spans,
+  required bool Function(SpanPlacement span) shows,
   required List<CalendarEvent> timed,
   required int capacity,
-  required int barCapacity,
 }) {
   if (!visible) {
     return const ColumnLayout(chips: [], overflow: 0, overflowLane: null);
   }
   final used = <int>{
     for (final span in spans)
-      if (span.covers(column) && span.lane < barCapacity) span.lane,
+      if (span.covers(column) && shows(span)) span.lane,
   };
   final hiddenSpans = spans
-      .where((span) => span.covers(column) && span.lane >= barCapacity)
+      .where((span) => span.covers(column) && !shows(span))
       .length;
   final free = [
     for (var lane = 0; lane < capacity; lane++)

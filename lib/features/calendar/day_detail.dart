@@ -40,6 +40,8 @@ class DayDetail extends StatefulWidget {
     required this.onModeDrag,
     required this.onModeSettle,
     this.inviteColors,
+    this.invitePeople,
+    this.sharedEvents = const [],
     this.metrics,
     this.onEventTap,
     this.onCreateRange,
@@ -79,6 +81,12 @@ class DayDetail extends StatefulWidget {
   /// Colours of an invite drawn in friends' rows ([DayTimeline]).
   final List<Color>? inviteColors;
 
+  /// The people of an invite being drawn, the user first.
+  final List<FriendInfo>? invitePeople;
+
+  /// Events with other people: cells behind the rows ([DaySharedLayer]).
+  final List<CalendarEvent> sharedEvents;
+
   @override
   State<DayDetail> createState() => _DayDetailState();
 }
@@ -89,8 +97,9 @@ class _DayDetailState extends State<DayDetail>
   late final AnimationController _rows = AnimationController.unbounded(
     vsync: this,
   )..addListener(_keepRowsInside);
+  // One friend's events sharing a day are one, as in the month.
   late CalendarEventIndex _friendIndex = CalendarEventIndex(
-    widget.friendEvents,
+    mergeBusyByDay(widget.friendEvents),
   );
   var _maxOffset = 0.0;
   var _drag = _Drag.ignored;
@@ -103,7 +112,7 @@ class _DayDetailState extends State<DayDetail>
   void didUpdateWidget(covariant DayDetail oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.friendEvents, widget.friendEvents)) {
-      _friendIndex = CalendarEventIndex(widget.friendEvents);
+      _friendIndex = CalendarEventIndex(mergeBusyByDay(widget.friendEvents));
     }
   }
 
@@ -264,6 +273,7 @@ class _DayDetailState extends State<DayDetail>
                       day: widget.day,
                       metrics: widget.metrics,
                       events: widget.events,
+                      sharedEvents: widget.sharedEvents,
                       onVisibleDay: widget.onVisibleDay,
                       onEventTap: widget.onEventTap,
                       onCreateRange: widget.onCreateRange,
@@ -271,6 +281,7 @@ class _DayDetailState extends State<DayDetail>
                       mode: widget.mode,
                       friends: view,
                       inviteColors: widget.inviteColors,
+                      invitePeople: widget.invitePeople,
                     ),
                   ),
                 ),

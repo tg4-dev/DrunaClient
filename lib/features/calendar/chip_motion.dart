@@ -12,70 +12,49 @@ double friendsFoldAt(double mode) => ((1 - mode) * 2).clamp(0.0, 1.0);
 /// Gap between a week line and a chip folded against it.
 const chipFoldGap = 2.0;
 
-/// How much later each lower lane starts to unfold, as a share of the way.
-/// Small, so each chip still travels over most of the swipe and its speed
-/// stays close to the finger's.
-const chipUnfoldStagger = 0.06;
+/// Below this share of its height a chip's title is gone, so squeezed
+/// letters never show; it comes back over [chipTitleFade] above it.
+const chipTitleGone = 0.6;
+const chipTitleFade = 0.25;
 
-/// The first part of a chip's way during which it grows out of the line.
-const chipBirth = 0.5;
-
-/// How far a chip in [lane] has unfolded, 0 folded to 1 in place, when its
-/// layer is [away] from being shown. Lower lanes start a little later.
-double chipUnfoldProgress({
-  required double away,
-  required int lane,
-  required int lanes,
-}) {
-  final spread = chipUnfoldStagger * (lanes > 1 ? lanes - 1 : 0);
-  final shown = 1 - away.clamp(0.0, 1.0);
-  return (shown * (1 + spread) - chipUnfoldStagger * lane).clamp(0.0, 1.0);
+/// How far a layer [away] from being shown is unfolded: 0 folded into its
+/// line, 1 in place. The whole layer moves as one, so its chips keep their
+/// order and gaps at every step. With [reduce] the layer just switches.
+double chipShownAt(double away, {bool reduce = false}) {
+  final a = away.clamp(0.0, 1.0);
+  if (reduce) return a < 0.5 ? 1 : 0;
+  return Curves.easeInOutCubic.transform(1 - a);
 }
 
-/// The transform of a chip [away] from its place: it travels from [homeTop]
-/// to [foldTop] and, near the line, shrinks into it from the side that
-/// touches the line.
+/// How much of a chip's title shows when its layer is [shown] unfolded.
+double chipTitleAlpha(double shown) =>
+    ((shown - chipTitleGone) / chipTitleFade).clamp(0.0, 1.0);
+
+/// The transform of a chip whose top is at [homeTop] when its layer is
+/// [shown] unfolded: the layer is squeezed towards [line] like an
+/// accordion — positions and heights scale together around the line, so
+/// no chip ever runs into another. Anchored at the chip's top.
 Matrix4 chipFoldTransform({
-  required double away,
-  required int lane,
-  required int lanes,
+  required double shown,
   required double homeTop,
-  required double foldTop,
-}) {
-  final progress = chipUnfoldProgress(away: away, lane: lane, lanes: lanes);
-  // Eased at both ends: a layer starts moving exactly where the other one
-  // stopped, and a curve that starts at full speed made it jump there.
-  final travel = Curves.easeInOutCubic.transform(progress);
-  final grow = Curves.easeInOut.transform(
-    (progress / chipBirth).clamp(0.0, 1.0),
-  );
-  return Matrix4.translationValues(0, (foldTop - homeTop) * (1 - travel), 0)
-    ..scaleByDouble(1, grow, 1, 1);
-}
-
-/// Where [chipFoldTransform] anchors its scale.
-Alignment chipFoldAlignment({
-  required double homeTop,
-  required double foldTop,
-}) => foldTop <= homeTop ? Alignment.topCenter : Alignment.bottomCenter;
+  required double line,
+}) =>
+    Matrix4.translationValues(0, (line - homeTop) * (1 - shown), 0)
+      ..scaleByDouble(1, shown, 1, 1);
 
 /// One chip on its way between its place and its line, following the mode.
-/// Folded, all chips of a day lie in one stack against the line; they
-/// unfold lane by lane, the first lane first, and are born from the line by
-/// growing out of it. Used by the month and the day timeline alike.
+/// Used by the month and the day timeline alike.
 ///
 /// Only a transform changes per frame — no opacity: an [Opacity] below 1
 /// costs an offscreen layer per chip, and dozens of them per frame made the
 /// swipe stutter. The tree is the same at every progress, so a landing chip
-/// keeps its state.
+/// keeps its state. Titles under it fade through [ChipFoldInk].
 class ChipMotion extends StatelessWidget {
   const ChipMotion({
     required this.mode,
     required this.awayAt,
-    required this.lane,
-    required this.lanes,
     required this.homeTop,
-    required this.foldTop,
+    required this.line,
     required this.child,
     super.key,
   });
@@ -84,28 +63,64 @@ class ChipMotion extends StatelessWidget {
 
   /// The mode turned into how far this layer is folded: 0 in place, 1 gone.
   final double Function(double mode) awayAt;
-  final int lane;
-  final int lanes;
   final double homeTop;
-  final double foldTop;
+
+  /// Where the layer folds to: the week line, in the chip's coordinates.
+  final double line;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    double shownAt(double t) => chipShownAt(awayAt(t), reduce: reduce);
     return ValueListenableBuilder<double>(
       valueListenable: mode,
-      child: child,
+      child: _ChipFoldScope(mode: mode, shownAt: shownAt, child: child),
       builder: (context, t, child) => Transform(
-        alignment: chipFoldAlignment(homeTop: homeTop, foldTop: foldTop),
+        alignment: Alignment.topCenter,
         transform: chipFoldTransform(
-          away: awayAt(t),
-          lane: lane,
-          lanes: lanes,
+          shown: shownAt(t),
           homeTop: homeTop,
-          foldTop: foldTop,
+          line: line,
         ),
         child: child,
       ),
+    );
+  }
+}
+
+class _ChipFoldScope extends InheritedWidget {
+  const _ChipFoldScope({
+    required this.mode,
+    required this.shownAt,
+    required super.child,
+  });
+
+  final ValueListenable<double> mode;
+  final double Function(double mode) shownAt;
+
+  @override
+  bool updateShouldNotify(_ChipFoldScope old) => old.mode != mode;
+}
+
+/// A chip's title under a [ChipMotion]: [builder] gets how much of it
+/// shows, 0..1, and puts it into the text colour — only the text repaints,
+/// no layer. Outside a [ChipMotion] the title always shows.
+class ChipFoldInk extends StatelessWidget {
+  const ChipFoldInk({required this.builder, super.key});
+
+  final Widget Function(BuildContext context, double alpha) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_ChipFoldScope>();
+    if (scope == null) return builder(context, 1);
+    return ValueListenableBuilder<double>(
+      valueListenable: scope.mode,
+      builder: (context, t, _) {
+        final alpha = chipTitleAlpha(scope.shownAt(t));
+        return alpha <= 0 ? const SizedBox.shrink() : builder(context, alpha);
+      },
     );
   }
 }

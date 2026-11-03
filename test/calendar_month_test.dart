@@ -473,7 +473,8 @@ void main() {
         .where((element) => painted(tester, element))
         .map((element) => (element.widget as DecoratedBox).decoration)
         .whereType<BoxDecoration>()
-        .map((decoration) => decoration.color);
+        .map((decoration) => decoration.color)
+        .map((color) => color == null ? null : baseOfTone(color));
 
     bool textShown(WidgetTester tester, String text) =>
         find.text(text).evaluate().any((element) => painted(tester, element));
@@ -516,7 +517,7 @@ void main() {
         (widget) =>
             widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
-            (widget.decoration as BoxDecoration).color == friendColour,
+            isToneOf((widget.decoration as BoxDecoration).color, friendColour),
       );
       final fades = tester.widgetList<Opacity>(
         find.ancestor(of: chip.first, matching: find.byType(Opacity)),
@@ -571,7 +572,7 @@ void main() {
         (widget) =>
             widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
-            (widget.decoration as BoxDecoration).color == friendColour,
+            isToneOf((widget.decoration as BoxDecoration).color, friendColour),
       );
       expect(chip, findsNWidgets(5));
 
@@ -605,10 +606,11 @@ void main() {
       expect(friendsFoldAt(1), 0);
     });
 
-    test('month chips are pills, 15% lower than before', () {
-      for (final density in [barDensity, titleDensity, detailDensity]) {
+    test('thin month chips are pills, the title-and-time one is not', () {
+      for (final density in [barDensity, titleDensity]) {
         expect(monthChipRadius(density), density.itemHeight / 2);
       }
+      expect(monthChipRadius(detailDensity), monthChipDetailRadius);
       expect(titleDensity.itemHeight, 15);
       expect(detailDensity.itemHeight, 27);
     });
@@ -694,8 +696,18 @@ void main() {
         find.ancestor(of: finder, matching: find.byType(MonthWeekGrid)).first,
       );
 
-      // Nearly in friends' mode: my chip is folded under the top line.
-      final myChip = find.text('Моё');
+      // Nearly in friends' mode: my chip is folded under the top line (its
+      // title already gone, so it is found by colour).
+      final myChip = find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            isToneOf(
+              (widget.decoration as BoxDecoration).color,
+              calendarEventColor,
+            ),
+      );
+      expect(find.text('Моё'), findsNothing);
       expect(
         tester.getRect(myChip).top - weekOf(myChip).top,
         lessThan(chipFoldGap + 4),
@@ -708,7 +720,7 @@ void main() {
         (widget) =>
             widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
-            (widget.decoration as BoxDecoration).color == friendColour,
+            isToneOf((widget.decoration as BoxDecoration).color, friendColour),
       );
       final rect = tester.getRect(theirs.first);
       expect(
@@ -734,9 +746,7 @@ void main() {
       expect((disc.decoration! as BoxDecoration).color, Colors.white);
     });
 
-    testWidgets('my events take my colour, with dark text on a light one', (
-      tester,
-    ) async {
+    testWidgets('my events take my colour’s grid tones', (tester) async {
       const mine = Color(0xFFFFD60A);
       await tester.pumpWidget(
         MaterialApp(
@@ -761,7 +771,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(chipColours(tester), contains(mine));
-      expect(tester.widget<Text>(find.text('Моё')).style?.color, Colors.black);
+      // Apple's dark look: a deep fill, light text of the same hue.
+      final ink = tester.widget<Text>(find.text('Моё')).style!.color!;
+      expect(ink, gridTone(mine).ink);
+      expect(gridTone(mine).fill.computeLuminance(), lessThan(0.1));
     });
 
     testWidgets('friends’ mode: their chips in their colour; mine a band', (
@@ -774,7 +787,20 @@ void main() {
 
       // My chip lies folded on the top line: a tap there brings my events
       // back instead of opening the chip.
-      await tester.tap(find.text('Моё'), warnIfMissed: false);
+      await tester.tap(
+        find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is DecoratedBox &&
+                  widget.decoration is BoxDecoration &&
+                  isToneOf(
+                    (widget.decoration as BoxDecoration).color,
+                    calendarEventColor,
+                  ),
+            )
+            .first,
+        warnIfMissed: false,
+      );
       expect(tapped, isEmpty);
 
       final before = shown;
@@ -786,3 +812,19 @@ void main() {
 }
 
 void _ignoreTap(DateTime day, Rect weekRect) {}
+
+/// A chip's fill or ink is one of [base]'s grid tones ([gridTone]).
+bool isToneOf(Color? color, Color base) =>
+    color == gridTone(base).fill || color == gridTone(base).ink;
+
+/// The colour a grid tone was made from, among the test's colours.
+Color baseOfTone(Color tone) {
+  for (final base in [
+    calendarEventColor,
+    const Color(0xFFFFD60A),
+    const Color(0xFF34C759),
+  ]) {
+    if (isToneOf(tone, base)) return base;
+  }
+  return tone;
+}

@@ -1,6 +1,6 @@
-const monthRowLevels = [100.0, 148.0, 230.0, 340.0, 520.0];
-const monthRowMin = 100.0;
-const monthRowMax = 520.0;
+const monthRowLevels = [115.0, 148.0, 230.0, 364.0];
+const monthRowMin = 115.0;
+const monthRowMax = 364.0;
 const weekdayHeaderHeight = 28.0;
 
 /// Height of the open day's title row under the safe area.

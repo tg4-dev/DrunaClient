@@ -276,11 +276,9 @@ flutter run \
   `1246EEFE-E718-4DE2-AE96-2DE0DD2EF254`;
 - debug-сборка iOS Simulator успешно собрана, установлена и запущена;
 - `flutter analyze` проходит без замечаний;
-- `flutter test`: на 2026-11-02 — 247 тестов, 245 проходят. Падают
+- `flutter test`: на 2026-11-03 — 275 тестов, 274 проходят. Падает
   `calendar_month_test.dart` «pinned top weeks run on under the top» (зависит
-  от текущей даты, падает и на коммите `55179fa`) и `invites_flow_test.dart`
-  «in friends’ calendar a hold invites the picked friends» (RenderFlex
-  overflow, падает и на `b649972`). В тестах
+  от текущей даты, падает и на коммите `55179fa`). В тестах
   progressive blur выключен (`test/flutter_test_config.dart`, `EdgeBlur`).
 
 Android SDK и Chrome в этом окружении не установлены. Android-сборка не была
@@ -314,7 +312,8 @@ flutter build ios \
   календаря, не из `DrunaColors`/`druna_widgets.dart` и не из прототипа v18.
 - Каждое дизайн-решение, которое описывает автор (в чате, скриншотом или
   словами), записывайте в `docs/design-system.md`: в нужный раздел и в журнал
-  решений (§13). Значения, не сверенные с Figma, помечайте 🟡.
+  решений (§13). Помечать значения 🟡 и сверять их с Figma больше не нужно
+  (решение автора 2026-11-03): эскизы и слова автора окончательны.
 - Людей везде показывайте через `PersonAvatar`: цвет из палитры и первая
   буква имени, фото нет.
 - Любая кнопка — `PillButton` (`lib/shared/ui/pill_button.dart`): иконка,

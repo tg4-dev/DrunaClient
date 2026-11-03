@@ -4,14 +4,19 @@ import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:flutter/material.dart';
 
 const timelineEventTop = 36.0;
-const timelineEventHeight = 58.0;
+
+/// As tall as an avatar of the friends' column (48): the user's bars and
+/// friends' rows read as one scale.
+const timelineEventHeight = 48.0;
 const timelineEventGap = 8.0;
 const timelineTitlePadding = 12.0;
 const timelineEventRadius = Radius.circular(16);
 
+/// `bodyStrong` (design-system §3): smaller than the 20 pt of the taller
+/// bars.
 const timelineTitleStyle = TextStyle(
   color: Colors.white,
-  fontSize: 20,
+  fontSize: 17,
   fontWeight: FontWeight.w600,
   height: 1.1,
 );
@@ -105,11 +110,20 @@ class DayEventLayer extends StatelessWidget {
                 event,
                 OwnEventColor.of(context),
                 DecoratedBox(
-                  decoration: eventFill(
-                    event,
-                    OwnEventColor.of(context),
-                    radius: radius,
-                  ),
+                  // Apple Calendar's dark look, as in the month: a deep
+                  // fill, the title in the light tone ([DayTitleOverlay]).
+                  decoration: event.invite == null
+                      ? BoxDecoration(
+                          color: gridTone(
+                            eventColor(event, OwnEventColor.of(context)),
+                          ).fill,
+                          borderRadius: radius,
+                        )
+                      : eventFill(
+                          event,
+                          OwnEventColor.of(context),
+                          radius: radius,
+                        ),
                 ),
               ),
             ),
@@ -205,29 +219,18 @@ class DayTitleOverlay extends StatelessWidget {
           height: timelineEventHeight,
           child: _moving(
             lanes[event.id] ?? 0,
-            Align(
-              alignment: Alignment.centerLeft,
-              child: AnimatedOpacity(
-                opacity: event.id == dimmedEventId ? 0.35 : 1,
-                duration: const Duration(milliseconds: 160),
-                child: Text.rich(
-                  TextSpan(
-                    text: title,
-                    children: [
-                      if (dates != null)
-                        TextSpan(
-                          text: '\u2002$dates',
-                          style: timelineDatesStyle,
-                        ),
-                    ],
-                  ),
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: timelineTitleStyle.copyWith(
-                    color: eventInkFor(event, own),
-                  ),
-                ),
+            AnimatedOpacity(
+              opacity: event.id == dimmedEventId ? 0.35 : 1,
+              duration: const Duration(milliseconds: 160),
+              child: _FadingTitle(
+                title: title,
+                dates: dates,
+                tone: event.invite == null
+                    ? gridTone(eventColor(event, own))
+                    : GridTone(
+                        fill: eventColor(event, own),
+                        ink: eventInkFor(event, own),
+                      ),
               ),
             ),
           ),
@@ -243,6 +246,66 @@ class DayTitleOverlay extends StatelessWidget {
   }
 }
 
+/// A bar's title in the light tone of its colour, the dates after it a
+/// little dimmer; cut and faded into the bar's fill at its end, as in the
+/// month, instead of an ellipsis.
+class _FadingTitle extends StatelessWidget {
+  const _FadingTitle({
+    required this.title,
+    required this.dates,
+    required this.tone,
+  });
+
+  final String title;
+  final String? dates;
+  final GridTone tone;
+
+  static const _fade = 16.0;
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text.rich(
+            TextSpan(
+              text: title,
+              children: [
+                if (dates != null)
+                  TextSpan(
+                    text: '\u2002$dates',
+                    style: timelineDatesStyle.copyWith(
+                      color: tone.ink.withValues(alpha: 0.7),
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
+            style: timelineTitleStyle.copyWith(color: tone.ink),
+          ),
+        ),
+        Positioned(
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: _fade,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [tone.fill.withValues(alpha: 0), tone.fill],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 /// X of [time] on the timeline, in list coordinates.
 double timelineX(DateTime time, double pixelsPerHour) {
   final dayIndex = calendarDaysBetween(dayTimelineOrigin, time);
@@ -253,10 +316,10 @@ double timelineX(DateTime time, double pixelsPerHour) {
 /// Day zero of the timeline list.
 final dayTimelineOrigin = DateTime(1970, 1, 1);
 
-/// Dates after a multi-day event's title: dark on the event colour.
+/// Dates after a multi-day event's title; [_FadingTitle] colours them.
 const timelineDatesStyle = TextStyle(
   color: Color(0x99000000),
-  fontSize: 15,
+  fontSize: 13,
   fontWeight: FontWeight.w600,
   height: 1.1,
   fontFeatures: [FontFeature.tabularFigures()],

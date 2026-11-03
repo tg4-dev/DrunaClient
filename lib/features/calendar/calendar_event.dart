@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/repeat_rule.dart';
+import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/oklab.dart';
 import 'package:flutter/material.dart';
 
 /// The user's events before their profile (and so their colour) is known.
@@ -44,6 +48,50 @@ Color eventInkFor(CalendarEvent event, Color own) {
         : color,
   );
 }
+
+/// How a colour reads on the month's grid, as in Apple Calendar's dark
+/// look: a deep fill and light text, both of the colour's own hue (in
+/// OKLCH, so neither drifts towards grey or another hue). Only the grid
+/// uses it; avatars, bands and the event page keep the colour itself.
+@immutable
+class GridTone {
+  const GridTone({required this.fill, required this.ink});
+
+  /// The chip behind a title: dark, half the colour's chroma.
+  final Color fill;
+
+  /// The title on it — and a chip with no title, which would barely show
+  /// as a dark fill: light, as much of the colour's chroma as sRGB holds.
+  final Color ink;
+}
+
+const gridFillLightness = 0.30;
+const gridFillChroma = 0.5;
+const gridInkLightnessMin = 0.72;
+const gridInkLightnessMax = 0.85;
+
+final _gridTones = <Color, GridTone>{};
+
+GridTone gridTone(Color color) => _gridTones.putIfAbsent(color, () {
+  final (l, a, b) = oklab(color);
+  final chroma = math.sqrt(a * a + b * b);
+  final hue = math.atan2(b, a);
+  Color at(double lightness, double c) {
+    // Less chroma until it fits in sRGB: the hue and lightness stay.
+    var fit = c;
+    for (var i = 0; i < 24; i++) {
+      final lab = (lightness, fit * math.cos(hue), fit * math.sin(hue));
+      if (inSrgbGamut(lab)) return fromOklab(lab);
+      fit *= 0.9;
+    }
+    return fromOklab((lightness, 0, 0));
+  }
+
+  return GridTone(
+    fill: at(gridFillLightness, chroma * gridFillChroma),
+    ink: at(l.clamp(gridInkLightnessMin, gridInkLightnessMax), chroma),
+  );
+});
 
 /// The average of [colors], for text and bands over a gradient.
 Color mixedColor(List<Color> colors) {
@@ -122,6 +170,7 @@ class EventInvite {
   const EventInvite({
     required this.id,
     required this.colors,
+    this.people = const [],
     this.pending = false,
     this.mine = false,
   });
@@ -130,6 +179,9 @@ class EventInvite {
 
   /// The people in it, organizer first: the event's gradient.
   final List<Color> colors;
+
+  /// The same people, for their faces on the month's cell.
+  final List<FriendInfo> people;
 
   /// The user has not answered yet.
   final bool pending;
@@ -159,20 +211,39 @@ class PendingInviteRim extends StatelessWidget {
   );
 }
 
-class _DashedRim extends CustomPainter {
-  const _DashedRim({required this.color, required this.radius});
+class _DashedRim extends DashedRimPainter {
+  _DashedRim({required Color color, required super.radius})
+    : super(color: Color.lerp(color, Colors.white, 0.35)!);
+}
+
+/// A dashed rounded edge just inside its box: the pending invite's rim, the
+/// month's unanswered cell and the chip that places a new invite.
+class DashedRimPainter extends CustomPainter {
+  const DashedRimPainter({
+    required this.color,
+    required this.radius,
+    this.dash = 4,
+    this.gap = 3,
+    this.width = 1.5,
+    this.inset,
+  });
 
   final Color color;
   final double radius;
+  final double dash;
+  final double gap;
+  final double width;
 
-  static const _dash = 4.0;
-  static const _gap = 3.0;
-  static const _width = 1.5;
+  /// Where the middle of the line runs, in from the box's edges; by default
+  /// half the line, so it stays inside. Zero puts it on the edge.
+  final EdgeInsets? inset;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    final rect = (Offset.zero & size).deflate(_width / 2);
+    if (size.isEmpty || color.a <= 0) return;
+    final rect = (inset ?? EdgeInsets.all(width / 2)).deflateRect(
+      Offset.zero & size,
+    );
     final path = Path()
       ..addRRect(
         RRect.fromRectAndRadius(
@@ -181,21 +252,29 @@ class _DashedRim extends CustomPainter {
         ),
       );
     final paint = Paint()
-      ..color = Color.lerp(color, Colors.white, 0.35)!
+      ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = _width;
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = width;
     for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        canvas.drawPath(metric.extractPath(distance, distance + _dash), paint);
-        distance += _dash + _gap;
+      // Whole dashes all the way round: the gap stretches a little.
+      final count = (metric.length / (dash + gap)).floor().clamp(1, 1 << 20);
+      final step = metric.length / count;
+      for (var i = 0; i < count; i++) {
+        final from = i * step;
+        canvas.drawPath(metric.extractPath(from, from + dash), paint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DashedRim old) =>
-      old.color != color || old.radius != radius;
+  bool shouldRepaint(covariant DashedRimPainter old) =>
+      old.color != color ||
+      old.radius != radius ||
+      old.dash != dash ||
+      old.gap != gap ||
+      old.width != width ||
+      old.inset != inset;
 }
 
 /// Shortest timed event; a shorter or inverted span grows to this.
@@ -284,6 +363,63 @@ CalendarEvent normalizeEvent(CalendarEvent event) {
   }
   if (event.end.isAfter(event.start)) return event;
   return event.copyWith(end: event.start.add(minimumEventLength));
+}
+
+/// Friends' busy time for the month: one friend's events that share a
+/// day become one chip — their sum, not a stack. Within one day it runs
+/// from the first start to the last end; over several days it is one bar
+/// from the first day to the last. Invites stay as they are.
+List<CalendarEvent> mergeBusyByDay(List<CalendarEvent> events) {
+  final byOwner = <int?, List<CalendarEvent>>{};
+  final rest = <CalendarEvent>[];
+  for (final event in events) {
+    if (event.invite != null) {
+      rest.add(event);
+    } else {
+      byOwner.putIfAbsent(event.ownerId, () => []).add(event);
+    }
+  }
+  final merged = <CalendarEvent>[...rest];
+  for (final own in byOwner.values) {
+    own.sort((a, b) => eventFirstDay(a).compareTo(eventFirstDay(b)));
+    var group = <CalendarEvent>[];
+    var last = DateTime(0);
+    void flush() {
+      if (group.isNotEmpty) merged.add(_sumOf(group));
+      group = [];
+    }
+
+    for (final event in own) {
+      if (group.isNotEmpty && eventFirstDay(event).isAfter(last)) flush();
+      group.add(event);
+      final end = eventLastDay(event);
+      if (group.length == 1 || end.isAfter(last)) last = end;
+    }
+    flush();
+  }
+  return merged;
+}
+
+CalendarEvent _sumOf(List<CalendarEvent> group) {
+  if (group.length == 1) return group.single;
+  final first = group
+      .map(eventFirstDay)
+      .reduce((a, b) => a.isBefore(b) ? a : b);
+  final last = group.map(eventLastDay).reduce((a, b) => a.isAfter(b) ? a : b);
+  final id =
+      'busy-${group.first.ownerId}-${first.year}-${first.month}-${first.day}';
+  if (sameDay(first, last) && group.every((event) => !event.allDay)) {
+    return group.first.copyWith(
+      id: id,
+      start: group
+          .map((event) => event.start)
+          .reduce((a, b) => a.isBefore(b) ? a : b),
+      end: group
+          .map((event) => event.end)
+          .reduce((a, b) => a.isAfter(b) ? a : b),
+    );
+  }
+  return group.first.copyWith(id: id, start: first, end: last, allDay: true);
 }
 
 DateTime eventFirstDay(CalendarEvent event) => dateOnly(event.start);

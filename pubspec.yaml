@@ -95,6 +95,7 @@ flutter:
   # (event_gradient.dart).
   shaders:
     - shaders/event_gradient.frag
+    - shaders/week_band.frag
 
   # The logo and the onboarding's arrow (lib/shared/ui/brand.dart).
   assets:

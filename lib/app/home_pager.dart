@@ -94,6 +94,9 @@ class _HomePagerState extends State<HomePager> {
   /// The invite whose page is open over the plane.
   String? _openInvite;
 
+  /// [_openInvite] for the calendar: its cells wait for the page to close.
+  final _openInviteNow = ValueNotifier<String?>(null);
+
   FriendsSource get _friendsSource =>
       widget.settings.demoFriends ? _demo : _server;
 
@@ -124,7 +127,12 @@ class _HomePagerState extends State<HomePager> {
 
   void _resetInvites() => _invites.source = _newInvitesSource();
 
-  void _showInvite(String id) => setState(() => _openInvite = id);
+  void _showInvite(String id) => _setOpenInvite(id);
+
+  void _setOpenInvite(String? id) {
+    setState(() => _openInvite = id);
+    _openInviteNow.value = id;
+  }
 
   /// Sends a new invite to the store; throws for the sheet to say so.
   Future<void> _sendInvite(InviteDraft draft) => _invites.create(draft);
@@ -135,14 +143,26 @@ class _HomePagerState extends State<HomePager> {
   @override
   void initState() {
     super.initState();
+    _invitesMeId = widget.session.profile?.id;
     _demo.offline = widget.settings.demoOffline;
     widget.settings.addListener(_onSettings);
     widget.session.addListener(_onSession);
     _store.addListener(_dropMissingFriends);
   }
 
+  /// Who the user was when the invites were last loaded.
+  int? _invitesMeId;
+
   /// The profile arrives after sign-in; it sets the colour of my events.
+  /// Invites loaded before it hold a nameless "me" (the demo puts in
+  /// whoever the user is at loading time): they load again, or the user's
+  /// face on them would be a stranger's colour and letter.
   void _onSession() {
+    final meId = widget.session.profile?.id;
+    if (meId != null && meId != _invitesMeId) {
+      _invitesMeId = meId;
+      _invites.load();
+    }
     _syncInvites();
     setState(() {});
   }
@@ -158,6 +178,7 @@ class _HomePagerState extends State<HomePager> {
     _mode.dispose();
     _invites.dispose();
     _inviteEvents.dispose();
+    _openInviteNow.dispose();
     _schedules.dispose();
     _selection.dispose();
     _store.dispose();
@@ -315,6 +336,7 @@ class _HomePagerState extends State<HomePager> {
                   me: widget.session.profile,
                   invites: _inviteEvents,
                   onOpenInvite: _showInvite,
+                  openInvite: _openInviteNow,
                   onSendInvite: _sendInvite,
                 ),
               );
@@ -380,7 +402,7 @@ class _HomePagerState extends State<HomePager> {
                           subject: SharedInvite(id),
                           invites: _invites,
                           me: _me,
-                          onGone: () => setState(() => _openInvite = null),
+                          onGone: () => _setOpenInvite(null),
                         ),
                       ),
                     ),

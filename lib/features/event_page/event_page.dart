@@ -943,7 +943,7 @@ class _Together extends StatelessWidget {
           ),
           if (extra > 0) ...[
             const SizedBox(width: 6),
-            Text('+$extra', style: EventPageStyle.caption),
+            AvatarOverflow(count: extra, size: _size),
           ],
         ],
       ),

@@ -1,4 +1,5 @@
 import 'package:druna_app/shared/ui/avatar_style.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 
 /// Eight colours for everyone (design-system §2.3, docs/avatar.md), the
@@ -127,4 +128,38 @@ class OwnAvatar extends InheritedWidget {
   @override
   bool updateShouldNotify(OwnAvatar old) =>
       old.id != id || old.color != color || old.font != font;
+}
+
+/// "+N" after a row or stack of faces: a circle the size of a face on the
+/// app's button surface ([PillSurface], with the button's rim) a little
+/// darker than a button, not a grey disc.
+/// A shade darker than [PillStyle.fill].
+const avatarOverflowFill = Color(0x1AFFFFFF);
+
+class AvatarOverflow extends StatelessWidget {
+  const AvatarOverflow({required this.count, this.size = 48, super.key});
+
+  final int count;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: PillSurface(
+      fill: avatarOverflowFill,
+      child: Center(
+        child: Text(
+          '+$count',
+          textScaler: TextScaler.noScaling,
+          maxLines: 1,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: size * 0.36,
+            fontWeight: FontWeight.w700,
+            height: 1,
+          ),
+        ),
+      ),
+    ),
+  );
 }

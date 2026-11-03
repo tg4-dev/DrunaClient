@@ -61,7 +61,9 @@ void main() {
     expect(yes.left, closeTo((screen.width - blockWidth) / 2, 0.5));
   });
 
-  testWidgets('away from this month the title lights up', (tester) async {
+  testWidgets('with today\'s week off screen the title lights up', (
+    tester,
+  ) async {
     final now = DateTime.now();
     Future<Color> fill(DateTime focus) async {
       await tester.pumpWidget(
@@ -81,6 +83,11 @@ void main() {
 
     expect(await fill(now), PillStyle.fill);
     expect(await fill(DateTime(now.year, now.month + 3, 15)), Colors.white);
+    // The same month, but today's week scrolled away: lit too.
+    expect(
+      await fill(now.add(const Duration(days: 21))),
+      isNot(PillStyle.fill),
+    );
   });
 
   testWidgets('the accepting ✓ is filled', (tester) async {

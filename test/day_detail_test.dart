@@ -299,6 +299,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(folded, findsNothing);
     });
+
+    testWidgets('in my calendar a chevron over the stack points up to '
+        'friends, and takes a tap', (tester) async {
+      await openDay(tester);
+      final hint = find.byKey(const ValueKey('day-swipe-hint'));
+      await tester.tap(find.byKey(const ValueKey('day-my-band')));
+      await tester.pumpAndSettle();
+      final stack = tester.getRect(folded);
+      final chevron = tester.getRect(hint);
+      expect(chevron.bottom, lessThanOrEqualTo(stack.top + 8));
+      expect(chevron.top, greaterThan(0));
+
+      await tester.tap(hint);
+      await tester.pumpAndSettle();
+      expect(folded, findsNothing);
+    });
   });
 
   testWidgets('titles stick to the edge of the friends column', (tester) async {

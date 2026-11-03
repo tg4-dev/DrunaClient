@@ -30,6 +30,7 @@ CalendarEvent inviteEvent(
   invite: EventInvite(
     id: invite.id,
     colors: inviteColors(invite, meId: meId, own: own),
+    people: invite.people,
     pending: invite.statusOf(meId) == RsvpStatus.pending,
     mine: invite.isOrganizer(meId),
   ),

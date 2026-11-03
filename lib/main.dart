@@ -3,6 +3,7 @@ import 'package:druna_app/app/druna_app.dart';
 import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
+import 'package:druna_app/features/calendar/band_paint.dart';
 import 'package:druna_app/features/event_page/event_gradient.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:flutter/material.dart';
@@ -15,8 +16,10 @@ Future<void> main() async {
   // Loaded before the first frame: until then the blurred widgets show
   // their child bare, and switching later would rebuild their subtrees.
   await ProgressiveBlurWidget.precache();
-  // The event page's background shader, so it never starts plain.
+  // The event page's background and the month's bands, so neither starts
+  // plain.
   await EventGradient.precache();
+  await BandShader.precache();
 
   const config = AppConfig.fromEnvironment();
   final tokenStore = SecureTokenStore();

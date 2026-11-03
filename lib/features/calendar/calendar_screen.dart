@@ -6,6 +6,7 @@ import 'package:druna_app/features/calendar/day_title_layout.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
+import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/event_page/event_page.dart';
 import 'package:druna_app/features/event_page/event_subject.dart';
@@ -36,6 +37,7 @@ class CalendarFriends {
     this.schedulesAvailable = true,
     this.invites,
     this.onOpenInvite,
+    this.openInvite,
     this.onSendInvite,
   });
 
@@ -64,6 +66,10 @@ class CalendarFriends {
 
   /// A tap on an invite opens its page.
   final ValueChanged<String>? onOpenInvite;
+
+  /// The invite whose page is open: a cell answered there changes once it
+  /// closes.
+  final ValueListenable<String?>? openInvite;
 
   /// Sends a new invite; throws if it failed. Without it a hold in friends'
   /// calendar makes the user's own event, as before.
@@ -115,7 +121,9 @@ class _CalendarScreenState extends State<CalendarScreen>
   /// The day the timeline shows now. Kept out of state: only closing reads it.
   DateTime? _visibleDay;
   Rect? _from;
-  double? _monthOffset;
+
+  /// Where the month was when the day opened, in rows ([MonthCalendarState.scrollUnits]).
+  double? _monthRows;
   int? _openedStrip;
   var _pulling = false;
 
@@ -127,11 +135,6 @@ class _CalendarScreenState extends State<CalendarScreen>
   final _leaving = <_Editor>[];
 
   var _reportedBusy = false;
-
-  /// [_events] or friends' busy time with the invites added, rebuilt only
-  /// when either list changes: the month indexes whatever list it gets.
-  final _mine = _Joined();
-  final _theirs = _Joined();
 
   /// Two fingers zoom the month: the plane must not slide meanwhile.
   var _pinching = false;
@@ -169,7 +172,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     setState(() {
       _day = date;
       _from = weekRect;
-      _monthOffset = _monthKey.currentState?.scrollOffset;
+      _monthRows = _monthKey.currentState?.scrollUnits;
       _openedStrip = stripIndexOfDay(date);
     });
     await _expand.animateTo(1, curve: Curves.easeOutCubic);
@@ -266,6 +269,16 @@ class _CalendarScreenState extends State<CalendarScreen>
       widget.friends?.onSendInvite != null &&
       widget.mode.value > calendarModeHalfway &&
       _invitees().isNotEmpty;
+
+  /// The user, then the picked friends: the faces on the chip of a new
+  /// invite.
+  List<FriendInfo>? _invitePeople() {
+    final friends = widget.friends;
+    if (friends?.onSendInvite == null) return null;
+    final invitees = _invitees();
+    if (invitees.isEmpty) return null;
+    return [meAsPerson(friends!.me), ...invitees];
+  }
 
   /// The user's colour, then each picked friend's: an invite's gradient.
   List<Color>? _inviteColors(BuildContext context) {
@@ -389,8 +402,8 @@ class _CalendarScreenState extends State<CalendarScreen>
     if (day != null) {
       final same = _openedStrip != null && stripIndexOfDay(day) == _openedStrip;
       final Rect? rect;
-      if (same && _monthOffset != null) {
-        _monthKey.currentState?.restoreOffset(_monthOffset!);
+      if (same && _monthRows != null) {
+        _monthKey.currentState?.restoreUnits(_monthRows!);
         rect = _monthKey.currentState?.rectForStrip(stripIndexOfDay(day));
       } else {
         rect = _monthKey.currentState?.revealDay(day);
@@ -408,7 +421,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       _closingDay = false;
       _day = null;
       _from = null;
-      _monthOffset = null;
+      _monthRows = null;
       _openedStrip = null;
     });
   }
@@ -422,13 +435,15 @@ class _CalendarScreenState extends State<CalendarScreen>
     // as a child, so open/close frames only move and fade it.
     final friends = widget.friends;
     final invites = friends?.invites;
-    final mine = _mine.of(_events, invites?.value);
+    // In the month, invites are cells of their own, in neither layer.
     MonthCalendar monthWith(List<CalendarEvent> friendEvents) => MonthCalendar(
       key: _monthKey,
       focus: DateTime.now(),
-      events: mine,
-      friendEvents: _theirs.of(friendEvents, invites?.value),
+      events: _events,
+      friendEvents: friendEvents,
+      sharedEvents: invites?.value ?? const [],
       inviteColors: _inviteColors(context),
+      invitePeople: _invitePeople(),
       mode: widget.mode,
       onShowMine: friends?.onShowMine,
       onPinchChanged: (pinching) {
@@ -470,7 +485,11 @@ class _CalendarScreenState extends State<CalendarScreen>
               friends.store,
               ?invites,
             ]),
-            builder: (context, _) => monthWith(friends.events.value),
+            builder: (context, _) => SharedCells(
+              events: invites?.value ?? const [],
+              openInvite: friends.openInvite,
+              child: monthWith(friends.events.value),
+            ),
           );
     return Scaffold(
       backgroundColor: Colors.black,
@@ -538,6 +557,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                     schedulesAvailable: friends.schedulesAvailable,
                     onShowFriends: friends.onShowFriends,
                     onAddFriends: friends.onAddFriends,
+                    me: _MyAvatar(
+                      profile: friends.me,
+                      size: FriendBarStyle.stackAvatar,
+                    ),
                   ),
                 ),
               ),
@@ -548,8 +571,10 @@ class _CalendarScreenState extends State<CalendarScreen>
               veil: _veil,
               week: from,
               day: day,
-              events: mine,
+              events: _events,
+              invites: invites,
               inviteColors: _inviteColors(context),
+              invitePeople: _invitePeople(),
               metrics: _dayMetrics,
               friends: friends,
               mode: widget.mode,
@@ -594,6 +619,8 @@ class _ExpandedDay extends StatelessWidget {
     required this.metrics,
     required this.friends,
     this.inviteColors,
+    this.invitePeople,
+    this.invites,
     required this.mode,
     required this.onVisibleDay,
     required this.onEventTap,
@@ -617,6 +644,12 @@ class _ExpandedDay extends StatelessWidget {
 
   /// Colours of an invite being drawn in friends' calendar.
   final List<Color>? inviteColors;
+
+  /// The people of that invite, the user first.
+  final List<FriendInfo>? invitePeople;
+
+  /// The user's invites: cells behind the rows of the day, in neither layer.
+  final ValueListenable<List<CalendarEvent>>? invites;
 
   /// With friends the day shows their rows and switches modes with the
   /// month (see [DayDetail]); without, only the user's events.
@@ -646,6 +679,7 @@ class _ExpandedDay extends StatelessWidget {
             day: day,
             metrics: metrics,
             events: events,
+            sharedEvents: invites?.value ?? const [],
             onVisibleDay: onVisibleDay,
             onEventTap: onEventTap,
             onCreateRange: onCreateRange,
@@ -656,11 +690,13 @@ class _ExpandedDay extends StatelessWidget {
               friends.store,
               friends.selection,
               friends.events,
+              ?invites,
             ]),
             builder: (context, _) => DayDetail(
               day: day,
               metrics: metrics,
               events: events,
+              sharedEvents: invites?.value ?? const [],
               onVisibleDay: onVisibleDay,
               onEventTap: onEventTap,
               onCreateRange: onCreateRange,
@@ -675,6 +711,7 @@ class _ExpandedDay extends StatelessWidget {
               onModeDrag: friends.onModeDrag,
               onModeSettle: friends.onModeSettle,
               inviteColors: inviteColors,
+              invitePeople: invitePeople,
             ),
           );
     final sheet = FadeTransition(
@@ -961,9 +998,13 @@ class _DayTitleTrack extends StatelessWidget {
 
 /// The user on top of the open day's column, in the colour of their events.
 class _MyAvatar extends StatelessWidget {
-  const _MyAvatar({required this.profile});
+  const _MyAvatar({
+    required this.profile,
+    this.size = DayFriendsGeometry.avatar,
+  });
 
   final UserProfile? profile;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -976,7 +1017,7 @@ class _MyAvatar extends StatelessWidget {
         name: profile?.name ?? '',
         username: profile?.username ?? 'Я',
         color: OwnEventColor.of(context),
-        size: DayFriendsGeometry.avatar,
+        size: size,
       ),
     );
   }
@@ -988,23 +1029,6 @@ class _Editor {
 
   final EventSubject subject;
   final key = UniqueKey();
-}
-
-/// Two lists as one, the same list object while neither changes.
-class _Joined {
-  List<CalendarEvent>? _a;
-  List<CalendarEvent>? _b;
-  List<CalendarEvent> _joined = const [];
-
-  List<CalendarEvent> of(List<CalendarEvent> a, List<CalendarEvent>? b) {
-    if (b == null || b.isEmpty) return a;
-    if (!identical(a, _a) || !identical(b, _b)) {
-      _a = a;
-      _b = b;
-      _joined = [...a, ...b];
-    }
-    return _joined;
-  }
 }
 
 /// The bottom blur and shade reach this share of the way from the screen

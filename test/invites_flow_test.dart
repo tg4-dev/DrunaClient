@@ -12,6 +12,8 @@ import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/event_page/event_page.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
+import 'package:druna_app/features/calendar/shared_cell.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -23,7 +25,10 @@ void main() {
   /// rename; everything else runs on the demo data.
   late _ProfileServer server;
 
-  Future<SessionController> pumpPager(WidgetTester tester) async {
+  Future<SessionController> pumpPager(
+    WidgetTester tester, {
+    bool profileLater = false,
+  }) async {
     tester.view.physicalSize = const Size(1206, 2622);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -41,7 +46,7 @@ void main() {
       ),
     );
     final session = SessionController(repository);
-    await tester.runAsync(session.restore);
+    if (!profileLater) await tester.runAsync(session.restore);
     await tester.pumpWidget(
       MaterialApp(
         home: HomePager(
@@ -59,6 +64,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    if (profileLater) {
+      await tester.runAsync(session.restore);
+      await tester.pumpAndSettle();
+    }
     return session;
   }
 
@@ -103,16 +112,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(EventPage), findsNothing);
 
-    // On the month, in everyone's colours, and opens its page.
-    // The layer of the user's own events is mounted too, unseen.
-    final chip = find.text('Каток').hitTestable();
-    expect(chip, findsOneWidget);
-    final fill = tester.widget<DecoratedBox>(
-      find.ancestor(of: chip, matching: find.byType(DecoratedBox)).first,
+    // On the month a cell of its day, answered (the user organizes it),
+    // with the faces and no title; a tap on it opens its page.
+    final chip = find.byWidgetPredicate(
+      (widget) => widget is SharedCellBack && widget.event.title == 'Каток',
     );
-    expect((fill.decoration as BoxDecoration).gradient, isNotNull);
+    expect(chip, findsOneWidget);
 
-    await tester.tap(chip);
+    await tester.tap(chip, warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(find.byType(EventPage), findsOneWidget);
     expect(find.text('Организатор'), findsOneWidget);
@@ -135,6 +142,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(EventPage), findsNothing);
     expect(find.text('Каток'), findsNothing);
+    expect(chip, findsNothing);
   });
 
   testWidgets('drawing in the open day with friends invites them too', (
@@ -151,14 +159,15 @@ void main() {
 
     final gesture = await tester.startGesture(const Offset(300, 420));
     await tester.pump(const Duration(milliseconds: 600));
-    // Drawn in everyone's colours while the finger is down.
-    final ghost = tester.widget<DecoratedBox>(
+    // Drawn as a dashed outline with everyone's faces while the finger is
+    // down, the unanswered cell it will become.
+    expect(
       find.descendant(
         of: find.byKey(const ValueKey('timeline-ghost')),
-        matching: find.byType(DecoratedBox),
+        matching: find.byType(FaceStack),
       ),
+      findsOneWidget,
     );
-    expect((ghost.decoration as BoxDecoration).gradient, isNotNull);
     await gesture.up();
     await tester.pumpAndSettle();
     expect(find.text('Отметить присутствие'), findsOneWidget);
@@ -169,7 +178,15 @@ void main() {
   ) async {
     await pumpPager(tester);
     await holdToday(tester);
-    expect(find.text('Мои события'), findsOneWidget);
+    // The event page says it is the user's own (the bar's caption under it
+    // says so too).
+    expect(
+      find.descendant(
+        of: find.byType(EventPage),
+        matching: find.text('Мои события'),
+      ),
+      findsOneWidget,
+    );
     expect(find.textContaining('Приглашение'), findsNothing);
   });
 
@@ -289,6 +306,23 @@ void main() {
     final fill = eventFill(event, const Color(0xFF00FF00));
     final colors = (fill.gradient! as LinearGradient).colors;
     expect(colors.every((c) => c.a == pendingInviteAlpha), isTrue);
+  });
+
+  testWidgets('the user\'s face on shared cells is theirs, also when the '
+      'profile comes after the invites', (tester) async {
+    final session = await pumpPager(tester, profileLater: true);
+    final me = session.profile!;
+    final faces = tester
+        .widgetList<PersonAvatar>(
+          find.descendant(
+            of: find.byType(FaceStack),
+            matching: find.byType(PersonAvatar),
+          ),
+        )
+        .toList();
+    expect(faces, isNotEmpty);
+    expect(faces.where((face) => face.id <= 0), isEmpty);
+    expect(faces.where((face) => face.id == me.id), isNotEmpty);
   });
 }
 
