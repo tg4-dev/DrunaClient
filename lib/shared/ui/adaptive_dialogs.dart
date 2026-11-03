@@ -32,30 +32,3 @@ Future<bool> confirmAction(
   );
   return confirmed;
 }
-
-/// Wheel picker on iOS, calendar picker on Android. [initialDate] is clamped
-/// into range: both pickers assert on it, e.g. when editing a past event.
-Future<DateTime?> pickDate(
-  BuildContext context, {
-  required DateTime initialDate,
-  required DateTime firstDate,
-  required DateTime lastDate,
-}) => AdaptiveDatePicker.show(
-  context: context,
-  initialDate: initialDate.isBefore(firstDate)
-      ? firstDate
-      : initialDate.isAfter(lastDate)
-      ? lastDate
-      : initialDate,
-  firstDate: firstDate,
-  lastDate: lastDate,
-);
-
-Future<TimeOfDay?> pickTime(
-  BuildContext context, {
-  required TimeOfDay initialTime,
-}) => AdaptiveTimePicker.show(
-  context: context,
-  initialTime: initialTime,
-  use24HourFormat: true,
-);

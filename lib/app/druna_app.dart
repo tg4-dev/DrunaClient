@@ -4,7 +4,6 @@ import 'package:druna_app/app/home_pager.dart';
 import 'package:druna_app/app/offline_accounts.dart';
 import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/config/app_config.dart';
-import 'package:druna_app/core/storage/token_store.dart';
 import 'package:druna_app/features/onboarding/auth_flow_source.dart';
 import 'package:druna_app/features/onboarding/onboarding_flow.dart';
 import 'package:druna_app/features/onboarding/welcome_page.dart';
@@ -17,14 +16,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 class DrunaApp extends StatefulWidget {
   const DrunaApp({
     required this.repository,
-    required this.tokenStore,
     required this.config,
     this.settingsStorage,
     this.authFlowSource,
     super.key,
   });
   final DrunaRepository repository;
-  final TokenStore tokenStore;
   final AppConfig config;
 
   /// Defaults to memory, so tests start from clean settings.

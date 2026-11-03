@@ -14,11 +14,8 @@ import 'package:druna_app/features/friends/friend_column.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
-  setUpAll(() => initializeDateFormatting('ru_RU'));
-
   group('busySpansOnDay', () {
     final day = DateTime(2026, 6, 25);
     CalendarEvent at(String id, int from, int to) => CalendarEvent(

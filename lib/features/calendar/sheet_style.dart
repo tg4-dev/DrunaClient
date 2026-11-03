@@ -49,21 +49,6 @@ abstract final class SheetStyle {
     letterSpacing: 0.2,
   );
 
-  static const clock = TextStyle(
-    color: Colors.white,
-    fontSize: 28,
-    fontWeight: FontWeight.w600,
-    height: 1.1,
-    fontFeatures: [FontFeature.tabularFigures()],
-  );
-
-  static const duration = TextStyle(
-    color: Colors.white,
-    fontSize: 17,
-    fontWeight: FontWeight.w700,
-    height: 1.1,
-  );
-
   static BoxDecoration get blockDecoration => const BoxDecoration(
     color: block,
     borderRadius: BorderRadius.all(blockRadius),

@@ -475,21 +475,6 @@ String clockLabel(DateTime time) =>
 String clockRangeLabel(DateTime start, DateTime end) =>
     '${clockLabel(start)}-${clockLabel(end)}';
 
-/// "4 часа", "30 минут", "1 ч 30 мин".
-String durationLabel(DateTime start, DateTime end) {
-  var minutes = end.difference(start).inMinutes;
-  if (minutes < 0) minutes = 0;
-  final hours = minutes ~/ 60;
-  final rest = minutes % 60;
-  if (hours == 0) {
-    return '$rest ${russianPlural(rest, 'минута', 'минуты', 'минут')}';
-  }
-  if (rest == 0) {
-    return '$hours ${russianPlural(hours, 'час', 'часа', 'часов')}';
-  }
-  return '$hours ч $rest мин';
-}
-
 /// [time] rounded to the nearest quarter hour, kept on its own day.
 DateTime nearestQuarter(DateTime time) {
   final total = time.hour * 60 + time.minute;
@@ -525,10 +510,6 @@ CalendarEvent createEventOnDay({
   return CalendarEvent(id: id, title: '', start: span.start, end: span.end);
 }
 
-/// Moves the event so it starts on [day], keeping times and its length in days.
-CalendarEvent moveEventToDay(CalendarEvent event, DateTime day) =>
-    shiftEventDays(event, calendarDaysBetween(eventFirstDay(event), day));
-
 /// Shifts the event by whole days. A repeat's end date is a date the user
 /// picked, so it stays where it is.
 CalendarEvent shiftEventDays(CalendarEvent event, int days) {
@@ -552,75 +533,6 @@ CalendarEvent shiftEventBy(CalendarEvent event, Duration shift) {
   return event.copyWith(
     start: event.start.add(shift),
     end: event.end.add(shift),
-  );
-}
-
-/// A new start time keeps the event's length.
-({DateTime start, DateTime end}) withStartClock(
-  DateTime start,
-  DateTime end,
-  int hour,
-  int minute,
-) {
-  final next = atClock(start, hour, minute);
-  final length = end.isAfter(start)
-      ? end.difference(start)
-      : minimumEventLength;
-  return (start: next, end: next.add(length));
-}
-
-/// A new end time lands on the start's day, or the next day when it is not
-/// after the start, so 22:00 → 02:00 becomes an overnight event.
-({DateTime start, DateTime end}) withEndClock(
-  DateTime start,
-  DateTime end,
-  int hour,
-  int minute,
-) {
-  var next = atClock(start, hour, minute);
-  if (!next.isAfter(start)) {
-    final tomorrow = addCalendarDays(start, 1);
-    next = atClock(tomorrow, hour, minute);
-  }
-  return (start: start, end: next);
-}
-
-/// Applies the sheet's fields to [event]. Timed drafts carry full dates, so an
-/// overnight or multi-day event keeps its days.
-CalendarEvent applyEventDraft({
-  required CalendarEvent event,
-  required String title,
-  required bool allDay,
-  required DateTime start,
-  required DateTime end,
-  RepeatRule? repeat,
-}) {
-  final trimmed = title.trim();
-  if (allDay) {
-    // An all-day event keeps its days; a timed one takes the draft's days.
-    final days = event.allDay ? event : event.copyWith(start: start, end: end);
-    final first = eventFirstDay(days);
-    final last = eventLastDay(days);
-    return normalizeEvent(
-      event.copyWith(
-        title: trimmed,
-        allDay: true,
-        start: first,
-        end: last,
-        repeat: repeat,
-        clearRepeat: repeat == null,
-      ),
-    );
-  }
-  return normalizeEvent(
-    event.copyWith(
-      title: trimmed,
-      allDay: false,
-      start: start,
-      end: end,
-      repeat: repeat,
-      clearRepeat: repeat == null,
-    ),
   );
 }
 

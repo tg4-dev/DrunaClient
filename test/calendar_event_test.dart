@@ -7,34 +7,6 @@ void main() {
   DateTime at(int day, int hour, [int minute = 0]) =>
       DateTime(2026, 10, day, hour, minute);
 
-  test('the duration label declines hours and minutes', () {
-    expect(durationLabel(at(14, 10), at(14, 10, 15)), '15 минут');
-    expect(durationLabel(at(14, 10), at(14, 10, 1)), '1 минута');
-    expect(durationLabel(at(14, 10), at(14, 11)), '1 час');
-    expect(durationLabel(at(14, 12), at(14, 16)), '4 часа');
-    expect(durationLabel(at(14, 10), at(14, 15)), '5 часов');
-    expect(durationLabel(at(14, 0), at(14, 4, 45)), '4 ч 45 мин');
-    expect(durationLabel(at(14, 22), at(15, 2)), '4 часа');
-  });
-
-  test('a new start keeps the length', () {
-    final next = withStartClock(at(14, 16), at(14, 20), 18, 30);
-    expect(next.start, at(14, 18, 30));
-    expect(next.end, at(14, 22, 30));
-  });
-
-  test('an end before the start rolls to the next day', () {
-    final next = withEndClock(at(14, 22), at(14, 23), 2, 0);
-    expect(next.start, at(14, 22));
-    expect(next.end, at(15, 2));
-
-    final later = withEndClock(at(14, 16), at(14, 17), 20, 0);
-    expect(later.end, at(14, 20));
-
-    final equal = withEndClock(at(14, 16), at(14, 17), 16, 0);
-    expect(equal.end, at(15, 16));
-  });
-
   test('a new event is one hour on the quarter hour', () {
     final day = DateTime(2026, 10, 14);
     final morning = defaultEventSpan(day, at(14, 10, 7));
@@ -66,95 +38,6 @@ void main() {
     ]);
     expect(index.onDay(DateTime(2026, 10, 14)).map((event) => event.id), ['a']);
     expect(sliceOnDay(index.events.single, DateTime(2026, 10, 14)), isNotNull);
-  });
-
-  test('moving an event keeps the time of day and the span', () {
-    final event = CalendarEvent(
-      id: 'trip',
-      title: 'Поездка',
-      allDay: true,
-      start: DateTime(2026, 10, 14),
-      end: DateTime(2026, 10, 18),
-    );
-
-    final moved = moveEventToDay(event, DateTime(2026, 10, 16));
-
-    expect(moved.start, DateTime(2026, 10, 16));
-    expect(moved.end, DateTime(2026, 10, 20));
-    expect(moveEventToDay(event, DateTime(2026, 10, 14)).start, event.start);
-  });
-
-  group('saving the sheet', () {
-    final trip = CalendarEvent(
-      id: 'trip',
-      title: 'Поездка',
-      allDay: true,
-      start: DateTime(2026, 10, 14),
-      end: DateTime(2026, 10, 18),
-    );
-
-    test('all-day keeps a multi-day span', () {
-      final renamed = applyEventDraft(
-        event: trip,
-        title: ' Дом ',
-        allDay: true,
-        start: at(14, 9),
-        end: at(14, 10),
-      );
-      expect(renamed.title, 'Дом');
-      expect(renamed.start, trip.start);
-      expect(renamed.end, trip.end);
-    });
-
-    test('a timed event turned all-day covers its days', () {
-      final night = CalendarEvent(
-        id: 'night',
-        title: 'Ночь',
-        start: at(14, 22),
-        end: at(15, 2),
-      );
-      final allDay = applyEventDraft(
-        event: night,
-        title: 'Ночь',
-        allDay: true,
-        start: night.start,
-        end: night.end,
-      );
-      expect(allDay.allDay, isTrue);
-      expect(allDay.start, DateTime(2026, 10, 14));
-      expect(allDay.end, DateTime(2026, 10, 15));
-    });
-
-    test('an overnight event keeps the next day', () {
-      final night = CalendarEvent(
-        id: 'night',
-        title: 'Ночь',
-        start: at(14, 22),
-        end: at(15, 2),
-      );
-      final saved = applyEventDraft(
-        event: night,
-        title: 'Ночь',
-        allDay: false,
-        start: night.start,
-        end: night.end,
-      );
-      expect(saved.start, at(14, 22));
-      expect(saved.end, at(15, 2));
-    });
-
-    test('a timed draft of an all-day event uses the draft times', () {
-      final back = applyEventDraft(
-        event: trip,
-        title: 'Поездка',
-        allDay: false,
-        start: at(14, 16),
-        end: at(14, 18),
-      );
-      expect(back.allDay, isFalse);
-      expect(back.start, at(14, 16));
-      expect(back.end, at(14, 18));
-    });
   });
 
   test('month densities follow the row heights', () {

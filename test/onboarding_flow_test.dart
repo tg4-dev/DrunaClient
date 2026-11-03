@@ -1045,12 +1045,14 @@ DrunaRepository _repository() => DrunaRepository(
 );
 
 Widget _app(AuthFlowSource source) {
-  final store = MemoryTokenStore();
   return DrunaApp(
     repository: DrunaRepository(
-      ApiClient(baseUrl: 'https://example.test', tokenStore: store, dio: Dio()),
+      ApiClient(
+        baseUrl: 'https://example.test',
+        tokenStore: MemoryTokenStore(),
+        dio: Dio(),
+      ),
     ),
-    tokenStore: store,
     config: const AppConfig(
       apiBaseUrl: 'https://example.test',
       environment: 'test',

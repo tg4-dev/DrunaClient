@@ -4,7 +4,6 @@ const dayMidnightInset = 40.0;
 const dayTitleRide = 6.0;
 const dayTitleSlot = dayMidnightInset + dayTitleRide;
 const expandOpenDuration = Duration(milliseconds: 360);
-const expandAlignDuration = Duration(milliseconds: 180);
 
 /// The sheet settles to full opacity early so the rest is just the move.
 const expandVeilCurve = Interval(0, 0.28, curve: Curves.easeOutCubic);

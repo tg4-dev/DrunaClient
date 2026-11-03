@@ -34,16 +34,6 @@ const drawnEventDefault = Duration(hours: 1);
 double quantizePixels(double pixelsPerHour) =>
     (pixelsPerHour * 32).round() / 32;
 
-/// [time] rounded to the nearest [step] minutes, rolling into the next day at
-/// midnight.
-DateTime snapToStep(DateTime time, {int step = calendarMinuteStep}) {
-  final minutes = time.hour * 60 + time.minute + time.second / 60;
-  final steps = (minutes / step).round() * step;
-  final day = addCalendarDays(dateOnly(time), steps ~/ (24 * 60));
-  final rest = steps % (24 * 60);
-  return atClock(day, rest ~/ 60, rest % 60);
-}
-
 class DayScrollMetrics extends ChangeNotifier {
   double offset = 0;
   double pixelsPerHour = defaultPixelsPerHour;

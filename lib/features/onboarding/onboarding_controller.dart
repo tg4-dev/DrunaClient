@@ -23,7 +23,7 @@ enum OnboardingStep {
   username,
   name,
 
-  /// Profile setup — a placeholder for now.
+  /// Profile setup: avatar font and colour.
   profile,
   done,
 }

@@ -5,6 +5,7 @@ import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -137,7 +138,7 @@ void main() {
   });
 
   group('pinned top', () {
-    Future<void> pumpMonth(WidgetTester tester) async {
+    Future<void> pumpMonth(WidgetTester tester, {DateTime? focus}) async {
       tester.view.physicalSize = const Size(1206, 2622);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
@@ -148,7 +149,10 @@ void main() {
               size: Size(402, 874),
               padding: EdgeInsets.only(top: 62, bottom: 34),
             ),
-            child: MonthCalendar(focus: DateTime.now(), onDayTap: _ignoreTap),
+            child: MonthCalendar(
+              focus: focus ?? DateTime.now(),
+              onDayTap: _ignoreTap,
+            ),
           ),
         ),
       );
@@ -172,7 +176,10 @@ void main() {
     testWidgets('weeks run on under the top instead of being cut', (
       tester,
     ) async {
-      await pumpMonth(tester);
+      // A fixed focus: the result depended on today's date. Around a
+      // month's first week (2026-10-15, 2026-11-03) the weeks above the top
+      // are not built — see docs/design-system.md §12.
+      await pumpMonth(tester, focus: DateTime(2026, 7, 1));
       const listTop = 62 + monthChrome;
       final month = tester.state<MonthCalendarState>(
         find.byType(MonthCalendar),
@@ -229,6 +236,35 @@ void main() {
       await tester.pumpAndSettle();
       expect(month.scrollOffset, closeTo(start, 0.5));
       expect(find.text(monthTitle(DateTime.now())), findsOneWidget);
+    });
+
+    testWidgets('with today\'s week off screen the title lights up', (
+      tester,
+    ) async {
+      final now = DateTime.now();
+      Future<Color> fill(DateTime focus) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MonthCalendar(
+              key: ValueKey(focus),
+              focus: focus,
+              onDayTap: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        return tester
+            .widget<PillButton>(find.byKey(const ValueKey('month-title')))
+            .fill;
+      }
+
+      expect(await fill(now), PillStyle.fill);
+      expect(await fill(DateTime(now.year, now.month + 3, 15)), Colors.white);
+      // The same month, but today's week scrolled away: lit too.
+      expect(
+        await fill(now.add(const Duration(days: 21))),
+        isNot(PillStyle.fill),
+      );
     });
   });
 

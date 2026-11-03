@@ -1,17 +1,12 @@
-import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/event_page/attendance_block.dart';
 import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/models/models.dart';
-import 'package:druna_app/shared/ui/action_pill.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
-  setUpAll(() => initializeDateFormatting('ru_RU'));
-
   const me = FriendInfo(id: 1, name: 'Глеб', username: 'gleb');
   const organizer = FriendInfo(id: 2, name: 'Алина', username: 'alina');
 
@@ -59,50 +54,5 @@ void main() {
     final screen = tester.getSize(find.byType(Scaffold));
     final blockWidth = PillStyle.wide + 16 + 36 + 5 * 26 + 44;
     expect(yes.left, closeTo((screen.width - blockWidth) / 2, 0.5));
-  });
-
-  testWidgets('with today\'s week off screen the title lights up', (
-    tester,
-  ) async {
-    final now = DateTime.now();
-    Future<Color> fill(DateTime focus) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MonthCalendar(
-            key: ValueKey(focus),
-            focus: focus,
-            onDayTap: (_, _) {},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      return tester
-          .widget<PillButton>(find.byKey(const ValueKey('month-title')))
-          .fill;
-    }
-
-    expect(await fill(now), PillStyle.fill);
-    expect(await fill(DateTime(now.year, now.month + 3, 15)), Colors.white);
-    // The same month, but today's week scrolled away: lit too.
-    expect(
-      await fill(now.add(const Duration(days: 21))),
-      isNot(PillStyle.fill),
-    );
-  });
-
-  testWidgets('the accepting ✓ is filled', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ActionPill(
-          icon: Icons.check_rounded,
-          label: 'Принять',
-          filled: true,
-          onPressed: () {},
-        ),
-      ),
-    );
-    final pill = tester.widget<PillButton>(find.byType(PillButton));
-    expect(pill.fill, Colors.white);
-    expect(pill.color, Colors.black);
   });
 }

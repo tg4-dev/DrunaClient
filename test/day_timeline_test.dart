@@ -191,12 +191,6 @@ void main() {
     }
   });
 
-  test('times snap to quarter hours and roll over midnight', () {
-    expect(snapToStep(at(9, 7)), at(9));
-    expect(snapToStep(at(9, 8)), at(9, 15));
-    expect(snapToStep(at(23, 53)), DateTime(2026, 10, 15));
-  });
-
   testWidgets('drawing snaps to half hours and shows the time under it', (
     tester,
   ) async {

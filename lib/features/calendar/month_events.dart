@@ -617,10 +617,7 @@ class _Placed {
   final bool continuesBefore;
   final bool continuesAfter;
 
-  bool get isSpan => startColumn != endColumn || event.allDay;
-
-  /// Insets match the old column chips (2 pt each side) and bars that run
-  /// on past the week edge.
+  /// 2 pt inset each side, none where the bar runs on past the week edge.
   double left(double columnWidth) =>
       startColumn * columnWidth + (continuesBefore ? 0 : 2);
 

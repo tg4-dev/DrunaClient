@@ -61,8 +61,6 @@ const weekCount = 52 * 120;
 String monthTitle(DateTime month) =>
     '${monthNames[month.month - 1]} ${month.year}';
 
-String monthLabel(DateTime month) => monthNames[month.month - 1];
-
 String monthShort(DateTime month) => monthShortNames[month.month - 1];
 
 String weekdayShort(DateTime day) => weekdayLabels[day.weekday - 1];

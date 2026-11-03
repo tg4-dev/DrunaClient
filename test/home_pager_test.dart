@@ -15,11 +15,8 @@ import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/features/calendar/day_detail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
-  setUpAll(() => initializeDateFormatting('ru_RU'));
-
   Future<AppSettings> pumpPager(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1206, 2622);
     tester.view.devicePixelRatio = 3;
