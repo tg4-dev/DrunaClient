@@ -42,6 +42,7 @@ void main() {
               schedulesAvailable: schedules,
               onShowFriends: () => shownFriends++,
               onAddFriends: () {},
+              me: const SizedBox(key: ValueKey('me')),
             ),
           ),
         ),
@@ -111,5 +112,38 @@ void main() {
   testWidgets('no friends yet: offers to add some', (tester) async {
     await pumpBar(tester, friends: const []);
     expect(find.text('Добавить друзей'), findsOneWidget);
+  });
+
+  testWidgets('in my mode: my avatar with "Мои события", and an arrow to '
+      'friends\' calendar while nobody is picked', (tester) async {
+    mode.value = 0;
+    await pumpBar(tester);
+    // How far in from its place a thing is: they fly in from the left.
+    double shiftOf(Finder finder) => tester
+        .widget<Transform>(
+          find.ancestor(of: finder, matching: find.byType(Transform)).first,
+        )
+        .transform
+        .storage[12];
+    expect(find.text('Мои события'), findsOneWidget);
+    expect(shiftOf(find.byKey(const ValueKey('me'))), closeTo(0, 1e-6));
+    final arrow = find.byKey(const ValueKey('swipe-hint'));
+    expect(arrow, findsOneWidget);
+    expect(shiftOf(arrow), closeTo(0, 1e-6));
+
+    await tester.tap(arrow);
+    expect(shownFriends, 1);
+
+    // In friends' calendar both are past the left edge.
+    mode.value = 1;
+    await tester.pumpAndSettle();
+    final width = tester.getSize(find.byType(FriendBar)).width;
+    expect(shiftOf(find.byKey(const ValueKey('me'))), lessThan(-width));
+
+    // With friends picked the stack stands there instead of the arrow.
+    selection.toggle(1);
+    mode.value = 0;
+    await tester.pumpAndSettle();
+    expect(arrow, findsNothing);
   });
 }

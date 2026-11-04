@@ -15,11 +15,8 @@ import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/features/calendar/day_detail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
-  setUpAll(() => initializeDateFormatting('ru_RU'));
-
   Future<AppSettings> pumpPager(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1206, 2622);
     tester.view.devicePixelRatio = 3;
@@ -195,15 +192,28 @@ void main() {
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
   });
 
-  testWidgets('picking my colour in settings repaints my events', (
+  testWidgets('a colour picked in settings repaints my events after ✓', (
     tester,
   ) async {
     final settings = await pumpPager(tester);
     await tester.tap(find.byKey(const ValueKey('settings-button')));
     await tester.pumpAndSettle();
 
+    final before = settings.ownColorSlot;
     await tester.ensureVisible(find.byKey(const ValueKey('color-6')));
     await tester.tap(find.byKey(const ValueKey('color-6')));
+    await tester.pumpAndSettle();
+    // A draft until confirmed: ✕ drops it.
+    expect(settings.ownColorSlot, before);
+    await tester.ensureVisible(find.byKey(const ValueKey('profile-cancel')));
+    await tester.tap(find.byKey(const ValueKey('profile-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-save')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('color-6')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('profile-save')));
+    await tester.tap(find.byKey(const ValueKey('profile-save')));
     await tester.pumpAndSettle();
     expect(settings.ownColorSlot, 6);
 

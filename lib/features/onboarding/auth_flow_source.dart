@@ -86,7 +86,8 @@ abstract interface class AuthFlowSource {
   /// True when nobody has the username yet.
   Future<bool> usernameAvailable(String username);
 
-  Future<void> signIn({required String email, required String password});
+  /// Signs in; the account's name for «Всё готово», null if not known.
+  Future<String?> signIn({required String email, required String password});
 
   /// «забыл пароль?». Nowhere supported yet: throws [resetUnsupported].
   Future<void> resetPassword(String email);
@@ -124,7 +125,7 @@ class ServerAuthFlowSource implements AuthFlowSource {
   Future<bool> usernameAvailable(String username) async => throw _unsupported;
 
   @override
-  Future<void> signIn({required String email, required String password}) =>
+  Future<String?> signIn({required String email, required String password}) =>
       throw _unsupported;
 
   @override
@@ -217,7 +218,10 @@ class DemoAuthFlowSource implements AuthFlowSource {
   }
 
   @override
-  Future<void> signIn({required String email, required String password}) async {
+  Future<String?> signIn({
+    required String email,
+    required String password,
+  }) async {
     final username = (await _accounts())[email];
     if (username == null || username == _unknown) {
       // The server signs in by username only, and this device does not
@@ -228,6 +232,12 @@ class DemoAuthFlowSource implements AuthFlowSource {
       );
     }
     await repository.signIn(username, password);
+    try {
+      return (await repository.getProfile()).name;
+    } catch (_) {
+      // Signed in all the same: «Всё готово» goes without the name.
+      return null;
+    }
   }
 
   @override
@@ -316,9 +326,13 @@ class RehearsalAuthFlowSource implements AuthFlowSource {
   }
 
   @override
-  Future<void> signIn({required String email, required String password}) async {
+  Future<String?> signIn({
+    required String email,
+    required String password,
+  }) async {
     await _wait();
     if (password == badPassword) throw wrongPassword;
+    return email.split('@').first;
   }
 
   @override
@@ -378,9 +392,13 @@ class OfflineAuthFlowSource implements AuthFlowSource {
   }
 
   @override
-  Future<void> signIn({required String email, required String password}) async {
+  Future<String?> signIn({
+    required String email,
+    required String password,
+  }) async {
     await _wait();
     await accounts.signIn(email);
+    return (await accounts.accounts())[email]?.name;
   }
 
   @override

@@ -1,15 +1,17 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:druna_app/app/app_settings.dart';
 import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
+import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
 import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/features/onboarding/onboarding_flow.dart';
 import 'package:druna_app/features/settings/avatar_tuning_page.dart';
 import 'package:druna_app/features/invites/invites_section.dart';
 import 'package:druna_app/features/invites/invites_store.dart';
+import 'package:druna_app/shared/ui/action_pill.dart';
 import 'package:druna_app/shared/ui/adaptive_dialogs.dart';
+import 'package:druna_app/shared/ui/avatar_style.dart';
 import 'package:druna_app/shared/ui/page_parts.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/shared/ui/person_name.dart';
@@ -17,6 +19,7 @@ import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:druna_app/features/onboarding/onboarding_rules.dart';
 import 'package:druna_app/shared/ui/pill_field.dart';
 import 'package:druna_app/shared/ui/profile_pickers.dart';
+import 'package:druna_app/shared/ui/setting_rows.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -35,8 +38,12 @@ class SettingsPage extends StatelessWidget {
     this.invites,
     this.onOpenInvite,
     this.onResetInvites,
+    this.calendarSync,
     super.key,
   });
+
+  /// For the calendar step of the onboarding rehearsal.
+  final CalendarSync? calendarSync;
 
   /// The user's invites for the «События» block; none without it.
   final InvitesStore? invites;
@@ -95,108 +102,125 @@ class SettingsPage extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _ServerSection(session: session, config: config),
-                      if (settings.allowDemo) ...[
-                        const SizedBox(height: 12),
-                        BlockSection(
-                          icon: CupertinoIcons.lab_flask_solid,
-                          title: 'Демо-данные',
-                          children: [
-                            _ActionRow(
-                              title: 'Пройти онбординг',
-                              subtitle:
-                                  'Регистрация без сервера, аккаунт не '
-                                  'создаётся; demo@druna.app — вход',
-                              onTap: () => showOnboardingRehearsal(context),
-                            ),
-                            _ActionRow(
-                              title: 'Пройти вход',
-                              subtitle:
-                                  'Любая почта ведёт ко входу; пароль '
-                                  'wrongpass — ошибка',
-                              onTap: () => showOnboardingRehearsal(
-                                context,
-                                signIn: true,
-                              ),
-                            ),
-                            _ActionRow(
-                              title: 'Подгонка аватаров',
-                              subtitle:
-                                  'Для разработчика: шрифты буквы, '
-                                  'docs/avatar.md',
-                              onTap: () => showAvatarTuning(context),
-                            ),
-                            _SwitchRow(
-                              title: 'Демо-друзья',
-                              subtitle: '12 друзей и заявка, без сервера',
-                              value: settings.demoFriends,
-                              onChanged: (value) =>
-                                  settings.demoFriends = value,
-                            ),
-                            _SwitchRow(
-                              title: 'Нет сети',
-                              subtitle:
-                                  'Демо отвечает ошибкой: проверить экраны ошибок',
-                              value: settings.demoOffline,
-                              onChanged: settings.demoFriends
-                                  ? (value) => settings.demoOffline = value
-                                  : null,
-                            ),
-                            _SwitchRow(
-                              title: 'Демо-расписания друзей',
-                              subtitle:
-                                  'Занятость выбранных друзей в календаре',
-                              value: settings.demoSchedules,
-                              onChanged: (value) =>
-                                  settings.demoSchedules = value,
-                            ),
-                            _ActionRow(
-                              title: 'Сбросить выбор друзей',
-                              subtitle:
-                                  'Кто выбран в нижней панели и как часто',
-                              onTap: () {
-                                onResetFriends();
-                                _toast(context, 'Выбор друзей сброшен');
-                              },
-                            ),
-                            _ActionRow(
-                              title: 'Сбросить демо-друзей',
-                              onTap: settings.demoFriends
-                                  ? () {
-                                      onResetDemo();
-                                      _toast(context, 'Демо-друзья сброшены');
-                                    }
-                                  : null,
-                            ),
-                            _ActionRow(
-                              title: 'Сбросить демо-приглашения',
-                              subtitle: 'Приглашения работают с демо-друзьями',
-                              onTap:
-                                  settings.demoFriends && onResetInvites != null
-                                  ? () {
-                                      onResetInvites!();
-                                      _toast(
-                                        context,
-                                        'Демо-приглашения сброшены',
-                                      );
-                                    }
-                                  : null,
+                      _DeveloperSection(
+                        children: [
+                          _ServerSection(session: session, config: config),
+                          if (settings.allowDemo) ...[
+                            const SizedBox(height: 12),
+                            BlockSection(
+                              icon: CupertinoIcons.lab_flask_solid,
+                              title: 'Демо-данные',
+                              children: [
+                                SettingRow(
+                                  title: 'Пройти онбординг',
+                                  subtitle:
+                                      'Регистрация без сервера, аккаунт не '
+                                      'создаётся; demo@druna.app — вход',
+                                  onTap: () => showOnboardingRehearsal(
+                                    context,
+                                    colorSlot: settings.ownColorSlot,
+                                    font: ownFontFor(settings),
+                                    calendarSync: calendarSync,
+                                  ),
+                                ),
+                                SettingRow(
+                                  title: 'Пройти вход',
+                                  subtitle:
+                                      'Любая почта ведёт ко входу; пароль '
+                                      'wrongpass — ошибка',
+                                  onTap: () => showOnboardingRehearsal(
+                                    context,
+                                    signIn: true,
+                                    colorSlot: settings.ownColorSlot,
+                                    font: ownFontFor(settings),
+                                  ),
+                                ),
+                                SettingRow(
+                                  title: 'Подгонка аватаров',
+                                  subtitle:
+                                      'Для разработчика: шрифты буквы, '
+                                      'docs/avatar.md',
+                                  onTap: () => showAvatarTuning(context),
+                                ),
+                                SettingSwitchRow(
+                                  title: 'Демо-друзья',
+                                  subtitle: '12 друзей и заявка, без сервера',
+                                  value: settings.demoFriends,
+                                  onChanged: (value) =>
+                                      settings.demoFriends = value,
+                                ),
+                                SettingSwitchRow(
+                                  title: 'Нет сети',
+                                  subtitle:
+                                      'Демо отвечает ошибкой: проверить экраны ошибок',
+                                  value: settings.demoOffline,
+                                  onChanged: settings.demoFriends
+                                      ? (value) => settings.demoOffline = value
+                                      : null,
+                                ),
+                                SettingSwitchRow(
+                                  title: 'Демо-расписания друзей',
+                                  subtitle:
+                                      'Занятость выбранных друзей в календаре',
+                                  value: settings.demoSchedules,
+                                  onChanged: (value) =>
+                                      settings.demoSchedules = value,
+                                ),
+                                SettingRow(
+                                  title: 'Сбросить выбор друзей',
+                                  subtitle:
+                                      'Кто выбран в нижней панели и как часто',
+                                  onTap: () {
+                                    onResetFriends();
+                                    _toast(context, 'Выбор друзей сброшен');
+                                  },
+                                ),
+                                SettingRow(
+                                  title: 'Сбросить демо-друзей',
+                                  onTap: settings.demoFriends
+                                      ? () {
+                                          onResetDemo();
+                                          _toast(
+                                            context,
+                                            'Демо-друзья сброшены',
+                                          );
+                                        }
+                                      : null,
+                                ),
+                                SettingRow(
+                                  title: 'Сбросить демо-приглашения',
+                                  subtitle:
+                                      'Приглашения работают с демо-друзьями',
+                                  onTap:
+                                      settings.demoFriends &&
+                                          onResetInvites != null
+                                      ? () {
+                                          onResetInvites!();
+                                          _toast(
+                                            context,
+                                            'Демо-приглашения сброшены',
+                                          );
+                                        }
+                                      : null,
+                                ),
+                              ],
                             ),
                           ],
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      BlockSection(
-                        icon: CupertinoIcons.wand_stars,
-                        title: 'Анимации',
-                        children: [
-                          _SwitchRow(
-                            title:
-                                'Замедлить в '
-                                '${AppSettings.slowMotionFactor.round()} раз',
-                            subtitle: 'Чтобы разглядеть переходы',
-                            value: settings.slowMotion,
-                            onChanged: (value) => settings.slowMotion = value,
+                          const SizedBox(height: 12),
+                          BlockSection(
+                            icon: CupertinoIcons.wand_stars,
+                            title: 'Анимации',
+                            children: [
+                              SettingSwitchRow(
+                                title:
+                                    'Замедлить в '
+                                    '${AppSettings.slowMotionFactor.round()} раз',
+                                subtitle: 'Чтобы разглядеть переходы',
+                                value: settings.slowMotion,
+                                onChanged: (value) =>
+                                    settings.slowMotion = value,
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -229,7 +253,11 @@ String _errorText(Object error) =>
 /// The user on top of the page (design-system §9.3, §9.11): the avatar as
 /// it is, the name in a field of the app's own style, the username and the
 /// email, then the same pickers of font and colour as in the onboarding.
-class _ProfileHeader extends StatelessWidget {
+///
+/// The font and the colour are a draft until ✓: the avatar shows them at
+/// once, the rest of the app (the events, the calendar «Druna» on the
+/// device) only after. ✕ drops the draft.
+class _ProfileHeader extends StatefulWidget {
   const _ProfileHeader({
     required this.session,
     required this.settings,
@@ -240,14 +268,53 @@ class _ProfileHeader extends StatelessWidget {
   final AppSettings settings;
   final Color own;
 
+  @override
+  State<_ProfileHeader> createState() => _ProfileHeaderState();
+}
+
+class _ProfileHeaderState extends State<_ProfileHeader> {
   static const _avatar = 120.0;
   static const _ring = 3.0;
   static const _ringGap = 4.0;
 
+  /// Picked but not saved; null — as saved.
+  int? _slot;
+  AvatarFont? _font;
+
+  AppSettings get settings => widget.settings;
+  SessionController get session => widget.session;
+
+  int get _savedSlot =>
+      settings.ownColorSlot ??
+      avatarPalette.indexOf(widget.own).clamp(0, avatarPalette.length - 1);
+
+  bool get _changed =>
+      (_slot != null && _slot != _savedSlot) ||
+      (_font != null && _font!.id != ownFontFor(settings).id);
+
+  void _save() {
+    final slot = _slot;
+    final font = _font;
+    if (slot != null && slot != _savedSlot) settings.ownColorSlot = slot;
+    if (font != null) settings.ownFontId = font.id;
+    setState(() {
+      _slot = null;
+      _font = null;
+    });
+    showToast(context, 'Профиль сохранён');
+  }
+
+  void _cancel() => setState(() {
+    _slot = null;
+    _font = null;
+  });
+
   @override
   Widget build(BuildContext context) {
     final profile = session.profile;
-    final font = ownFontFor(settings);
+    final font = _font ?? ownFontFor(settings);
+    final slot = _slot;
+    final own = slot == null ? widget.own : avatarPalette[slot];
     final name = profile == null
         ? ''
         : (profile.name.isEmpty ? profile.username : profile.name);
@@ -278,7 +345,7 @@ class _ProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           if (profile == null)
-            _ActionRow(
+            SettingRow(
               title: 'Профиль не загружен',
               subtitle: 'Нажми, чтобы запросить снова',
               onTap: () async {
@@ -302,21 +369,45 @@ class _ProfileHeader extends StatelessWidget {
             ),
             if (profile.email.isNotEmpty) ...[
               const SizedBox(height: 2),
-              Text(profile.email, style: _subtitle),
+              Text(profile.email, style: SettingRowStyle.subtitle),
             ],
           ],
           const SizedBox(height: 20),
           FontPicker(
             name: name.isEmpty ? '?' : name,
             selected: font,
-            onPick: (font) => settings.ownFontId = font.id,
+            onPick: (font) => setState(() => _font = font),
           ),
           const SizedBox(height: 14),
           ColorPicker(
-            selected:
-                settings.ownColorSlot ??
-                avatarPalette.indexOf(own).clamp(0, avatarPalette.length - 1),
-            onPick: (slot) => settings.ownColorSlot = slot,
+            selected: slot ?? _savedSlot,
+            onPick: (slot) => setState(() => _slot = slot),
+          ),
+          Reveal(
+            open: _changed,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ActionPill(
+                    key: const ValueKey('profile-cancel'),
+                    icon: CupertinoIcons.xmark,
+                    label: 'Отменить',
+                    kind: ActionPillKind.cancel,
+                    onPressed: _cancel,
+                  ),
+                  const SizedBox(width: 8),
+                  ActionPill(
+                    key: const ValueKey('profile-save'),
+                    icon: CupertinoIcons.checkmark_alt,
+                    label: 'Сохранить профиль',
+                    filled: true,
+                    onPressed: _save,
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -455,7 +546,7 @@ class _LogoutBlock extends StatelessWidget {
       decoration: SheetStyle.blockDecoration,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
-        child: _ActionRow(
+        child: SettingRow(
           title: 'Выйти',
           color: SheetStyle.today,
           onTap: () => _logout(context),
@@ -476,21 +567,21 @@ class _ServerSection extends StatefulWidget {
 }
 
 class _ServerSectionState extends State<_ServerSection> {
-  _Check? _ping;
-  _Check? _refresh;
+  SettingCheck? _ping;
+  SettingCheck? _refresh;
 
   Future<void> _run(
     Future<void> Function() action,
-    void Function(_Check) store,
+    void Function(SettingCheck) store,
   ) async {
     final watch = Stopwatch()..start();
-    setState(() => store(const _Check.running()));
-    _Check result;
+    setState(() => store(const SettingCheck.running()));
+    SettingCheck result;
     try {
       await action();
-      result = _Check.ok('OK · ${watch.elapsedMilliseconds} мс');
+      result = SettingCheck.ok('OK · ${watch.elapsedMilliseconds} мс');
     } catch (error) {
-      result = _Check.failed(_errorText(error));
+      result = SettingCheck.failed(_errorText(error));
     }
     if (mounted) setState(() => store(result));
   }
@@ -503,7 +594,7 @@ class _ServerSectionState extends State<_ServerSection> {
       icon: CupertinoIcons.antenna_radiowaves_left_right,
       title: 'Сервер',
       children: [
-        _ActionRow(
+        SettingRow(
           title: 'Адрес',
           value: url,
           onTap: () {
@@ -511,11 +602,11 @@ class _ServerSectionState extends State<_ServerSection> {
             _toast(context, 'Адрес скопирован');
           },
         ),
-        _ActionRow(
+        SettingRow(
           title: 'Сборка',
           value: '${widget.config.environment} · ${_buildMode()}',
         ),
-        _ActionRow(
+        SettingRow(
           title: 'Проверить соединение',
           subtitle: 'GET /ping/',
           status: _ping,
@@ -523,7 +614,7 @@ class _ServerSectionState extends State<_ServerSection> {
               ? null
               : () => _run(repository.ping, (check) => _ping = check),
         ),
-        _ActionRow(
+        SettingRow(
           title: 'Проверить обновление токена',
           subtitle: 'Испортить access token и запросить профиль',
           status: _refresh,
@@ -545,143 +636,61 @@ String _buildMode() => kReleaseMode
     ? 'profile'
     : 'debug';
 
-class _Check {
-  const _Check.running() : running = true, ok = false, text = '';
-  const _Check.ok(this.text) : running = false, ok = true;
-  const _Check.failed(this.text) : running = false, ok = false;
+/// The server, the demo and the slow motion: closed until asked for, so the
+/// page is the user's profile first.
+class _DeveloperSection extends StatefulWidget {
+  const _DeveloperSection({required this.children});
 
-  final bool running;
-  final bool ok;
-  final String text;
+  final List<Widget> children;
+
+  @override
+  State<_DeveloperSection> createState() => _DeveloperSectionState();
 }
 
-const _title = TextStyle(color: Colors.white, fontSize: 17);
-const _subtitle = TextStyle(color: SheetStyle.muted, fontSize: 13);
-
-/// A row at least 44 pt tall: title, optional subtitle, and on the right a
-/// value or the result of a check.
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.title,
-    this.subtitle,
-    this.value,
-    this.status,
-    this.color = Colors.white,
-    this.onTap,
-  });
-
-  final String title;
-  final String? subtitle;
-  final String? value;
-  final _Check? status;
-  final Color color;
-  final VoidCallback? onTap;
+class _DeveloperSectionState extends State<_DeveloperSection> {
+  var _open = false;
 
   @override
   Widget build(BuildContext context) {
-    final check = status;
-    final enabled = onTap != null || value != null || check != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedOpacity(
-        duration: SheetStyle.fade,
-        opacity: enabled ? 1 : 0.4,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DecoratedBox(
+          decoration: SheetStyle.blockDecoration,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: _title.copyWith(color: color)),
-                      if (subtitle != null) Text(subtitle!, style: _subtitle),
-                    ],
+            padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
+            child: Semantics(
+              expanded: _open,
+              child: SettingRow(
+                key: const ValueKey('developer-section'),
+                title: 'Для разработчика',
+                subtitle: 'Сервер, демо-данные, анимации',
+                trailing: AnimatedRotation(
+                  turns: _open ? 0.25 : 0,
+                  duration: SheetStyle.motion,
+                  curve: Curves.easeOutCubic,
+                  child: const Icon(
+                    CupertinoIcons.chevron_right,
+                    size: 14,
+                    color: SheetStyle.muted,
                   ),
                 ),
-                if (value != null)
-                  Flexible(
-                    child: Text(
-                      value!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: SheetStyle.value,
-                    ),
-                  ),
-                if (check != null)
-                  Flexible(
-                    child: AnimatedSwitcher(
-                      duration: SheetStyle.fade,
-                      child: check.running
-                          ? const CupertinoActivityIndicator()
-                          : Text(
-                              check.text,
-                              key: ValueKey(check.text),
-                              maxLines: 2,
-                              textAlign: TextAlign.end,
-                              style: SheetStyle.value.copyWith(
-                                color: check.ok
-                                    ? const Color(0xFF34C759)
-                                    : SheetStyle.today,
-                              ),
-                            ),
-                    ),
-                  ),
-              ],
+                onTap: () => setState(() => _open = !_open),
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SwitchRow extends StatelessWidget {
-  const _SwitchRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      duration: SheetStyle.fade,
-      opacity: onChanged == null ? 0.4 : 1,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: _title),
-                  Text(subtitle, style: _subtitle),
-                ],
-              ),
+        Reveal(
+          open: _open,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: widget.children,
             ),
-            const SizedBox(width: 12),
-            IgnorePointer(
-              ignoring: onChanged == null,
-              child: AdaptiveSwitch(
-                value: value,
-                onChanged: (next) => onChanged?.call(next),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

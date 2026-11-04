@@ -5,7 +5,9 @@ import 'package:druna_app/features/calendar/day_friends.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
+import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:druna_app/models/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -31,16 +33,6 @@ const drawnEventDefault = Duration(hours: 1);
 /// and the list's extent is always a whole number of days.
 double quantizePixels(double pixelsPerHour) =>
     (pixelsPerHour * 32).round() / 32;
-
-/// [time] rounded to the nearest [step] minutes, rolling into the next day at
-/// midnight.
-DateTime snapToStep(DateTime time, {int step = calendarMinuteStep}) {
-  final minutes = time.hour * 60 + time.minute + time.second / 60;
-  final steps = (minutes / step).round() * step;
-  final day = addCalendarDays(dateOnly(time), steps ~/ (24 * 60));
-  final rest = steps % (24 * 60);
-  return atClock(day, rest ~/ 60, rest % 60);
-}
 
 class DayScrollMetrics extends ChangeNotifier {
   double offset = 0;
@@ -93,6 +85,7 @@ class DayTimeline extends StatefulWidget {
     this.metrics,
     this.hourLabelOpacity = 1,
     this.events = const [],
+    this.sharedEvents = const [],
     this.hiddenEventId,
     this.onEventTap,
     this.onCreateRange,
@@ -100,6 +93,7 @@ class DayTimeline extends StatefulWidget {
     this.mode = myEventsMode,
     this.friends,
     this.inviteColors,
+    this.invitePeople,
     super.key,
   });
 
@@ -110,6 +104,10 @@ class DayTimeline extends StatefulWidget {
   final DayScrollMetrics? metrics;
   final double hourLabelOpacity;
   final List<CalendarEvent> events;
+
+  /// Events with other people: cells behind every row for their time, still
+  /// while the mode changes (design-system §9.8).
+  final List<CalendarEvent> sharedEvents;
   final String? hiddenEventId;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
 
@@ -129,6 +127,10 @@ class DayTimeline extends StatefulWidget {
   /// In friends' rows with friends picked, drawing makes an invite: the
   /// event being drawn takes their colours.
   final List<Color>? inviteColors;
+
+  /// Their faces, the user first: an invite being drawn is a dashed outline
+  /// with them, as the unanswered cell it will become.
+  final List<FriendInfo>? invitePeople;
 
   @override
   State<DayTimeline> createState() => DayTimelineState();
@@ -192,6 +194,7 @@ class DayTimelineState extends State<DayTimeline>
   late final ScrollController _scroll;
   late final AnimationController _snap;
   late CalendarEventIndex _index;
+  late CalendarEventIndex _sharedIndex;
   late double _pixels;
   double _pinchStartPixels = defaultPixelsPerHour;
   double _pinchStartOffset = 0;
@@ -220,6 +223,7 @@ class DayTimelineState extends State<DayTimeline>
   void initState() {
     super.initState();
     _index = CalendarEventIndex(widget.events);
+    _sharedIndex = CalendarEventIndex(widget.sharedEvents);
     _pixels = quantizePixels(
       widget.metrics?.pixelsPerHour ?? defaultPixelsPerHour,
     );
@@ -246,6 +250,9 @@ class DayTimelineState extends State<DayTimeline>
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.events, widget.events)) {
       _index = CalendarEventIndex(widget.events);
+    }
+    if (!identical(oldWidget.sharedEvents, widget.sharedEvents)) {
+      _sharedIndex = CalendarEventIndex(widget.sharedEvents);
     }
   }
 
@@ -339,6 +346,7 @@ class DayTimelineState extends State<DayTimeline>
     if (widget.onMoveEvent == null ||
         _friendsShown ||
         event.invite != null ||
+        event.external != null ||
         event.allDay ||
         _hold != null ||
         _pointers.length > 1) {
@@ -599,12 +607,32 @@ class DayTimelineState extends State<DayTimeline>
       viewportWidth: width,
       hiddenEventId: widget.hiddenEventId,
       dimmedEventId: _hold?.event?.id,
-      motion: _laneMotion(lanes),
+      motion: _laneMotion(),
       leftInset: widget.friends == null ? 0 : DayFriendsGeometry.columnWidth,
     );
-    if (widget.friends == null) return titles;
+    final shared = _sharedIndex.between(
+      addCalendarDays(dayTimelineOrigin, first),
+      addCalendarDays(dayTimelineOrigin, last),
+    );
+    final faces = DaySharedFaces(
+      events: shared,
+      scrollOffset: offset,
+      pixelsPerHour: _pixels,
+      viewportWidth: width,
+      leftInset: widget.friends == null ? 0 : DayFriendsGeometry.columnWidth,
+    );
+    if (widget.friends == null) {
+      if (shared.isEmpty) return titles;
+      return Stack(
+        children: [
+          Positioned.fill(child: titles),
+          Positioned.fill(child: faces),
+        ],
+      );
+    }
     return Stack(
       children: [
+        if (shared.isNotEmpty) Positioned.fill(child: faces),
         Positioned.fill(child: titles),
         Positioned.fill(
           child: MyBandTitles(
@@ -621,20 +649,14 @@ class DayTimelineState extends State<DayTimeline>
   }
 
   /// With friends, the user's bars fold up into their row as friends'
-  /// rows come in, lane by lane, like the month's chips.
-  LaneMotion? _laneMotion(Map<String, int> lanes) {
+  /// rows come in, squeezed towards it like the month's chips.
+  LaneMotion? _laneMotion() {
     if (widget.friends == null) return null;
-    var count = 0;
-    for (final lane in lanes.values) {
-      if (lane + 1 > count) count = lane + 1;
-    }
     return (lane, child) => ChipMotion(
       mode: widget.mode,
       awayAt: myFoldAt,
-      lane: lane,
-      lanes: count,
       homeTop: timelineLaneTop(lane),
-      foldTop: DayFriendsGeometry.myRowTop,
+      line: DayFriendsGeometry.myRowTop,
       child: child,
     );
   }
@@ -652,12 +674,35 @@ class DayTimelineState extends State<DayTimeline>
       onHoldStart: _beginMove,
       onHoldMove: _updateHold,
       onHoldEnd: _endHold,
-      motion: _laneMotion(lanes),
+      motion: _laneMotion(),
+    );
+    final shared = _sharedIndex.onDay(day);
+    Widget sharedLayer({required bool front}) => Positioned.fill(
+      child: IgnorePointer(
+        ignoring: front,
+        child: DaySharedLayer(
+          day: day,
+          pixelsPerHour: _pixels,
+          events: shared,
+          front: front,
+          onTap: widget.onEventTap,
+        ),
+      ),
     );
     final friends = widget.friends;
-    if (friends == null) return mine;
+    if (friends == null) {
+      if (shared.isEmpty) return mine;
+      return Stack(
+        children: [
+          sharedLayer(front: false),
+          Positioned.fill(child: mine),
+          sharedLayer(front: true),
+        ],
+      );
+    }
     return Stack(
       children: [
+        if (shared.isNotEmpty) sharedLayer(front: false),
         Positioned.fill(
           child: IgnorePointer(
             child: DayBands(
@@ -688,6 +733,7 @@ class DayTimelineState extends State<DayTimeline>
             ),
           ),
         ),
+        if (shared.isNotEmpty) sharedLayer(front: true),
       ],
     );
   }
@@ -720,6 +766,7 @@ class DayTimelineState extends State<DayTimeline>
           final base = colors == null
               ? OwnEventColor.of(context)
               : mixedColor(colors);
+          final people = widget.invitePeople;
           return Stack(
             clipBehavior: Clip.none,
             children: [
@@ -729,32 +776,34 @@ class DayTimelineState extends State<DayTimeline>
                 width: (right - left).clamp(2.0, double.infinity),
                 top: top,
                 height: height,
-                child: DecoratedBox(
-                  decoration: liftedEventDecoration(
-                    const BorderRadius.all(timelineEventRadius),
-                    color: base,
-                    colors: colors,
-                  ),
-                  child: title == null
-                      ? const SizedBox.expand()
-                      : Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: timelineTitlePadding,
-                          ),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                              style: timelineTitleStyle.copyWith(
-                                color: eventInk(base),
-                              ),
-                            ),
-                          ),
+                child: colors != null && people != null && people.isNotEmpty
+                    ? _InviteGhost(people: people)
+                    : DecoratedBox(
+                        decoration: liftedEventDecoration(
+                          const BorderRadius.all(timelineEventRadius),
+                          color: base,
+                          colors: colors,
                         ),
-                ),
+                        child: title == null
+                            ? const SizedBox.expand()
+                            : Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: timelineTitlePadding,
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: timelineTitleStyle.copyWith(
+                                      color: eventInk(base),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ),
               ),
               Positioned(
                 key: const ValueKey('timeline-ghost-time'),
@@ -920,4 +969,38 @@ class _TimeBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// An invite being drawn: a dashed outline on black with the faces of the
+/// people in it, like the month's chip for one.
+class _InviteGhost extends StatelessWidget {
+  const _InviteGhost({required this.people});
+
+  final List<FriendInfo> people;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    foregroundPainter: const DashedRimPainter(
+      color: Color(0xCCFFFFFF),
+      radius: 16,
+      dash: 8,
+      gap: 5,
+      width: sharedRimWidth,
+    ),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: const BorderRadius.all(timelineEventRadius),
+      ),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: FaceStack(people: people, size: 30),
+          ),
+        ),
+      ),
+    ),
+  );
 }

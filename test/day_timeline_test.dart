@@ -2,7 +2,9 @@ import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/day_events.dart';
 import 'package:druna_app/features/calendar/day_timeline.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
+import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:druna_app/models/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -189,12 +191,6 @@ void main() {
     }
   });
 
-  test('times snap to quarter hours and roll over midnight', () {
-    expect(snapToStep(at(9, 7)), at(9));
-    expect(snapToStep(at(9, 8)), at(9, 15));
-    expect(snapToStep(at(23, 53)), DateTime(2026, 10, 15));
-  });
-
   testWidgets('drawing snaps to half hours and shows the time under it', (
     tester,
   ) async {
@@ -270,5 +266,96 @@ void main() {
     );
 
     expect(find.textContaining('14.10-16.10'), findsOneWidget);
+  });
+
+  testWidgets('in the day, bars take the grid tones and the title the '
+      'light one', (tester) async {
+    await pumpTimeline(
+      tester,
+      events: [
+        CalendarEvent(
+          id: 'mine',
+          title: 'Обед',
+          start: at(timelineMorningHour + 1),
+          end: at(timelineMorningHour + 3),
+        ),
+      ],
+    );
+    final tone = gridTone(calendarEventColor);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).color == tone.fill,
+      ),
+      findsWidgets,
+    );
+    final title = tester.widget<Text>(find.text('Обед'));
+    expect(title.style?.color, tone.ink);
+  });
+
+  testWidgets('a shared event in the day is a cell with the faces, behind '
+      'the rows, and opens on a tap', (tester) async {
+    CalendarEvent? opened;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DayTimeline(
+          day: day,
+          onVisibleDay: (_) {},
+          onEventTap: (event, _) => opened = event,
+          sharedEvents: [
+            CalendarEvent(
+              id: 'dinner',
+              title: 'Ужин',
+              start: at(timelineMorningHour + 1),
+              end: at(timelineMorningHour + 3),
+              invite: const EventInvite(
+                id: 'dinner',
+                colors: [Color(0xFF34C759), Color(0xFFFF2D78)],
+                people: [
+                  FriendInfo(id: 1, name: 'Катя', username: 'katya'),
+                  FriendInfo(id: 2, name: 'Маша', username: 'masha'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(SharedCellBack), findsOneWidget);
+    expect(find.byType(FaceStack), findsOneWidget);
+    await tester.tap(find.byType(SharedCellBack), warnIfMissed: false);
+    expect(opened?.id, 'dinner');
+  });
+
+  testWidgets('a shared event\'s faces stick to the left edge while it runs '
+      'on past it', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DayTimeline(
+          day: day,
+          onVisibleDay: (_) {},
+          sharedEvents: [
+            CalendarEvent(
+              id: 'trip',
+              title: 'Поездка',
+              start: at(0),
+              end: at(23),
+              invite: const EventInvite(
+                id: 'trip',
+                colors: [Color(0xFF34C759), Color(0xFFFF2D78)],
+                people: [FriendInfo(id: 1, name: 'Катя', username: 'katya')],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    final faces = tester.getRect(find.byType(FaceStack));
+    expect(faces.left, closeTo(10, 0.5));
+    expect(faces.width, sharedDayFaceSize);
   });
 }

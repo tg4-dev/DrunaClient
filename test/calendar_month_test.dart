@@ -5,6 +5,7 @@ import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -137,7 +138,7 @@ void main() {
   });
 
   group('pinned top', () {
-    Future<void> pumpMonth(WidgetTester tester) async {
+    Future<void> pumpMonth(WidgetTester tester, {DateTime? focus}) async {
       tester.view.physicalSize = const Size(1206, 2622);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
@@ -148,7 +149,10 @@ void main() {
               size: Size(402, 874),
               padding: EdgeInsets.only(top: 62, bottom: 34),
             ),
-            child: MonthCalendar(focus: DateTime.now(), onDayTap: _ignoreTap),
+            child: MonthCalendar(
+              focus: focus ?? DateTime.now(),
+              onDayTap: _ignoreTap,
+            ),
           ),
         ),
       );
@@ -172,7 +176,10 @@ void main() {
     testWidgets('weeks run on under the top instead of being cut', (
       tester,
     ) async {
-      await pumpMonth(tester);
+      // A fixed focus: the result depended on today's date. Around a
+      // month's first week (2026-10-15, 2026-11-03) the weeks above the top
+      // are not built — see docs/design-system.md §12.
+      await pumpMonth(tester, focus: DateTime(2026, 7, 1));
       const listTop = 62 + monthChrome;
       final month = tester.state<MonthCalendarState>(
         find.byType(MonthCalendar),
@@ -229,6 +236,35 @@ void main() {
       await tester.pumpAndSettle();
       expect(month.scrollOffset, closeTo(start, 0.5));
       expect(find.text(monthTitle(DateTime.now())), findsOneWidget);
+    });
+
+    testWidgets('with today\'s week off screen the title lights up', (
+      tester,
+    ) async {
+      final now = DateTime.now();
+      Future<Color> fill(DateTime focus) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MonthCalendar(
+              key: ValueKey(focus),
+              focus: focus,
+              onDayTap: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        return tester
+            .widget<PillButton>(find.byKey(const ValueKey('month-title')))
+            .fill;
+      }
+
+      expect(await fill(now), PillStyle.fill);
+      expect(await fill(DateTime(now.year, now.month + 3, 15)), Colors.white);
+      // The same month, but today's week scrolled away: lit too.
+      expect(
+        await fill(now.add(const Duration(days: 21))),
+        isNot(PillStyle.fill),
+      );
     });
   });
 
@@ -473,7 +509,8 @@ void main() {
         .where((element) => painted(tester, element))
         .map((element) => (element.widget as DecoratedBox).decoration)
         .whereType<BoxDecoration>()
-        .map((decoration) => decoration.color);
+        .map((decoration) => decoration.color)
+        .map((color) => color == null ? null : baseOfTone(color));
 
     bool textShown(WidgetTester tester, String text) =>
         find.text(text).evaluate().any((element) => painted(tester, element));
@@ -516,7 +553,7 @@ void main() {
         (widget) =>
             widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
-            (widget.decoration as BoxDecoration).color == friendColour,
+            isToneOf((widget.decoration as BoxDecoration).color, friendColour),
       );
       final fades = tester.widgetList<Opacity>(
         find.ancestor(of: chip.first, matching: find.byType(Opacity)),
@@ -571,7 +608,7 @@ void main() {
         (widget) =>
             widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
-            (widget.decoration as BoxDecoration).color == friendColour,
+            isToneOf((widget.decoration as BoxDecoration).color, friendColour),
       );
       expect(chip, findsNWidgets(5));
 
@@ -605,10 +642,11 @@ void main() {
       expect(friendsFoldAt(1), 0);
     });
 
-    test('month chips are pills, 15% lower than before', () {
-      for (final density in [barDensity, titleDensity, detailDensity]) {
+    test('thin month chips are pills, the title-and-time one is not', () {
+      for (final density in [barDensity, titleDensity]) {
         expect(monthChipRadius(density), density.itemHeight / 2);
       }
+      expect(monthChipRadius(detailDensity), monthChipDetailRadius);
       expect(titleDensity.itemHeight, 15);
       expect(detailDensity.itemHeight, 27);
     });
@@ -694,8 +732,18 @@ void main() {
         find.ancestor(of: finder, matching: find.byType(MonthWeekGrid)).first,
       );
 
-      // Nearly in friends' mode: my chip is folded under the top line.
-      final myChip = find.text('Моё');
+      // Nearly in friends' mode: my chip is folded under the top line (its
+      // title already gone, so it is found by colour).
+      final myChip = find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            isToneOf(
+              (widget.decoration as BoxDecoration).color,
+              calendarEventColor,
+            ),
+      );
+      expect(find.text('Моё'), findsNothing);
       expect(
         tester.getRect(myChip).top - weekOf(myChip).top,
         lessThan(chipFoldGap + 4),
@@ -708,7 +756,7 @@ void main() {
         (widget) =>
             widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
-            (widget.decoration as BoxDecoration).color == friendColour,
+            isToneOf((widget.decoration as BoxDecoration).color, friendColour),
       );
       final rect = tester.getRect(theirs.first);
       expect(
@@ -734,9 +782,7 @@ void main() {
       expect((disc.decoration! as BoxDecoration).color, Colors.white);
     });
 
-    testWidgets('my events take my colour, with dark text on a light one', (
-      tester,
-    ) async {
+    testWidgets('my events take my colour’s grid tones', (tester) async {
       const mine = Color(0xFFFFD60A);
       await tester.pumpWidget(
         MaterialApp(
@@ -761,7 +807,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(chipColours(tester), contains(mine));
-      expect(tester.widget<Text>(find.text('Моё')).style?.color, Colors.black);
+      // Apple's dark look: a deep fill, light text of the same hue.
+      final ink = tester.widget<Text>(find.text('Моё')).style!.color!;
+      expect(ink, gridTone(mine).ink);
+      expect(gridTone(mine).fill.computeLuminance(), lessThan(0.1));
     });
 
     testWidgets('friends’ mode: their chips in their colour; mine a band', (
@@ -774,7 +823,20 @@ void main() {
 
       // My chip lies folded on the top line: a tap there brings my events
       // back instead of opening the chip.
-      await tester.tap(find.text('Моё'), warnIfMissed: false);
+      await tester.tap(
+        find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is DecoratedBox &&
+                  widget.decoration is BoxDecoration &&
+                  isToneOf(
+                    (widget.decoration as BoxDecoration).color,
+                    calendarEventColor,
+                  ),
+            )
+            .first,
+        warnIfMissed: false,
+      );
       expect(tapped, isEmpty);
 
       final before = shown;
@@ -786,3 +848,19 @@ void main() {
 }
 
 void _ignoreTap(DateTime day, Rect weekRect) {}
+
+/// A chip's fill or ink is one of [base]'s grid tones ([gridTone]).
+bool isToneOf(Color? color, Color base) =>
+    color == gridTone(base).fill || color == gridTone(base).ink;
+
+/// The colour a grid tone was made from, among the test's colours.
+Color baseOfTone(Color tone) {
+  for (final base in [
+    calendarEventColor,
+    const Color(0xFFFFD60A),
+    const Color(0xFF34C759),
+  ]) {
+    if (isToneOf(tone, base)) return base;
+  }
+  return tone;
+}

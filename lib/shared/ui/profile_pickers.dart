@@ -85,7 +85,7 @@ class AvatarPreview extends StatelessWidget {
                   letter: letter,
                   font: font,
                   size: size,
-                  color: avatarInkFor(fill),
+                  color: avatarInk,
                 ),
               ),
             ),

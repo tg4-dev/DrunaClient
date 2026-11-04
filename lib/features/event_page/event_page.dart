@@ -42,6 +42,7 @@ class EventPage extends StatefulWidget {
     this.onDelete,
     this.onSendInvite,
     this.onClosing,
+    this.onOpenExternal,
     super.key,
   });
 
@@ -67,6 +68,9 @@ class EventPage extends StatefulWidget {
 
   /// The page has left and can be removed.
   final VoidCallback onGone;
+
+  /// A [DeviceEventSubject]: opens it in the device's calendar.
+  final VoidCallback? onOpenExternal;
 
   @override
   State<EventPage> createState() => _EventPageState();
@@ -125,6 +129,10 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
         _editing = false;
         _last = _shared;
         widget.invites?.addListener(_onStore);
+      case DeviceEventSubject(:final event):
+        _event = event;
+        _editing = false;
+        _load(event, title: event.title);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -167,7 +175,7 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   /// The invite on screen: the shared one, or the one being made, with the
   /// user as its organizer.
   Invite? get _invite => switch (widget.subject) {
-    OwnEvent() => null,
+    OwnEvent() || DeviceEventSubject() => null,
     NewInvite(:final invitees) => Invite(
       id: 'draft',
       organizer: widget.me,
@@ -184,11 +192,15 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     SharedInvite() => _shared ?? _last,
   };
 
-  bool get _own => widget.subject is OwnEvent;
+  /// Not an invite: the user's own event, or one of the device's calendar.
+  bool get _own =>
+      widget.subject is OwnEvent || widget.subject is DeviceEventSubject;
+
+  bool get _external => widget.subject is DeviceEventSubject;
 
   bool get _organizer => _invite?.isOrganizer(widget.me.id) ?? true;
 
-  bool get _canEdit => _own || _organizer;
+  bool get _canEdit => !_external && (_own || _organizer);
 
   void _onStore() {
     final invite = _shared;
@@ -352,6 +364,8 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
           ),
         );
         if (saved && mounted) setState(() => _editing = false);
+      case DeviceEventSubject():
+        return;
     }
   }
 
@@ -383,6 +397,8 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
         _close();
       case SharedInvite():
         await _cancelInvite();
+      case DeviceEventSubject():
+        return;
     }
   }
 
@@ -526,7 +542,7 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
         ? own
         : avatarColorFor(id: person.id, username: person.username);
     final colors = invite == null
-        ? [own]
+        ? [_event?.color ?? own]
         : [
             for (final person in _people(
               invite,
@@ -625,6 +641,13 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
                   icon: CupertinoIcons.pencil,
                   label: 'Изменить',
                   onPressed: _edit,
+                )
+              : _external && widget.onOpenExternal != null
+              ? PillButton(
+                  key: const ValueKey('event-open-external'),
+                  icon: CupertinoIcons.arrow_up_right,
+                  label: 'Открыть в календаре',
+                  onPressed: widget.onOpenExternal,
                 )
               : null,
         ),
@@ -812,7 +835,7 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('Мои события', style: style),
+          Text(_event?.external?.calendarName ?? 'Мои события', style: style),
           const SizedBox(width: 8),
           const Icon(CupertinoIcons.calendar, color: Colors.white, size: 22),
         ],
@@ -943,7 +966,7 @@ class _Together extends StatelessWidget {
           ),
           if (extra > 0) ...[
             const SizedBox(width: 6),
-            Text('+$extra', style: EventPageStyle.caption),
+            AvatarOverflow(count: extra, size: _size),
           ],
         ],
       ),

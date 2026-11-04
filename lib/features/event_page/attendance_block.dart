@@ -302,7 +302,7 @@ class _FacesState extends State<_Faces> {
                 top: 0,
                 bottom: 0,
                 child: Center(
-                  child: Text('+$extra', style: EventPageStyle.caption),
+                  child: AvatarOverflow(count: extra, size: _size),
                 ),
               ),
           ],

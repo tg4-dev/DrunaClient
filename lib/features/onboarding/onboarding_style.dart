@@ -12,8 +12,6 @@ abstract final class OnboardingStyle {
   /// The email field: wider, and its text smaller, so an address fits.
   static const emailWidth = 300.0;
 
-  /// The name field hugs its text but is never narrower than this.
-  static const nameWidth = PillFieldStyle.nameWidth;
   static const arrowWidth = 72.0;
   static const arrowGap = 10.0;
   static const buttonGap = 14.0;
@@ -61,7 +59,6 @@ abstract final class OnboardingStyle {
     height: 1.3,
   );
   static final field = PillFieldStyle.field;
-  static final fieldHint = PillFieldStyle.fieldHint;
 
   static final emailField = onest(18, weight: FontWeight.w500, height: 1.2);
   static final emailHint = onest(
@@ -84,6 +81,15 @@ abstract final class OnboardingStyle {
   static final link = onest(15, weight: FontWeight.w500).copyWith(
     decoration: TextDecoration.underline,
     decorationColor: Colors.white,
+  );
+
+  /// A calendar on the calendar step: its name, and its account under it.
+  static final calendarName = onest(17, weight: FontWeight.w600, height: 1.2);
+  static final calendarAccount = onest(
+    13,
+    weight: FontWeight.w500,
+    color: Colors.white.withValues(alpha: 0.6),
+    height: 1.2,
   );
 
   static final tagline = onest(

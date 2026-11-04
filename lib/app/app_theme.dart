@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 /// The Material theme under the new screens. Its values are those of the
 /// old prototype theme, which the friends page and the profile still lean
-/// on (design-system §12 #8); new widgets set their own styles and should
-/// not read from here.
+/// on; new widgets set their own styles and should not read from here. Goes
+/// away when Onest becomes the app font (docs/design-system.md §12).
 ThemeData buildAppTheme() {
   const background = Color(0xFF080808);
   const surface = Color(0xFF111112);

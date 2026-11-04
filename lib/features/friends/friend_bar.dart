@@ -1,6 +1,7 @@
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/brand.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/cupertino.dart';
@@ -23,6 +24,20 @@ abstract final class FriendBarStyle {
   static const stackAvatar = 48.0;
   static const stackStep = 22.0;
   static const stackMax = 3;
+
+  /// The user's own mode: their avatar and caption on the left, the swipe
+  /// hint on the right.
+  static const mineGap = 10.0;
+  static const mineCaption = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    height: 1,
+  );
+  static const arrow = Color(0xB3FFFFFF);
+  static const arrowSize = 24.0;
+
+  /// The corner and the hint start this far past the left edge.
+  static const flyOver = 48.0;
 
   static const ring = 3.0;
   static const ringGap = 3.0;
@@ -48,6 +63,8 @@ class FriendBar extends StatefulWidget {
     required this.onShowFriends,
     required this.onAddFriends,
     this.schedulesAvailable = true,
+    this.me,
+    this.onOpenMine,
     super.key,
   });
 
@@ -64,6 +81,13 @@ class FriendBar extends StatefulWidget {
 
   /// False when there is no way to get friends' busy time.
   final bool schedulesAvailable;
+
+  /// The user's avatar: in the user's own mode it stands at the bottom
+  /// left with "Мои события".
+  final Widget? me;
+
+  /// Makes the corner with [me] a button: the menu of the user's calendar.
+  final VoidCallback? onOpenMine;
 
   @override
   State<FriendBar> createState() => _FriendBarState();
@@ -101,11 +125,35 @@ class _FriendBarState extends State<FriendBar> {
               const SizedBox(height: FriendBarStyle.hintGap),
               SizedBox(
                 height: FriendBarStyle.height,
-                child: friends == null
-                    ? _Placeholder(visible: expanded)
-                    : friends.isEmpty
-                    ? _AddFriends(visible: expanded, onTap: widget.onAddFriends)
-                    : _row(friends, constraints.maxWidth, expanded),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (friends == null)
+                      _Placeholder(visible: expanded)
+                    else if (friends.isEmpty)
+                      _AddFriends(visible: expanded, onTap: widget.onAddFriends)
+                    else
+                      _row(friends, constraints.maxWidth, expanded),
+                    // The user's own mode says whose events these are, and
+                    // with nobody picked, that friends' calendar is a swipe
+                    // to the left.
+                    if (widget.me case final me?)
+                      _MineCorner(
+                        me: me,
+                        mode: widget.mode,
+                        expanded: expanded,
+                        width: constraints.maxWidth,
+                        onTap: widget.onOpenMine,
+                      ),
+                    if (widget.selection.selected.isEmpty)
+                      _SwipeHint(
+                        mode: widget.mode,
+                        expanded: expanded,
+                        width: constraints.maxWidth,
+                        onTap: widget.onShowFriends,
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -462,22 +510,7 @@ class _MoreSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: motion,
-      child: Container(
-        alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          color: SheetStyle.chip,
-          shape: BoxShape.circle,
-        ),
-        child: Text(
-          '+$count',
-          textScaler: TextScaler.noScaling,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+      child: AvatarOverflow(count: count, size: FriendBarStyle.stackAvatar),
       builder: (context, child) {
         final offset = _offsetOf(scroll);
         return Positioned(
@@ -592,4 +625,124 @@ class _AddFriends extends StatelessWidget {
       ),
     );
   }
+}
+
+/// How far in from the left the user's own mode's corner and hint are
+/// while the bar is [fold]ed: they fly in from beyond the left edge, the
+/// way the plane moves and the friends leave to the right — same curve,
+/// same distance.
+Offset _flyIn(double fold, double width) =>
+    Offset(-(width + FriendBarStyle.flyOver) * (1 - fold), 0);
+
+/// In the user's own mode, bottom left: their avatar and "Мои события".
+/// With [onTap] it is a button that opens the menu of the user's calendar.
+class _MineCorner extends StatelessWidget {
+  const _MineCorner({
+    required this.me,
+    required this.mode,
+    required this.expanded,
+    required this.width,
+    this.onTap,
+  });
+
+  final Widget me;
+  final ValueListenable<double> mode;
+  final bool expanded;
+  final double width;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    left: FriendBarStyle.gutter,
+    top: 0,
+    bottom: 0,
+    child: IgnorePointer(
+      ignoring: onTap == null || expanded,
+      child: ValueListenableBuilder<double>(
+        valueListenable: mode,
+        child: onTap != null
+            ? Center(
+                child: PillButton(
+                  key: const ValueKey('mine-button'),
+                  leading: me,
+                  text: 'Мои события',
+                  label: 'Мои события: календари',
+                  onPressed: onTap,
+                ),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox.square(
+                    dimension: FriendBarStyle.stackAvatar,
+                    child: me,
+                  ),
+                  const SizedBox(width: FriendBarStyle.mineGap),
+                  Text(
+                    'Мои события',
+                    textScaler: TextScaler.noScaling,
+                    style: FriendBarStyle.mineCaption.copyWith(
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+        builder: (context, t, row) => Transform.translate(
+          offset: _flyIn(friendBarFold(t), width),
+          child: row,
+        ),
+      ),
+    ),
+  );
+}
+
+/// In the user's own mode with nobody picked, bottom right: a chevron to
+/// the left — friends' calendar is a swipe that way. A tap goes there too.
+class _SwipeHint extends StatelessWidget {
+  const _SwipeHint({
+    required this.mode,
+    required this.expanded,
+    required this.width,
+    required this.onTap,
+  });
+
+  final ValueListenable<double> mode;
+  final bool expanded;
+  final double width;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    right: FriendBarStyle.gutter - 8,
+    top: 0,
+    bottom: 0,
+    child: IgnorePointer(
+      ignoring: expanded,
+      child: Semantics(
+        button: true,
+        label: 'Показать календарь друзей',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Center(
+              child: ValueListenableBuilder<double>(
+                valueListenable: mode,
+                child: const ChevronIcon(
+                  key: ValueKey('swipe-hint'),
+                  color: FriendBarStyle.arrow,
+                  size: FriendBarStyle.arrowSize,
+                ),
+                builder: (context, t, arrow) => Transform.translate(
+                  offset: _flyIn(friendBarFold(t), width),
+                  child: arrow,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }

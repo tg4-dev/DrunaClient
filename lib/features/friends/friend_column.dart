@@ -1,5 +1,6 @@
 import 'package:druna_app/features/calendar/day_friends.dart';
-import 'package:druna_app/features/calendar/sheet_style.dart';
+import 'package:druna_app/shared/ui/brand.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
@@ -9,6 +10,10 @@ import 'package:flutter/services.dart';
 
 /// Look of the friends column of the open day.
 abstract final class FriendColumnStyle {
+  /// The chevron of the user's own mode, and its gap over the stack.
+  static const hintSize = 24.0;
+  static const hintGap = 8.0;
+
   /// The timeline passing under the column darkens and blurs towards the
   /// screen edge ([DayDetail]). Sigma is in physical pixels, as the shader
   /// takes it.
@@ -174,6 +179,21 @@ class FriendColumn extends StatelessWidget {
             top: geometry.stackTop(DayFriendsGeometry.stackMax) - shift,
             mode: mode,
           ),
+        // In the user's own mode: a chevron up over the stack (or where it
+        // would be) — friends' rows are a swipe up. It rides up from below
+        // with the friends going down, and takes a tap too.
+        _ColumnHint(
+          top:
+              (selectedCount > 0
+                  ? geometry.bandTop - FriendColumnStyle.hintGap
+                  : geometry.bandBottom) -
+              FriendColumnStyle.hintSize -
+              shift,
+          travel: geometry.height,
+          mode: mode,
+          open: open,
+          onTap: onShowFriends,
+        ),
         if (!open && selectedCount > 0)
           Positioned(
             left: 0,
@@ -324,25 +344,61 @@ class _ColumnMore extends StatelessWidget {
       height: avatar,
       child: ValueListenableBuilder<double>(
         valueListenable: mode,
-        child: Container(
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            color: SheetStyle.chip,
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            '+$count',
-            textScaler: TextScaler.noScaling,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+        child: AvatarOverflow(count: count, size: DayFriendsGeometry.avatar),
         builder: (context, t, child) =>
             Transform.scale(scale: _settling(dayFriendsFold(t)), child: child),
       ),
     );
   }
+}
+
+/// The swipe hint of the user's own mode in the open day: a chevron up.
+class _ColumnHint extends StatelessWidget {
+  const _ColumnHint({
+    required this.top,
+    required this.travel,
+    required this.mode,
+    required this.open,
+    required this.onTap,
+  });
+
+  final double top;
+  final double travel;
+  final ValueListenable<double> mode;
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    left: 0,
+    right: 0,
+    top: top,
+    height: FriendColumnStyle.hintSize,
+    child: IgnorePointer(
+      ignoring: open,
+      child: Semantics(
+        button: true,
+        label: 'Показать строки друзей',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: ValueListenableBuilder<double>(
+            valueListenable: mode,
+            child: const Center(
+              child: ChevronIcon(
+                key: ValueKey('day-swipe-hint'),
+                color: FriendBarStyle.arrow,
+                size: FriendColumnStyle.hintSize,
+                quarterTurns: 1,
+              ),
+            ),
+            builder: (context, t, chevron) => Transform.translate(
+              offset: Offset(0, travel * (1 - dayFriendsFold(t))),
+              child: chevron,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }

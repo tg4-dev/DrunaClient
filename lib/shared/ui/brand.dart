@@ -9,6 +9,7 @@ abstract final class Brand {
 
   static const logoAsset = 'assets/branding/druna_logo.svg';
   static const arrowAsset = 'assets/branding/arrow_right.svg';
+  static const chevronAsset = 'assets/branding/Chevron_Left.svg';
 
   /// Width to height of the logo's artwork.
   static const logoAspect = 527.13 / 90.29;
@@ -64,5 +65,32 @@ class ArrowIcon extends StatelessWidget {
     );
     if (!back) return arrow;
     return Transform.flip(flipX: true, child: arrow);
+  }
+}
+
+/// The hint chevron (`Chevron_Left.svg`): left by default, turned by
+/// [quarterTurns] clockwise (1 points up).
+class ChevronIcon extends StatelessWidget {
+  const ChevronIcon({
+    required this.color,
+    this.size = 24,
+    this.quarterTurns = 0,
+    super.key,
+  });
+
+  final Color color;
+  final double size;
+  final int quarterTurns;
+
+  @override
+  Widget build(BuildContext context) {
+    final chevron = SvgPicture.asset(
+      Brand.chevronAsset,
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+    );
+    if (quarterTurns % 4 == 0) return chevron;
+    return RotatedBox(quarterTurns: quarterTurns, child: chevron);
   }
 }

@@ -1,6 +1,6 @@
-const monthRowLevels = [100.0, 148.0, 230.0, 340.0, 520.0];
-const monthRowMin = 100.0;
-const monthRowMax = 520.0;
+const monthRowLevels = [115.0, 148.0, 230.0, 364.0];
+const monthRowMin = 115.0;
+const monthRowMax = 364.0;
 const weekdayHeaderHeight = 28.0;
 
 /// Height of the open day's title row under the safe area.
@@ -60,8 +60,6 @@ const weekCount = 52 * 120;
 
 String monthTitle(DateTime month) =>
     '${monthNames[month.month - 1]} ${month.year}';
-
-String monthLabel(DateTime month) => monthNames[month.month - 1];
 
 String monthShort(DateTime month) => monthShortNames[month.month - 1];
 

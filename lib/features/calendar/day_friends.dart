@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
+import 'package:druna_app/features/calendar/band_paint.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/day_events.dart';
@@ -280,7 +280,8 @@ class DayFriendLayer extends StatelessWidget {
                   offset: Offset(0, top - homeTop),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: color.a * alpha),
+                      // Untitled busy time: the light tone, as in the month.
+                      color: gridTone(color).ink.withValues(alpha: alpha),
                       borderRadius: BorderRadius.horizontal(
                         left: span.continuesBefore
                             ? Radius.zero
@@ -350,14 +351,6 @@ class DayBandsPainter extends CustomPainter {
   final double dayWidth;
   final ValueListenable<double> mode;
 
-  static const _slice = 2.0;
-
-  /// 100% at the line, fading to nothing at the bottom of the row.
-  static double _fade(double x) {
-    final k = 1 - x.clamp(0.0, 1.0);
-    return k * k * (0.45 + 0.55 * k);
-  }
-
   static double _smooth(double edge0, double edge1, double x) =>
       _smoothStep(edge0, edge1, x);
 
@@ -376,22 +369,17 @@ class DayBandsPainter extends CustomPainter {
         Curves.easeOutCubic.transform(_smooth(0.3, 1, away));
     final opacity = _smooth(0.2, 0.7, away);
     if (h < 0.5 || opacity <= 0) return;
-    final paint = Paint();
-    final slices = (h / _slice).ceil();
     const top = DayFriendsGeometry.myRowTop;
-    for (var i = 0; i < slices; i++) {
-      final from = i * h / slices;
-      final to = (i + 1) * h / slices;
-      final alpha =
-          _fade((from + to) / 2 / DayFriendsGeometry.rowHeight) * opacity;
-      if (alpha <= 0.004) continue;
-      paint.color = ownColor.withValues(alpha: alpha);
-      for (final band in mine) {
-        canvas.drawRect(
-          Rect.fromLTRB(band.left, top + from, band.right, top + to),
-          paint,
-        );
-      }
+    for (final band in mine) {
+      paintFadingBand(
+        canvas,
+        Rect.fromLTRB(band.left, top, band.right, top + h),
+        colors: [ownColor, ownColor],
+        stops: const [0, 1],
+        fromTop: true,
+        fade: DayFriendsGeometry.rowHeight,
+        opacity: opacity,
+      );
     }
   }
 
@@ -406,43 +394,30 @@ class DayBandsPainter extends CustomPainter {
     final h = geometry.bandHeight * grow;
     if (h < 0.5 || opacity <= 0) return;
     final bottom = geometry.bandBottom;
-    final slices = (h / _slice).ceil();
     for (final band in friends) {
-      final paint = Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(band.left, 0),
-          Offset(band.right, 0),
-          band.colors,
-          band.stops,
-        );
       final left = band.left <= 0 ? Radius.zero : timelineEventRadius;
       final right = band.right >= dayWidth ? Radius.zero : timelineEventRadius;
+      final rect = Rect.fromLTRB(band.left, bottom - h, band.right, bottom);
       canvas
         ..save()
         ..clipRRect(
           RRect.fromRectAndCorners(
-            Rect.fromLTRB(band.left, bottom - h, band.right, bottom),
+            rect,
             topLeft: left,
             bottomLeft: left,
             topRight: right,
             bottomRight: right,
           ),
         );
-      for (var i = 0; i < slices; i++) {
-        final from = i * h / slices;
-        final to = (i + 1) * h / slices;
-        final alpha = _fade((from + to) / 2 / h) * opacity;
-        if (alpha <= 0.004) continue;
-        // Modulate scales the shader's colour, alpha included, per draw.
-        paint.colorFilter = ColorFilter.mode(
-          Color.fromRGBO(255, 255, 255, alpha),
-          BlendMode.modulate,
-        );
-        canvas.drawRect(
-          Rect.fromLTRB(band.left, bottom - to, band.right, bottom - from),
-          paint,
-        );
-      }
+      paintFadingBand(
+        canvas,
+        rect,
+        colors: band.colors,
+        stops: band.stops,
+        fromTop: false,
+        fade: h,
+        opacity: opacity,
+      );
       canvas.restore();
     }
   }
@@ -538,7 +513,8 @@ class MyBandTitles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final own = OwnEventColor.of(context);
-    final ink = eventInk(own);
+    // Light on the band of the user's colour: the grid's light tone.
+    final ink = gridTone(own).ink;
     final runs = myBandRuns(events);
     final children = <Widget>[];
     for (final run in runs) {

@@ -67,8 +67,6 @@ abstract final class EventPageStyle {
 
   /// Dates and times: proportional figures — Onest's tabular "1" stands
   /// apart ("1 2 ноя.").
-  static final value = onest(24, letterSpacing: -0.2, height: 1.1);
-  static final duration = onest(18, weight: FontWeight.w600, height: 1.2);
   static final label = onest(19, weight: FontWeight.w600);
   static final caption = onest(15, color: const Color(0x99FFFFFF));
 

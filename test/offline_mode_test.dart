@@ -12,11 +12,8 @@ import 'package:druna_app/features/onboarding/onboarding_flow.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
-  setUpAll(() => initializeDateFormatting('ru_RU'));
-
   DrunaRepository repository() => DrunaRepository(
     ApiClient(
       baseUrl: 'https://example.test',
@@ -88,7 +85,6 @@ void main() {
     );
     DrunaApp app() => DrunaApp(
       repository: repository(),
-      tokenStore: MemoryTokenStore(),
       config: config,
       settingsStorage: storage,
     );

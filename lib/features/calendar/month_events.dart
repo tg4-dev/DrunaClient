@@ -1,10 +1,11 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
+import 'package:druna_app/features/calendar/band_paint.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
+import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/features/calendar/week_bands.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,13 +13,31 @@ import 'package:flutter/material.dart';
 export 'package:druna_app/features/calendar/chip_motion.dart'
     show chipFoldGap, friendsFoldAt, myFoldAt;
 
-/// Month chips are pills: fully rounded at every density.
-/// Pills, except the tall two-line chips: a pill that tall would round
-/// the text away.
-double monthChipRadius(EventDensity density) =>
-    math.min(density.itemHeight / 2, monthChipMaxRadius);
+/// Month chips are pills at the thin densities. From the title-and-time
+/// chip up the corners are only rounded: a pill that tall would round the
+/// text away.
+double monthChipRadius(EventDensity density) => math.min(
+  density.itemHeight / 2,
+  density.showTime
+      ? (density.titleLines > 1 ? monthChipMaxRadius : monthChipDetailRadius)
+      : double.infinity,
+);
 
 const monthChipMaxRadius = 14.0;
+const monthChipDetailRadius = 8.0;
+
+/// A chip's title in one line.
+const monthChipTitleStyle = TextStyle(
+  fontSize: 11,
+  fontWeight: FontWeight.w600,
+  height: 1.1,
+);
+
+/// A chip running on past the week fades out over this much at that end.
+const chipContinueFade = 16.0;
+
+/// A one-line title fades into the chip over this much at its end.
+const chipTitleFadeWidth = 10.0;
 
 /// Room for the title inside a pill, clear of its round ends.
 double monthChipPadding(EventDensity density) =>
@@ -81,6 +100,7 @@ class MonthWeekGrid extends StatelessWidget {
     required this.onDayTap,
     required this.index,
     this.friendIndex,
+    this.sharedIndex,
     this.mode = myEventsMode,
     this.onShowMine,
     this.hiddenEventId,
@@ -99,6 +119,10 @@ class MonthWeekGrid extends StatelessWidget {
 
   /// Busy time of the selected friends, drawn in their colours.
   final CalendarEventIndex? friendIndex;
+
+  /// Shared events: cells of their days under both layers, still while
+  /// the mode changes (design-system §9.8).
+  final CalendarEventIndex? sharedIndex;
   final ValueListenable<double> mode;
 
   /// A tap on the band of the user's events while friends are shown.
@@ -120,32 +144,76 @@ class MonthWeekGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
-        final density = densityForRowHeight(size.height);
-        final capacity = monthEventCapacity(size.height, density);
         final visible = _visibleRange(strip.kind, firstOfMonth);
         final columnWidth = size.width / 7;
+        final density = _densityWorthIt(
+          densityForRowHeight(size.height),
+          days: days,
+          visible: visible,
+          columnWidth: columnWidth,
+        );
+        final shared = _sharedCells(days, visible, columnWidth, size.height);
+        final capacity = monthEventCapacity(size.height, density);
         // Friends' busy time has no titles: it never grows past the middle
         // density, however far the month is zoomed in.
         final friendDensity = friendDensityFor(density);
         final friendCapacity = monthEventCapacity(size.height, friendDensity);
+        // On a day with a shared cell, chips stop above its title (or its
+        // "+" and faces): they never cross it.
+        final chipLimit = <int, double>{};
+        for (final cell in shared) {
+          final limit =
+              cell.rect.bottom - sharedFrontHeight(cell.event, cell.rect);
+          for (
+            var column = cell.piece.startColumn;
+            column <= cell.piece.endColumn;
+            column++
+          ) {
+            chipLimit[column] = math.min(chipLimit[column] ?? limit, limit);
+          }
+        }
+        List<int>? capacitiesFor(EventDensity d, int capacity) {
+          if (chipLimit.isEmpty) return null;
+          return [
+            for (var column = 0; column < 7; column++)
+              chipLimit[column] == null
+                  ? capacity
+                  : ((chipLimit[column]! - monthEventHeader + d.gap) / d.slot)
+                        .floor()
+                        .clamp(1, capacity),
+          ];
+        }
+
         _WeekLayer layerOf(
           CalendarEventIndex source,
           String? hidden,
           int capacity,
+          List<int>? columnCapacity,
         ) => _WeekLayer.build(
           index: source,
           strip: strip,
           days: days,
           visible: visible,
           capacity: capacity,
+          columnCapacity: columnCapacity,
           hiddenEventId: hidden,
           columnWidth: columnWidth,
         );
         final own = OwnEventColor.of(context);
-        final mine = layerOf(index, hiddenEventId, capacity);
+        final mine = layerOf(
+          index,
+          hiddenEventId,
+          capacity,
+          capacitiesFor(density, capacity),
+        );
         final friends = friendIndex == null
             ? null
-            : layerOf(friendIndex!, null, friendCapacity);
+            : layerOf(
+                friendIndex!,
+                null,
+                friendCapacity,
+                capacitiesFor(friendDensity, friendCapacity),
+              );
         final mineBands = buildSolidBands(mine.bandChips, own);
         final friendBands = friends == null
             ? const <WeekBand>[]
@@ -176,6 +244,29 @@ class MonthWeekGrid extends StatelessWidget {
         return Stack(
           clipBehavior: Clip.hardEdge,
           children: [
+            // Shared cells under everything; their taps go through the
+            // day columns ([_column]).
+            for (final cell in shared)
+              Positioned.fromRect(
+                key: ValueKey('shared-back-${cell.key}'),
+                rect: cell.rect,
+                child: IgnorePointer(
+                  child: cell.event == null
+                      ? SharedMoreCell(count: cell.piece.more)
+                      : SharedCellBack(
+                          event: cell.event!,
+                          mode: mode,
+                          upperBottom: _upperBottom(
+                            cell,
+                            mine: mine.bottomIn(cell.piece, density),
+                            friends: friends?.bottomIn(
+                              cell.piece,
+                              friendDensity,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
             // Under the day numbers, so they stay readable over a band.
             Positioned.fill(
               child: IgnorePointer(
@@ -201,6 +292,11 @@ class MonthWeekGrid extends StatelessWidget {
                       column: column,
                       firstOfMonth: firstOfMonth,
                       own: own,
+                      shared: [
+                        for (final cell in shared)
+                          if (cell.piece.covers(column)) cell,
+                      ],
+                      columnWidth: columnWidth,
                     ),
                   ),
               ],
@@ -260,11 +356,143 @@ class MonthWeekGrid extends StatelessWidget {
                 },
               ),
             ),
+            // Faces, dashed edges and "+" of shared cells: over the chips,
+            // across the whole days.
+            for (final cell in shared)
+              if (cell.event case final event?)
+                Positioned.fromRect(
+                  key: ValueKey('shared-front-${cell.key}'),
+                  rect: sharedDaysRect(cell.piece, columnWidth, cell.rect),
+                  child: IgnorePointer(
+                    child: SharedCellFront(
+                      event: event,
+                      mode: mode,
+                      onScreenLeft: cell.piece.startColumn == 0,
+                      onScreenRight: cell.piece.endColumn == 6,
+                      cell: EdgeInsets.only(
+                        left:
+                            cell.rect.left -
+                            cell.piece.startColumn * columnWidth,
+                        right:
+                            (cell.piece.endColumn + 1) * columnWidth -
+                            cell.rect.right,
+                      ),
+                      upperBottom: _upperBottom(
+                        cell,
+                        mine: mine.bottomIn(cell.piece, density),
+                        friends: friends?.bottomIn(cell.piece, friendDensity),
+                      ),
+                    ),
+                  ),
+                ),
           ],
         );
       },
     );
   }
+
+  /// Where the lowest thing above a cell's faces ends, from the top of the
+  /// cell, at each step of the mode: the chips shown then, folding with
+  /// their layer, or the day number.
+  double Function(double mode) _upperBottom(
+    _SharedCell cell, {
+    required double? mine,
+    required double? friends,
+  }) {
+    final base = math.max(
+      cell.rect.top,
+      cell.piece.slot == 0 ? dayNumberTop + dayNumberSize : cell.rect.top,
+    );
+    double reach(double? bottom, double shown) =>
+        bottom == null || bottom <= base
+        ? base
+        : base + (bottom - base) * shown;
+    return (t) =>
+        math.max(
+          reach(mine, chipShownAt(myFoldAt(t))),
+          reach(friends, chipShownAt(friendsFoldAt(t))),
+        ) -
+        cell.rect.top;
+  }
+
+  List<_SharedCell> _sharedCells(
+    List<DateTime> days,
+    (int, int) visible,
+    double columnWidth,
+    double rowHeight,
+  ) {
+    final source = sharedIndex;
+    if (source == null || visible.$1 > visible.$2) return const [];
+    final events = source.forWeek(strip.weekIndex);
+    if (events.isEmpty) return const [];
+    final pieces =
+        source.memo.putIfAbsent(
+              ('shared', strip.weekIndex, strip.kind),
+              () => layoutSharedWeek(
+                events: events,
+                days: days,
+                visibleStart: visible.$1,
+                visibleEnd: visible.$2,
+              ),
+            )
+            as List<SharedPiece>;
+    final byId = {for (final event in events) event.id: event};
+    return [
+      for (final piece in pieces)
+        if (piece.eventId == null || byId[piece.eventId] != null)
+          _SharedCell(
+            piece: piece,
+            event: piece.eventId == null ? null : byId[piece.eventId],
+            rect: sharedPieceRect(piece, columnWidth, rowHeight),
+          ),
+    ];
+  }
+
+  /// The density the row's height allows, but no further than shows
+  /// something new: the title-and-time chip only with a timed event to
+  /// show the time of, the two-line chip only with a title that does not
+  /// fit in one line. Otherwise the smaller chips stay, and more of them
+  /// fit.
+  EventDensity _densityWorthIt(
+    EventDensity allowed, {
+    required List<DateTime> days,
+    required (int, int) visible,
+    required double columnWidth,
+  }) {
+    if (!allowed.showTime) return allowed;
+    final events = [
+      for (final event in index.forWeek(strip.weekIndex))
+        if (event.id != hiddenEventId) event,
+    ];
+    if (!events.any((event) => !event.allDay)) return titleDensity;
+    if (allowed.titleLines < 2) return allowed;
+    final padding = monthChipPadding(detailDensity);
+    for (final event in events) {
+      var columns = 0;
+      for (var column = visible.$1; column <= visible.$2; column++) {
+        if (eventOccursOn(event, days[column])) columns++;
+      }
+      if (columns == 0) continue;
+      final room = columns * columnWidth - 4 - padding * 2;
+      if (_titleWidth(eventDisplayTitle(event)) > room) return allowed;
+    }
+    return detailDensity;
+  }
+
+  static final _titleWidths = <String, double>{};
+
+  /// How wide [title] is in a chip's one line.
+  static double _titleWidth(String title) =>
+      _titleWidths.putIfAbsent(title, () {
+        final painter = TextPainter(
+          text: TextSpan(text: title, style: monthChipTitleStyle),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final width = painter.width;
+        painter.dispose();
+        return width;
+      });
 
   (int, int) _visibleRange(MonthStripKind kind, int firstOfMonth) {
     var start = 7;
@@ -290,6 +518,8 @@ class MonthWeekGrid extends StatelessWidget {
     required int column,
     required int firstOfMonth,
     required Color own,
+    required List<_SharedCell> shared,
+    required double columnWidth,
   }) {
     final showDay = columnVisible(
       kind: strip.kind,
@@ -298,17 +528,32 @@ class MonthWeekGrid extends StatelessWidget {
     );
     if (!showDay) return const SizedBox.expand();
     final day = days[column];
-    final content = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onDayTap(day),
-      onLongPressStart: (details) =>
-          onHoldStart?.call(null, details.globalPosition),
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: const EdgeInsets.only(top: dayNumberTop),
-          child: _DayNumber(day: day, today: sameDay(day, today)),
-        ),
+    final content = Builder(
+      builder: (context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // Below the number, a shared cell opens its event ("+N" its day).
+        onTapUp: (details) {
+          final at = details.localPosition;
+          final x = at.dx + column * columnWidth;
+          for (final cell in shared) {
+            if (at.dy < monthEventHeader ||
+                !cell.rect.contains(Offset(x, at.dy))) {
+              continue;
+            }
+            final event = cell.event;
+            final box = context.findRenderObject() as RenderBox?;
+            if (event == null || box == null || onEventTap == null) break;
+            final origin = box.localToGlobal(
+              Offset(cell.rect.left - column * columnWidth, cell.rect.top),
+            );
+            onEventTap!(event, origin & cell.rect.size);
+            return;
+          }
+          onDayTap(day);
+        },
+        onLongPressStart: (details) =>
+            onHoldStart?.call(null, details.globalPosition),
+        child: _dayNumber(day),
       ),
     );
     final hover = hoverDay;
@@ -329,6 +574,29 @@ class MonthWeekGrid extends StatelessWidget {
       ),
     );
   }
+
+  Widget _dayNumber(DateTime day) => Align(
+    alignment: Alignment.topCenter,
+    child: Padding(
+      padding: const EdgeInsets.only(top: dayNumberTop),
+      child: _DayNumber(day: day, today: sameDay(day, today)),
+    ),
+  );
+}
+
+/// A shared event's cell (or "+N") of the week, where it is drawn.
+class _SharedCell {
+  const _SharedCell({
+    required this.piece,
+    required this.event,
+    required this.rect,
+  });
+
+  final SharedPiece piece;
+  final CalendarEvent? event;
+  final Rect rect;
+
+  String get key => '${piece.eventId ?? 'more'}-${piece.startColumn}';
 }
 
 /// One chip or bar of a week, in grid columns and lanes.
@@ -349,10 +617,7 @@ class _Placed {
   final bool continuesBefore;
   final bool continuesAfter;
 
-  bool get isSpan => startColumn != endColumn || event.allDay;
-
-  /// Insets match the old column chips (2 pt each side) and bars that run
-  /// on past the week edge.
+  /// 2 pt inset each side, none where the bar runs on past the week edge.
   double left(double columnWidth) =>
       startColumn * columnWidth + (continuesBefore ? 0 : 2);
 
@@ -378,6 +643,7 @@ class _WeekLayer {
     required int capacity,
     required String? hiddenEventId,
     required double columnWidth,
+    List<int>? columnCapacity,
   }) {
     final shown = [
       for (final event in index.forWeek(strip.weekIndex))
@@ -385,13 +651,21 @@ class _WeekLayer {
     ];
     final layout =
         index.memo.putIfAbsent(
-              ('week', strip.weekIndex, strip.kind, capacity, hiddenEventId),
+              (
+                'week',
+                strip.weekIndex,
+                strip.kind,
+                capacity,
+                columnCapacity?.join(','),
+                hiddenEventId,
+              ),
               () => layoutWeek(
                 events: shown,
                 days: days,
                 visibleStart: visible.$1,
                 visibleEnd: visible.$2,
                 capacity: capacity,
+                columnCapacity: columnCapacity,
               ),
             )
             as MonthWeekLayout;
@@ -471,17 +745,22 @@ class _WeekLayer {
   /// Every event of the week, also those behind "+N".
   final Set<String> eventIds;
 
-  /// Lanes in use, chips and "+N" together: the unfolding order counts
-  /// them.
-  int get lanes {
-    var count = 0;
+  /// The bottom of the lowest chip or "+N" on the days of [piece], laid
+  /// out at [density]; null when there is none.
+  double? bottomIn(SharedPiece piece, EventDensity density) {
+    var lanes = 0;
     for (final item in placed) {
-      if (item.lane + 1 > count) count = item.lane + 1;
+      if (item.endColumn < piece.startColumn ||
+          item.startColumn > piece.endColumn) {
+        continue;
+      }
+      lanes = math.max(lanes, item.lane + 1);
     }
-    for (final (_, lane, _) in overflow) {
-      if (lane + 1 > count) count = lane + 1;
+    for (final (column, lane, _) in overflow) {
+      if (piece.covers(column)) lanes = math.max(lanes, lane + 1);
     }
-    return count;
+    if (lanes == 0) return null;
+    return monthEventHeader + lanes * density.slot - density.gap;
   }
 }
 
@@ -503,6 +782,7 @@ class _MineChips extends StatelessWidget {
 
   final _WeekLayer layer;
   final List<DateTime> days;
+
   final EventDensity density;
   final ValueListenable<double> mode;
   final double rowHeight;
@@ -514,17 +794,14 @@ class _MineChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lanes = layer.lanes;
     return _AnimatedDensity(
       density: density,
       builder: (context, d) {
         Widget moving(int lane, Widget child) => ChipMotion(
           mode: mode,
           awayAt: myFoldAt,
-          lane: lane,
-          lanes: lanes,
           homeTop: monthEventHeader + lane * d.slot,
-          foldTop: chipFoldGap,
+          line: 0,
           child: child,
         );
         return Stack(
@@ -608,13 +885,17 @@ class _OverflowLabel extends StatelessWidget {
   final int count;
 
   @override
-  Widget build(BuildContext context) => Align(
+  Widget build(BuildContext context) => OverflowBox(
+    // Taller than the thinnest lane: laid out at its own height, centred
+    // on the lane, never cut.
     alignment: Alignment.centerLeft,
+    minHeight: 0,
+    maxHeight: double.infinity,
     child: Text(
       '+$count',
       style: const TextStyle(
-        color: Color(0xFF8E8E93),
-        fontSize: 11,
+        color: Color(0xFFAEAEB2),
+        fontSize: 10,
         fontWeight: FontWeight.w600,
         height: 1,
       ),
@@ -696,7 +977,6 @@ class _FriendChipsState extends State<_FriendChips> {
   Widget build(BuildContext context) {
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final current = {for (final item in widget.layer.placed) item.event.id};
-    final lanes = widget.layer.lanes;
     return _AnimatedDensity(
       density: widget.density,
       builder: (context, d) => Stack(
@@ -704,9 +984,9 @@ class _FriendChipsState extends State<_FriendChips> {
         children: [
           for (final item in _leaving.values)
             if (!current.contains(item.event.id))
-              _chip(item, d, lanes, leaving: true, reduce: reduce),
+              _chip(item, d, leaving: true, reduce: reduce),
           for (final item in widget.layer.placed)
-            _chip(item, d, lanes, leaving: false, reduce: reduce),
+            _chip(item, d, leaving: false, reduce: reduce),
           for (final (column, lane, count) in widget.layer.overflow)
             Positioned(
               key: ValueKey('more-$column'),
@@ -714,7 +994,7 @@ class _FriendChipsState extends State<_FriendChips> {
               width: widget.columnWidth - 6,
               top: monthEventHeader + lane * d.slot,
               height: d.itemHeight,
-              child: _motion(lane, lanes, d, _OverflowLabel(count)),
+              child: _motion(lane, d, _OverflowLabel(count)),
             ),
         ],
       ),
@@ -722,21 +1002,17 @@ class _FriendChipsState extends State<_FriendChips> {
   }
 
   /// Friends' chips fold down onto the bottom line of the week.
-  Widget _motion(int lane, int lanes, EventDensity d, Widget child) =>
-      ChipMotion(
-        mode: widget.mode,
-        awayAt: friendsFoldAt,
-        lane: lane,
-        lanes: lanes,
-        homeTop: monthEventHeader + lane * d.slot,
-        foldTop: widget.rowHeight - d.itemHeight - chipFoldGap,
-        child: child,
-      );
+  Widget _motion(int lane, EventDensity d, Widget child) => ChipMotion(
+    mode: widget.mode,
+    awayAt: friendsFoldAt,
+    homeTop: monthEventHeader + lane * d.slot,
+    line: widget.rowHeight,
+    child: child,
+  );
 
   Widget _chip(
     _Placed item,
-    EventDensity density,
-    int lanes, {
+    EventDensity density, {
     required bool leaving,
     required bool reduce,
   }) {
@@ -752,7 +1028,7 @@ class _FriendChipsState extends State<_FriendChips> {
         width: width,
         top: monthEventHeader + lane * density.slot,
         height: density.itemHeight,
-        child: _motion(item.lane, lanes, density, child!),
+        child: _motion(item.lane, density, child!),
       ),
       child: TweenAnimationBuilder<double>(
         tween: Tween(
@@ -808,19 +1084,6 @@ class _BandPainter extends CustomPainter {
   final ValueListenable<double> mode;
   final double height;
 
-  /// The fade from the line to the middle of the week, drawn as thin slices
-  /// of falling opacity rather than an alpha mask: a mask needs a saveLayer
-  /// per band, and those every frame made the swipe stutter.
-  static const _slice = 2.0;
-
-  /// Opacity at a share of the way from the line to the middle.
-  static double _fade(double x) {
-    // 100% at the line, about 55% at a third, 20% at two thirds, 0 at the
-    // middle: the curve of the reference.
-    final k = 1 - x.clamp(0.0, 1.0);
-    return k * k * (0.45 + 0.55 * k);
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
     final t = mode.value;
@@ -840,31 +1103,21 @@ class _BandPainter extends CustomPainter {
     final opacity = _smooth(0.2, 0.7, away);
     final h = height * grow;
     if (h < 0.5 || opacity <= 0) return;
-    final slices = (h / _slice).ceil();
     for (final band in bands) {
-      final paint = Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(band.left, 0),
-          Offset(band.right, 0),
-          band.colors,
-          band.stops,
-        );
-      for (var i = 0; i < slices; i++) {
-        final from = i * h / slices;
-        final to = (i + 1) * h / slices;
-        final alpha = _fade((from + to) / 2 / h) * opacity;
-        if (alpha <= 0.004) continue;
-        // Modulate scales the shader's colour, alpha included, per draw.
-        paint.colorFilter = ColorFilter.mode(
-          Color.fromRGBO(255, 255, 255, alpha),
-          BlendMode.modulate,
-        );
-        final top = fromTop ? from : size.height - to;
-        canvas.drawRect(
-          Rect.fromLTRB(band.left, top, band.right, top + (to - from)),
-          paint,
-        );
-      }
+      paintFadingBand(
+        canvas,
+        Rect.fromLTRB(
+          band.left,
+          fromTop ? 0 : size.height - h,
+          band.right,
+          fromTop ? h : size.height,
+        ),
+        colors: band.colors,
+        stops: band.stops,
+        fromTop: fromTop,
+        fade: h,
+        opacity: opacity,
+      );
     }
   }
 
@@ -937,7 +1190,12 @@ class _MonthEventBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final own = OwnEventColor.of(context);
-    final ink = eventInkFor(event, own);
+    // Apple Calendar's dark look ([gridTone]): a deep fill with light text
+    // of the same hue; a chip with no title is the light tone itself.
+    final tone = gridTone(eventColor(event, own));
+    final titled = density.showTitle && showTitle;
+    final fill = titled ? tone.fill : tone.ink;
+    final ink = tone.ink;
     final corner = Radius.circular(monthChipRadius(density));
     final radius = BorderRadius.horizontal(
       left: continuesBefore ? Radius.zero : corner,
@@ -962,62 +1220,163 @@ class _MonthEventBlock extends StatelessWidget {
           event: event,
           own: own,
           radius: monthChipRadius(density),
-          child: DecoratedBox(
-            decoration: eventFill(event, own, radius: radius),
-            child: density.showTitle && showTitle && density.titleLines > 1
-                ? _TallChipText(event: event, ink: ink, density: density)
-                : density.showTitle && showTitle
-                ? Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: monthChipPadding(density),
+          child: _ChipFill(
+            decoration: event.invite == null
+                ? BoxDecoration(color: fill, borderRadius: radius)
+                : eventFill(event, own, radius: radius),
+            fadeBefore: continuesBefore,
+            fadeAfter: continuesAfter,
+            child: titled
+                // The title fades out while the layer folds, so squeezed
+                // letters never show.
+                ? ChipFoldInk(
+                    builder: (context, alpha) => _title(
+                      ink.withValues(alpha: ink.a * alpha),
+                      // Where the chip itself fades out, the title is
+                      // just cut: a fade in the fill's colour would
+                      // show there.
+                      continuesAfter ? null : fill,
                     ),
-                    child: density.showTime && !event.allDay
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                eventDisplayTitle(event),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: ink,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.1,
-                                ),
-                              ),
-                              Text(
-                                clockLabel(event.start),
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: ink,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              eventDisplayTitle(event),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: ink,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                height: 1,
-                              ),
-                            ),
-                          ),
                   )
                 : const SizedBox.expand(),
           ),
         ),
       ),
+    );
+  }
+
+  /// Narrow chips cut the title off rather than spend a third of the room
+  /// on an ellipsis: "Бейсб" says more than "Бейс…".
+  Widget _title(Color ink, Color? fill) {
+    if (density.titleLines > 1) {
+      return _TallChipText(event: event, ink: ink, density: density);
+    }
+    final padding = monthChipPadding(density);
+    final title = monthChipTitleStyle.copyWith(color: ink);
+    // Laid out at its own height and clipped, like Apple Calendar: while
+    // the chip grows or shrinks between densities nothing reflows or jumps.
+    if (density.showTime && !event.allDay) {
+      return ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.centerLeft,
+          minHeight: 0,
+          maxHeight: double.infinity,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: padding),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  eventDisplayTitle(event),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: title,
+                ),
+                Text(
+                  clockLabel(event.start),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  style: title.copyWith(
+                    color: ink.withValues(alpha: ink.a * 0.8),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    // One line: cut off and faded into the chip before its round end, as
+    // Apple does, rather than an ellipsis eating a third of a narrow chip.
+    // The fade stays inside the padding, so it never pokes past the round
+    // end.
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: padding),
+      child: ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.centerLeft,
+          minHeight: 0,
+          maxHeight: double.infinity,
+          child: Stack(
+            children: [
+              Text(
+                eventDisplayTitle(event),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.clip,
+                style: title.copyWith(height: 1),
+              ),
+              if (fill != null)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: chipTitleFadeWidth,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [fill.withValues(alpha: 0), fill],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A chip's fill. A chip that runs on into the next week or month fades
+/// out over [chipContinueFade] at that end instead of being cut square.
+class _ChipFill extends StatelessWidget {
+  const _ChipFill({
+    required this.decoration,
+    required this.fadeBefore,
+    required this.fadeAfter,
+    required this.child,
+  });
+
+  final BoxDecoration decoration;
+  final bool fadeBefore;
+  final bool fadeAfter;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = decoration.color;
+    if ((!fadeBefore && !fadeAfter) || color == null) {
+      return DecoratedBox(decoration: decoration, child: child);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final edge = width <= 0
+            ? 0.5
+            : (chipContinueFade / width).clamp(0.0, 0.5).toDouble();
+        final clear = color.withValues(alpha: 0);
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: decoration.borderRadius,
+            gradient: LinearGradient(
+              colors: [
+                fadeBefore ? clear : color,
+                color,
+                color,
+                fadeAfter ? clear : color,
+              ],
+              stops: [0, edge, 1 - edge, 1],
+            ),
+          ),
+          child: child,
+        );
+      },
     );
   }
 }

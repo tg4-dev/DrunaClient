@@ -5,7 +5,9 @@ import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
+import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/features/calendar/timeline_scale.dart';
+import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -28,10 +30,12 @@ class MonthCalendar extends StatefulWidget {
     this.bottomInset = 0,
     this.bottomBlur = 0,
     this.friendEvents = const [],
+    this.sharedEvents = const [],
     this.mode = myEventsMode,
     this.onShowMine,
     this.onPinchChanged,
     this.inviteColors,
+    this.invitePeople,
     super.key,
   });
 
@@ -56,8 +60,13 @@ class MonthCalendar extends StatefulWidget {
   /// How far up from the bottom edge the weeks are blurred, under the bar.
   final double bottomBlur;
 
-  /// Busy time of the selected friends, in their colours.
+  /// Busy time of the selected friends, in their colours. One friend's
+  /// events on one day show as one chip ([mergeBusyByDay]).
   final List<CalendarEvent> friendEvents;
+
+  /// Events with other people in them: cells of their days, in both modes
+  /// (design-system §9.8).
+  final List<CalendarEvent> sharedEvents;
 
   /// 0 shows the user's events, 1 friends'; see [MonthWeekGrid].
   final ValueListenable<double> mode;
@@ -72,6 +81,9 @@ class MonthCalendar extends StatefulWidget {
   /// In friends' calendar with friends picked, a hold invites them: the
   /// chip being placed takes their colours and says so.
   final List<Color>? inviteColors;
+
+  /// The people of that invite, the user first: their faces on the chip.
+  final List<FriendInfo>? invitePeople;
 
   /// [day] is the event's new first day: the drop day shifted back by how far
   /// into the event it was grabbed.
@@ -88,9 +100,9 @@ class MonthCalendarState extends State<MonthCalendar>
   late final AnimationController _rowSnap;
   late DateTime _visibleMonth;
 
-  /// Another month than today's is on screen.
-  bool get _awayFromToday =>
-      _visibleMonth.year != _today.year || _visibleMonth.month != _today.month;
+  /// Today's week is not on screen (under the pinned top or the friend
+  /// bar does not count): the title pill lights up to bring it back.
+  var _awayFromToday = false;
   late DateTime _today;
   late final ValueNotifier<double> _rows = ValueNotifier(monthRowLevels[1]);
   double _pinchStartHeight = monthRowLevels[1];
@@ -122,6 +134,7 @@ class MonthCalendarState extends State<MonthCalendar>
   final _dropRange = ValueNotifier<DropRange?>(null);
   late CalendarEventIndex _index;
   late CalendarEventIndex _friendIndex;
+  late CalendarEventIndex _sharedIndex;
   late final AppLifecycleListener _lifecycle;
   Timer? _midnight;
 
@@ -137,7 +150,8 @@ class MonthCalendarState extends State<MonthCalendar>
     super.initState();
     _today = dateOnly(DateTime.now());
     _index = CalendarEventIndex(widget.events);
-    _friendIndex = CalendarEventIndex(widget.friendEvents);
+    _friendIndex = CalendarEventIndex(mergeBusyByDay(widget.friendEvents));
+    _sharedIndex = CalendarEventIndex(widget.sharedEvents);
     _lifecycle = AppLifecycleListener(onResume: _refreshToday);
     _scheduleMidnight();
     final focus = dateOnly(widget.focus ?? _today);
@@ -146,6 +160,9 @@ class MonthCalendarState extends State<MonthCalendar>
     _scroll = ScrollController(
       initialScrollOffset: stripUnits(index) * _rowHeight,
     )..addListener(_onScroll);
+    // Rows change height on a pinch without the offset always following.
+    _rows.addListener(_updateAway);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateAway());
     _rowSnap = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -159,7 +176,10 @@ class MonthCalendarState extends State<MonthCalendar>
       _index = CalendarEventIndex(widget.events);
     }
     if (!identical(oldWidget.friendEvents, widget.friendEvents)) {
-      _friendIndex = CalendarEventIndex(widget.friendEvents);
+      _friendIndex = CalendarEventIndex(mergeBusyByDay(widget.friendEvents));
+    }
+    if (!identical(oldWidget.sharedEvents, widget.sharedEvents)) {
+      _sharedIndex = CalendarEventIndex(widget.sharedEvents);
     }
   }
 
@@ -191,9 +211,34 @@ class MonthCalendarState extends State<MonthCalendar>
     final today = dateOnly(DateTime.now());
     if (!mounted || today == _today) return;
     setState(() => _today = today);
+    _updateAway();
   }
 
   double get scrollOffset => _scroll.hasClients ? _scroll.offset : 0;
+
+  /// The position in rows, not pixels: it means the same week whatever the
+  /// row height is when it is restored ([restoreUnits]). Pixels saved at
+  /// one height and restored at another land years away — from 2026 at
+  /// 180 pt rows to 148 pt rows is 2039.
+  double get scrollUnits => scrollOffset / _rowHeight;
+
+  void restoreUnits(double units) => restoreOffset(units * _rowHeight);
+
+  /// Ends a pinch's settling at once, at its level: a day opened by a tap
+  /// right after a pinch must not see the rows change under it.
+  void finishRowSnap() {
+    if (!_snapping) return;
+    _rowSnap.stop();
+    _snapping = false;
+    final offset = zoomedOffset(
+      offset: _snapOffset,
+      focal: _snapFocal,
+      oldExtent: _snapFrom,
+      newExtent: _snapTo,
+    );
+    _rowHeight = _snapTo;
+    _jump(offset);
+  }
 
   void restoreOffset(double offset) {
     if (!_scroll.hasClients) return;
@@ -201,8 +246,27 @@ class MonthCalendarState extends State<MonthCalendar>
     _scroll.jumpTo(offset.clamp(0, max).toDouble());
   }
 
+  /// Whether today's week crosses the visible band of the month.
+  bool _todayShown() {
+    if (!_scroll.hasClients || !_scroll.position.hasViewportDimension) {
+      return true;
+    }
+    final index = stripIndexOfDay(_today);
+    final top = stripUnits(index) * _rowHeight;
+    final bottom = top + stripExtentUnits(stripAt(index)) * _rowHeight;
+    final offset = _scroll.offset;
+    return bottom > offset && top < offset + _scroll.position.viewportDimension;
+  }
+
+  void _updateAway() {
+    final away = !_todayShown();
+    if (away == _awayFromToday || !mounted) return;
+    setState(() => _awayFromToday = away);
+  }
+
   void _onScroll() {
     if (!_scroll.hasClients) return;
+    _updateAway();
     final units = _scroll.offset / _rowHeight;
     final week = weekAtUnits(units);
     final local = units - unitsOfWeek(week);
@@ -384,8 +448,9 @@ class MonthCalendarState extends State<MonthCalendar>
   }
 
   void _beginHold(CalendarEvent? event, Offset global) {
-    // An invite is not the user's to move: its page changes it.
-    if (event?.invite != null) return;
+    // An invite is not the user's to move: its page changes it. Neither is
+    // an event of the device's calendar.
+    if (event?.invite != null || event?.external != null) return;
     if (_holding || _pointers.length != 1) return;
     _holdPointer = _pointers.keys.single;
     final day = _dayAtGlobal(global);
@@ -537,6 +602,10 @@ class MonthCalendarState extends State<MonthCalendar>
     const width = 132.0;
     const height = 24.0;
     final colors = _holdEvent == null ? _invitingColors : null;
+    final people = widget.invitePeople;
+    if (colors != null && people != null && people.isNotEmpty) {
+      return _inviteChip(local, people);
+    }
     final base = colors == null
         ? OwnEventColor.of(context)
         : mixedColor(colors);
@@ -566,6 +635,42 @@ class MonthCalendarState extends State<MonthCalendar>
                   fontWeight: FontWeight.w600,
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A hold that invites the picked friends: a dashed outline with their
+  /// faces, as the unanswered cell it will become (design-system §9.8).
+  Widget _inviteChip(Offset local, List<FriendInfo> people) {
+    const face = 26.0;
+    const padding = 8.0;
+    final count = math.min(people.length, 3);
+    const height = face + padding * 2;
+    final width = face + face * 0.6 * (count - 1) + padding * 2;
+    return Positioned(
+      left: local.dx - width / 2,
+      top: local.dy - height - 20,
+      width: width,
+      height: height,
+      child: IgnorePointer(
+        child: CustomPaint(
+          foregroundPainter: const DashedRimPainter(
+            color: Color(0xCCFFFFFF),
+            radius: 14,
+            dash: 8,
+            gap: 5,
+            width: 2,
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Center(
+              child: FaceStack(people: people, size: face),
             ),
           ),
         ),
@@ -639,6 +744,7 @@ class MonthCalendarState extends State<MonthCalendar>
                                     today: _today,
                                     index: _index,
                                     friendIndex: _friendIndex,
+                                    sharedIndex: _sharedIndex,
                                     mode: widget.mode,
                                     onShowMine: widget.onShowMine,
                                     hiddenEventId: widget.hiddenEventId,
@@ -647,6 +753,7 @@ class MonthCalendarState extends State<MonthCalendar>
                                     onEventTap: widget.onEventTap,
                                     onHoldStart: _beginHold,
                                     onTap: (day) {
+                                      finishRowSnap();
                                       final rect = rectForStrip(index);
                                       if (rect != null) {
                                         widget.onDayTap(day, rect);
@@ -816,6 +923,7 @@ class _WeekStrip extends StatelessWidget {
     required this.onTap,
     required this.index,
     required this.friendIndex,
+    required this.sharedIndex,
     required this.mode,
     this.onShowMine,
     this.hiddenEventId,
@@ -830,6 +938,7 @@ class _WeekStrip extends StatelessWidget {
   final ValueChanged<DateTime> onTap;
   final CalendarEventIndex index;
   final CalendarEventIndex friendIndex;
+  final CalendarEventIndex sharedIndex;
   final ValueListenable<double> mode;
   final VoidCallback? onShowMine;
   final String? hiddenEventId;
@@ -873,6 +982,7 @@ class _WeekStrip extends StatelessWidget {
                   today: today,
                   index: index,
                   friendIndex: friendIndex,
+                  sharedIndex: sharedIndex,
                   mode: mode,
                   onShowMine: onShowMine,
                   hiddenEventId: hiddenEventId,
