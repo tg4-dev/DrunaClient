@@ -495,7 +495,13 @@ class _PasswordFieldState extends State<_PasswordField> {
     // A plain keyboard: with «visiblePassword» iOS stops treating the field
     // as a password and offers the email in it.
     keyboardType: TextInputType.text,
-    autofillHints: [?widget.autofillHint],
+    // Null, not an empty list: an empty list still enrols the field in the
+    // autofill group, and iOS then copies what is typed in the password
+    // into it as its confirmation.
+    autofillHints: switch (widget.autofillHint) {
+      final hint? => [hint],
+      null => null,
+    },
     textInputAction: widget.action,
     onSubmitted: widget.onSubmitted,
     trailing: Semantics(

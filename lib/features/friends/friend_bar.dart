@@ -41,17 +41,6 @@ abstract final class FriendBarStyle {
   /// The corner and the hint start this far past the left edge.
   static const flyOver = 48.0;
 
-  /// While the corner flies in, the arrow rides this far right of it and
-  /// leaves for its place on the second half of the way (author,
-  /// 2026-11-04).
-  static const followGap = 10.0;
-  static const followFrom = 0.5;
-
-  /// Each avatar in the row sets off this share of the way after the one on
-  /// its left, the sixth and on together (author, 2026-11-04).
-  static const lag = 0.06;
-  static const lagMax = 5;
-
   static const ring = 3.0;
   static const ringGap = 3.0;
 
@@ -147,12 +136,7 @@ class _FriendBarState extends State<FriendBar> {
                     if (friends == null)
                       _Placeholder(visible: expanded)
                     else if (friends.isEmpty)
-                      _AddFriends(
-                        visible: expanded,
-                        mode: widget.mode,
-                        width: constraints.maxWidth,
-                        onTap: widget.onAddFriends,
-                      )
+                      _AddFriends(visible: expanded, onTap: widget.onAddFriends)
                     else
                       _row(friends, constraints.maxWidth, expanded),
                     // The user's own mode says whose events these are, and
@@ -160,7 +144,6 @@ class _FriendBarState extends State<FriendBar> {
                     // to the left.
                     if (widget.me case final me?)
                       _MineCorner(
-                        boxKey: _corner,
                         me: me,
                         mode: widget.mode,
                         expanded: expanded,
@@ -169,7 +152,6 @@ class _FriendBarState extends State<FriendBar> {
                       ),
                     if (widget.selection.selected.isEmpty)
                       _SwipeHint(
-                        corner: widget.me == null ? null : _corner,
                         mode: widget.mode,
                         expanded: expanded,
                         width: constraints.maxWidth,
@@ -692,7 +674,6 @@ Offset _flyIn(double fold, double width) =>
 /// With [onTap] it is a button that opens the menu of the user's calendar.
 class _MineCorner extends StatelessWidget {
   const _MineCorner({
-    required this.boxKey,
     required this.me,
     required this.mode,
     required this.expanded,
@@ -700,7 +681,6 @@ class _MineCorner extends StatelessWidget {
     this.onTap,
   });
 
-  final GlobalKey boxKey;
   final Widget me;
   final ValueListenable<double> mode;
   final bool expanded;
@@ -709,7 +689,6 @@ class _MineCorner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Positioned(
-    key: boxKey,
     left: FriendBarStyle.gutter,
     top: 0,
     bottom: 0,
@@ -755,36 +734,18 @@ class _MineCorner extends StatelessWidget {
 
 /// In the user's own mode with nobody picked, bottom right: a chevron to
 /// the left — friends' calendar is a swipe that way. A tap goes there too.
-/// Flying in, it rides beside [corner] and only on the second half of the
-/// way leaves it for its place; back, mirrored.
 class _SwipeHint extends StatelessWidget {
   const _SwipeHint({
-    required this.corner,
     required this.mode,
     required this.expanded,
     required this.width,
     required this.onTap,
   });
 
-  final GlobalKey? corner;
   final ValueListenable<double> mode;
   final bool expanded;
   final double width;
   final VoidCallback onTap;
-
-  /// How far the chevron stands from its place.
-  double _shift(double t) {
-    final fly = _flyIn(friendBarFold(t), width).dx;
-    final box = corner?.currentContext?.findRenderObject();
-    if (box is! RenderBox || !box.hasSize) return fly;
-    // Beside the corner, against the chevron's own left at its place.
-    final beside =
-        FriendBarStyle.gutter + box.size.width + FriendBarStyle.followGap;
-    final place = width - FriendBarStyle.gutter - FriendBarStyle.arrowSize;
-    const from = FriendBarStyle.followFrom;
-    final away = ((1 - t.clamp(0.0, 1.0) - from) / (1 - from)).clamp(0.0, 1.0);
-    return (fly + beside - place) * (1 - Curves.easeInOutCubic.transform(away));
-  }
 
   @override
   Widget build(BuildContext context) => Positioned(
@@ -810,7 +771,7 @@ class _SwipeHint extends StatelessWidget {
                   size: FriendBarStyle.arrowSize,
                 ),
                 builder: (context, t, arrow) => Transform.translate(
-                  offset: Offset(_shift(t), 0),
+                  offset: _flyIn(friendBarFold(t), width),
                   child: arrow,
                 ),
               ),

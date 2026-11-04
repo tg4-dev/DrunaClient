@@ -62,28 +62,35 @@
 - Статус: `уточнить` — механизм у бэкенда ещё не выбран.
 - **Решено.** Пароль остаётся (решение автора, 2026-11-04): при регистрации его придумывают, входят по нику и паролю. Telegram заменяет подтверждение почты. Новые шаги онбординга — по дизайну автора, отдельным заходом.
 - **Почему текущих вызовов недостаточно.**
-  - `POST /auth/telegram` принимает `initData`. Его подписывает только клиент Telegram внутри Mini App, нативное приложение его получить не может.
-  - `sign-up` на занятые почту или ник отвечает HTTP 500 с текстом Postgres (`pq: duplicate key value violates unique constraint …`). Клиент угадывает поле по тексту (`takenOr`). Нужно: 409 и поле, например `{ "error": { "code": 409, "field": "username", "message": "…" } }`.
-  - Свободен ли ник, можно узнать только из защищённого `/friends/search`, до регистрации он недоступен.
-- **Варианты для обсуждения с бэкендом** (все публичные `/auth/*`, под общим rate limit, одноразовые короткоживущие коды и токены):
-  1. **Код от бота.** Приложение открывает `t.me/<bot>`, бот присылает 6-значный код.
-     - `POST /auth/telegram/code/start` → `{ requestId, botUrl, expiresIn }`;
-     - пользователь нажимает Start в боте, бот присылает код;
-     - `POST /auth/telegram/code/verify` `{ requestId, code }` → `{ signupToken }` для нового аккаунта или пара токенов для существующего.
-     - На клиенте остаются ячейки кода (`CodeBoxes`). Автозаполнения кода из Telegram у iOS нет — только ввод или вставка.
-  2. **Подтверждение кнопкой в боте, без кода.**
-     - `POST /auth/telegram/link/start` → `{ nonce, botUrl: "t.me/<bot>?start=<nonce>", expiresIn }`;
-     - пользователь нажимает в боте «Подтвердить»;
-     - клиент опрашивает `GET /auth/telegram/link/<nonce>` → `pending` | `{ signupToken }` | пара токенов.
-     - Ввода нет совсем, но нужен возврат из Telegram в приложение (опрос при возвращении на экран).
-  3. **Telegram Gateway по номеру телефона.**
-     - `POST /auth/phone/start` `{ phone }` → `{ requestId, resendAfter }`; Telegram сам присылает код в чат «Verification Codes»;
-     - `POST /auth/phone/verify` `{ requestId, code }` → как в варианте 1.
-     - Gateway платный, за каждый код; в приложении появляется шаг ввода номера.
-- **Нужно в любом варианте.**
-  - `POST /auth/sign-up` `{ signupToken, name, username, password }` → сразу пара токенов; Telegram-аккаунт берётся из токена.
-  - `GET /auth/username-available?username=` → `{ available: bool }`. Правила ника как в клиенте: 3–32 символа `a–z 0–9 _ .`, без учёта регистра; неверный формат — 400.
-  - `POST /auth/sign-in` `{ username, password }` — как сейчас; неверная пара — 401, клиент показывает «неверный пароль» по коду, а не по тексту.
+  - `sign-up` на занятые почту или ник отвечает HTTP 500 с текстом Postgres (`pq: duplicate key value violates unique constraint "unique_email"`). Клиент сейчас угадывает поле по этому тексту (`takenOr`). Нужно: 409 и понятное поле, например `{ "error": { "code": 409, "field": "email" | "username", "message": "…" } }`.
+  - `sign-in` принимает только `username`, а пользователь знает почту.
+  - Нет способа узнать, есть ли аккаунт у почты, отправить код и проверить его.
+  - Свободен ли ник, можно узнать только из `/friends/search`. Это защищённый роут, до регистрации недоступен.
+  - `sign-up` не проверяет, что почта принадлежит пользователю.
+- **Предлагаемый контракт** (публичные `/auth/*`, под общим rate limit):
+  - `POST /auth/email/start` `{ email }` → `{ registered: bool, resendAfter: 60 }`.
+    - Для новой почты отправляет 6-значный код, живёт 10 минут.
+    - Для зарегистрированной ничего не шлёт.
+    - Повтор раньше `resendAfter` — 429.
+    - Перечисление почт через `registered` — осознанный компромисс ради потока «вход или регистрация». Если неприемлемо — `уточнить`.
+  - `POST /auth/email/verify` `{ email, code }` → `{ signupToken }`.
+    - Токен одноразовый, на 15 минут.
+    - Неверный код — 400 «неверный код»; после 5 ошибок — 429 и новый код.
+  - `GET /auth/username-available?username=` → `{ available: bool }`.
+    - Правила ника как в клиенте: 3–32 символа `a–z 0–9 _ .`, без учёта регистра.
+    - Неверный формат — 400 с текстом.
+  - `POST /auth/sign-up` принимает `signupToken` вместо проверки почты: `{ signupToken, name, username, password }`. Почта берётся из токена. Ответ — сразу пара токенов, чтобы не делать второй вызов `sign-in`.
+  - `POST /auth/sign-in` принимает `{ email, password }` наравне с `{ username, password }`. Неверная пара — по-прежнему 401: клиент показывает «неверный пароль» по коду, а не по тексту.
+  - Письмо с кодом: слово «код» в теме и в тексте, сам код отдельной строкой. Так iOS Mail (iOS 17+) предлагает его в автозаполнении.
+- **Сохранение паролей системой.** Чтобы iOS и Android предлагали сохранить и подставить почту и пароль, нужны:
+  - iOS: в приложении уже есть `webcredentials:druna.tg4.dev` (`ios/Runner/Runner.entitlements`, bundle ID `dev.tg4.druna`, команда `KJMPGZ5P4U`). Серверу нужно отдавать `https://druna.tg4.dev/.well-known/apple-app-site-association` — сейчас 404:
+
+    ```json
+    { "webcredentials": { "apps": ["KJMPGZ5P4U.dev.tg4.druna"] } }
+    ```
+
+    `Content-Type: application/json`, без редиректов и без авторизации. Тот же файл понадобится для passkeys.
+  - Android: `https://druna.tg4.dev/.well-known/assetlinks.json` с `package_name` `dev.tg4.druna` и `delegate_permission/common.get_login_creds`; SHA-256 сертификата подписи — `уточнить` (release-ключа пока нет).
 - **Apple и Google.** Кнопки на welcome — плейсхолдеры. Понадобятся:
   - `POST /auth/apple` `{ identityToken, name? }`;
   - `POST /auth/google` `{ idToken }`.
@@ -122,6 +129,17 @@
 - **Предлагаемый контракт** (WebAuthn, RP ID `druna.tg4.dev`):
   - `POST /auth/passkey/register/start` (с access token) → параметры создания с одноразовым challenge; `POST /auth/passkey/register/finish` — ответ устройства, сервер проверяет и хранит публичный ключ.
   - `POST /auth/passkey/sign-in/start` `{ username? }` → challenge; `POST /auth/passkey/sign-in/finish` — подпись → пара токенов.
+  - Challenge создаёт и проверяет только сервер, один раз, с коротким сроком.
+- Нужен тот же `apple-app-site-association` (`webcredentials`) и `assetlinks.json`, что выше.
+
+## Passkeys
+
+- Статус: `уточнить`
+- **Что нужно клиенту.** Вход без пароля: создать passkey для аккаунта и входить им; iOS предлагает его над клавиатурой в поле почты. UI — по дизайну автора, его пока нет.
+- **Почему текущих вызовов недостаточно.** Сервер знает только пароли; WebAuthn-регистрации и проверки подписи нет.
+- **Предлагаемый контракт** (WebAuthn, RP ID `druna.tg4.dev`):
+  - `POST /auth/passkey/register/start` (с access token) → параметры создания с одноразовым challenge; `POST /auth/passkey/register/finish` — ответ устройства, сервер проверяет и хранит публичный ключ.
+  - `POST /auth/passkey/sign-in/start` `{ email? }` → challenge; `POST /auth/passkey/sign-in/finish` — подпись → пара токенов.
   - Challenge создаёт и проверяет только сервер, один раз, с коротким сроком.
 - Нужен тот же `apple-app-site-association` (`webcredentials`) и `assetlinks.json`, что выше.
 
