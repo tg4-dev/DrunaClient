@@ -254,9 +254,10 @@ String _errorText(Object error) =>
 /// it is, the name in a field of the app's own style, the username and the
 /// email, then the same pickers of font and colour as in the onboarding.
 ///
-/// The font and the colour are a draft until ✓: the avatar shows them at
+/// The name, the font and the colour are a draft until «Сохранить
+/// профиль», one button for all of them: the avatar shows the draft at
 /// once, the rest of the app (the events, the calendar «Druna» on the
-/// device) only after. ✕ drops the draft.
+/// device) only after. «Отменить» drops it.
 class _ProfileHeader extends StatefulWidget {
   const _ProfileHeader({
     required this.session,
@@ -281,33 +282,108 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
   int? _slot;
   AvatarFont? _font;
 
+  /// The name as typed; saved with the rest.
+  final _name = UpperCaseNameController();
+  final _nameFocus = FocusNode();
+  String? _savedName;
+  var _busy = false;
+
   AppSettings get settings => widget.settings;
   SessionController get session => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(_onName);
+    _syncName();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncName();
+  }
+
+  @override
+  void dispose() {
+    _name.removeListener(_onName);
+    _name.dispose();
+    _nameFocus.dispose();
+    super.dispose();
+  }
+
+  void _onName() => setState(() {});
+
+  /// Renamed elsewhere (a refresh, a first load): shows it unless the user
+  /// has a draft of their own.
+  void _syncName() {
+    final saved = session.profile?.name;
+    if (saved == null || saved == _savedName) return;
+    final drafted =
+        _savedName != null && _name.text.trim() != _savedName!.trim();
+    _savedName = saved;
+    if (!drafted) _name.text = saved;
+  }
 
   int get _savedSlot =>
       settings.ownColorSlot ??
       avatarPalette.indexOf(widget.own).clamp(0, avatarPalette.length - 1);
 
-  bool get _changed =>
+  bool get _nameChanged =>
+      _savedName != null && _name.text.trim() != _savedName!.trim();
+
+  bool get _avatarChanged =>
       (_slot != null && _slot != _savedSlot) ||
       (_font != null && _font!.id != ownFontFor(settings).id);
 
-  void _save() {
+  bool get _changed => _nameChanged || _avatarChanged;
+
+  /// One save for all: the name through the server (`PATCH /users/me`) or,
+  /// without one, on the device; the font and the colour on the device. A
+  /// name the server refused keeps the whole draft.
+  Future<void> _save() async {
+    if (_busy) return;
+    if (_nameChanged) {
+      final problem = nameError(_name.text);
+      if (problem != null) {
+        showToast(context, problem, error: true);
+        return;
+      }
+      setState(() => _busy = true);
+      try {
+        await session.rename(_name.text);
+      } catch (error) {
+        if (mounted) {
+          setState(() => _busy = false);
+          showToast(context, _errorText(error), error: true);
+        }
+        return;
+      }
+      if (!mounted) return;
+      _savedName = session.profile?.name ?? _name.text.trim();
+    }
     final slot = _slot;
     final font = _font;
     if (slot != null && slot != _savedSlot) settings.ownColorSlot = slot;
     if (font != null) settings.ownFontId = font.id;
+    HapticFeedback.selectionClick();
+    _nameFocus.unfocus();
     setState(() {
+      _busy = false;
       _slot = null;
       _font = null;
     });
     showToast(context, 'Профиль сохранён');
   }
 
-  void _cancel() => setState(() {
-    _slot = null;
-    _font = null;
-  });
+  void _cancel() {
+    _nameFocus.unfocus();
+    setState(() {
+      _slot = null;
+      _font = null;
+      if (_savedName != null) _name.text = _savedName!;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -315,6 +391,7 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
     final font = _font ?? ownFontFor(settings);
     final slot = _slot;
     final own = slot == null ? widget.own : avatarPalette[slot];
+    final typed = _name.text.trim();
     final name = profile == null
         ? ''
         : (typed.isNotEmpty

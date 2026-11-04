@@ -3,8 +3,7 @@ import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:flutter/cupertino.dart';
 
 /// The current value with ⌃⌄ opening a pull-down menu: on iOS 26 the
-/// system's own pop-up button, elsewhere the value drawn here with an
-/// action sheet or a popup menu.
+/// system's own menu, elsewhere an action sheet or a popup menu.
 class ValueMenu extends StatelessWidget {
   const ValueMenu({
     required this.label,
@@ -33,14 +32,8 @@ class ValueMenu extends StatelessWidget {
         if (dividerAfter.contains(entry.key)) const AdaptivePopupMenuDivider(),
       ],
     ];
-    if (PlatformInfo.isIOS26OrHigher()) {
-      return AdaptivePopupMenuButton.text<String>(
-        label: label,
-        items: items,
-        shrinkWrap: true,
-        onSelected: (_, entry) => onSelected(entry.value!),
-      );
-    }
+    // The system's menu everywhere; the value and ⌃⌄ drawn here, since the
+    // iOS 26 pop-up button of the package shows no ⌃⌄.
     return Semantics(
       button: true,
       label: label,
