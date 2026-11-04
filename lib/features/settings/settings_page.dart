@@ -254,9 +254,10 @@ String _errorText(Object error) =>
 /// it is, the name in a field of the app's own style, the username and the
 /// email, then the same pickers of font and colour as in the onboarding.
 ///
-/// The font and the colour are a draft until ✓: the avatar shows them at
+/// The name, the font and the colour are a draft until «Сохранить
+/// профиль», one button for all of them: the avatar shows the draft at
 /// once, the rest of the app (the events, the calendar «Druna» on the
-/// device) only after. ✕ drops the draft.
+/// device) only after. «Отменить» drops it.
 class _ProfileHeader extends StatefulWidget {
   const _ProfileHeader({
     required this.session,
@@ -281,33 +282,108 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
   int? _slot;
   AvatarFont? _font;
 
+  /// The name as typed; saved with the rest.
+  final _name = UpperCaseNameController();
+  final _nameFocus = FocusNode();
+  String? _savedName;
+  var _busy = false;
+
   AppSettings get settings => widget.settings;
   SessionController get session => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(_onName);
+    _syncName();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncName();
+  }
+
+  @override
+  void dispose() {
+    _name.removeListener(_onName);
+    _name.dispose();
+    _nameFocus.dispose();
+    super.dispose();
+  }
+
+  void _onName() => setState(() {});
+
+  /// Renamed elsewhere (a refresh, a first load): shows it unless the user
+  /// has a draft of their own.
+  void _syncName() {
+    final saved = session.profile?.name;
+    if (saved == null || saved == _savedName) return;
+    final drafted =
+        _savedName != null && _name.text.trim() != _savedName!.trim();
+    _savedName = saved;
+    if (!drafted) _name.text = saved;
+  }
 
   int get _savedSlot =>
       settings.ownColorSlot ??
       avatarPalette.indexOf(widget.own).clamp(0, avatarPalette.length - 1);
 
-  bool get _changed =>
+  bool get _nameChanged =>
+      _savedName != null && _name.text.trim() != _savedName!.trim();
+
+  bool get _avatarChanged =>
       (_slot != null && _slot != _savedSlot) ||
       (_font != null && _font!.id != ownFontFor(settings).id);
 
-  void _save() {
+  bool get _changed => _nameChanged || _avatarChanged;
+
+  /// One save for all: the name through the server (`PATCH /users/me`) or,
+  /// without one, on the device; the font and the colour on the device. A
+  /// name the server refused keeps the whole draft.
+  Future<void> _save() async {
+    if (_busy) return;
+    if (_nameChanged) {
+      final problem = nameError(_name.text);
+      if (problem != null) {
+        showToast(context, problem, error: true);
+        return;
+      }
+      setState(() => _busy = true);
+      try {
+        await session.rename(_name.text);
+      } catch (error) {
+        if (mounted) {
+          setState(() => _busy = false);
+          showToast(context, _errorText(error), error: true);
+        }
+        return;
+      }
+      if (!mounted) return;
+      _savedName = session.profile?.name ?? _name.text.trim();
+    }
     final slot = _slot;
     final font = _font;
     if (slot != null && slot != _savedSlot) settings.ownColorSlot = slot;
     if (font != null) settings.ownFontId = font.id;
+    HapticFeedback.selectionClick();
+    _nameFocus.unfocus();
     setState(() {
+      _busy = false;
       _slot = null;
       _font = null;
     });
     showToast(context, 'Профиль сохранён');
   }
 
-  void _cancel() => setState(() {
-    _slot = null;
-    _font = null;
-  });
+  void _cancel() {
+    _nameFocus.unfocus();
+    setState(() {
+      _slot = null;
+      _font = null;
+      if (_savedName != null) _name.text = _savedName!;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -315,9 +391,12 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
     final font = _font ?? ownFontFor(settings);
     final slot = _slot;
     final own = slot == null ? widget.own : avatarPalette[slot];
+    final typed = _name.text.trim();
     final name = profile == null
         ? ''
-        : (profile.name.isEmpty ? profile.username : profile.name);
+        : (typed.isNotEmpty
+              ? typed
+              : (profile.name.isEmpty ? profile.username : profile.name));
     const outer = _avatar + (_ring + _ringGap) * 2;
     return Padding(
       padding: const EdgeInsets.only(top: 24),
@@ -357,10 +436,19 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
               },
             )
           else ...[
-            _NameField(
-              key: ValueKey('profile-name-${profile.id}'),
-              session: session,
-              name: profile.name,
+            PillField(
+              fieldKey: const ValueKey('profile-name-field'),
+              controller: _name,
+              focusNode: _nameFocus,
+              hint: 'ИМЯ',
+              width: null,
+              style: PillFieldStyle.name,
+              hintStyle: PillFieldStyle.nameHint,
+              keyboardType: TextInputType.name,
+              textCapitalization: TextCapitalization.words,
+              autofillHints: const [AutofillHints.givenName],
+              textInputAction: TextInputAction.done,
+              keepFocus: false,
             ),
             const SizedBox(height: 8),
             Text(
@@ -413,115 +501,6 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
       ),
     );
   }
-}
-
-/// The name in the app's field: bold, drawn in capitals. A change shows ✓
-/// at the right; it, or the keyboard's return, saves through the server
-/// (`PATCH /users/me`) or, without one, on the device.
-class _NameField extends StatefulWidget {
-  const _NameField({required this.session, required this.name, super.key});
-
-  final SessionController session;
-  final String name;
-
-  @override
-  State<_NameField> createState() => _NameFieldState();
-}
-
-class _NameFieldState extends State<_NameField> {
-  late final _name = UpperCaseNameController(text: widget.name);
-  final _focus = FocusNode();
-  var _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _name.addListener(() => setState(() {}));
-    _focus.addListener(() => setState(() {}));
-  }
-
-  @override
-  void didUpdateWidget(covariant _NameField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Renamed elsewhere (a refresh): show it unless the user is typing.
-    if (oldWidget.name != widget.name && !_focus.hasFocus) {
-      _name.text = widget.name;
-    }
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  bool get _changed => _name.text.trim() != widget.name.trim();
-
-  /// ✓ or «готово»: saves a change; with none, just ends the editing.
-  Future<void> _save() async {
-    if (_busy) return;
-    if (!_changed) {
-      _focus.unfocus();
-      return;
-    }
-    final problem = nameError(_name.text);
-    if (problem != null) {
-      showToast(context, problem, error: true);
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await widget.session.rename(_name.text);
-      if (!mounted) return;
-      HapticFeedback.selectionClick();
-      _focus.unfocus();
-      showToast(context, 'Имя сохранено');
-    } catch (error) {
-      if (mounted) showToast(context, _errorText(error), error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => PillField(
-    fieldKey: const ValueKey('profile-name-field'),
-    controller: _name,
-    focusNode: _focus,
-    hint: 'ИМЯ',
-    width: null,
-    style: PillFieldStyle.name,
-    hintStyle: PillFieldStyle.nameHint,
-    keyboardType: TextInputType.name,
-    textCapitalization: TextCapitalization.words,
-    autofillHints: const [AutofillHints.givenName],
-    textInputAction: TextInputAction.done,
-    keepFocus: false,
-    onSubmitted: _save,
-    trailing: _busy
-        ? const CupertinoActivityIndicator(color: Colors.white)
-        : _changed || _focus.hasFocus
-        ? Semantics(
-            button: true,
-            label: _changed ? 'Сохранить имя' : 'Готово',
-            excludeSemantics: true,
-            child: GestureDetector(
-              key: const ValueKey('profile-name-save'),
-              behavior: HitTestBehavior.opaque,
-              onTap: _save,
-              child: const SizedBox.square(
-                dimension: 44,
-                child: Icon(
-                  CupertinoIcons.checkmark_alt,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ),
-          )
-        : null,
-  );
 }
 
 class _LogoutBlock extends StatelessWidget {

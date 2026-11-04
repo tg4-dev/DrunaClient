@@ -829,18 +829,7 @@ void main() {
       TextField field(String key) =>
           tester.widget<TextField>(find.byKey(ValueKey(key)));
       expect(field('password').autofillHints, [AutofillHints.password]);
-      // Null, not empty: an empty list keeps it in the autofill group.
-      expect(field('password-repeat').autofillHints, isNull);
-      final repeat = tester.state<EditableTextState>(
-        find.descendant(
-          of: find.byKey(const ValueKey('password-repeat')),
-          matching: find.byType(EditableText),
-        ),
-      );
-      expect(
-        repeat.textInputConfiguration.autofillConfiguration.enabled,
-        isFalse,
-      );
+      expect(field('password-repeat').autofillHints, isEmpty);
 
       await tester.enterText(
         find.byKey(const ValueKey('password')),

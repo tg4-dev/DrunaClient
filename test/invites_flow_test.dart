@@ -257,35 +257,40 @@ void main() {
     expect(editable().controller.text, 'Глеб');
     expect(shown(), 'ГЛЕБ');
     expect(find.text('@gleb'), findsOneWidget);
+    // One save for the name and the avatar: nothing to save yet.
     expect(find.byKey(const ValueKey('profile-name-save')), findsNothing);
+    expect(find.byKey(const ValueKey('profile-save')), findsNothing);
 
-    // In and out without a change: ✓ ends the editing, so does a tap
-    // outside.
+    // A tap outside ends the editing.
     await tester.tap(field);
     await tester.pump();
     expect(editable().focusNode.hasFocus, isTrue);
-    expect(find.byKey(const ValueKey('profile-name-save')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('profile-name-save')));
-    await tester.pump();
-    expect(editable().focusNode.hasFocus, isFalse);
-    expect(server.name, 'Глеб');
-    await tester.tap(field);
-    await tester.pump();
     await tester.tapAt(const Offset(20, 300));
     await tester.pump();
     expect(editable().focusNode.hasFocus, isFalse);
 
+    // «Отменить» puts the saved name back.
+    await tester.enterText(field, 'Кто-то');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('profile-cancel')));
+    await tester.tap(find.byKey(const ValueKey('profile-cancel')));
+    await tester.pumpAndSettle();
+    expect(editable().controller.text, 'Глеб');
+    expect(server.name, 'Глеб');
+
     await tester.enterText(field, 'Глеб Я.');
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('profile-name-save')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-name-save')), findsNothing);
+    await tester.ensureVisible(find.byKey(const ValueKey('profile-save')));
+    await tester.tap(find.byKey(const ValueKey('profile-save')));
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
 
     expect(server.name, 'Глеб Я.');
     expect(session.profile?.name, 'Глеб Я.');
     expect(shown(), 'ГЛЕБ Я.');
-    expect(find.text('Имя сохранено'), findsOneWidget);
-    expect(find.byKey(const ValueKey('profile-name-save')), findsNothing);
+    expect(find.text('Профиль сохранён'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-save')), findsNothing);
   });
 
   test('an unanswered invite is see-through on the calendar', () {

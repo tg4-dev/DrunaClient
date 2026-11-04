@@ -16,13 +16,17 @@
    физическом устройстве.
 6. Проверить адаптивность, клавиатуру, локальный HTTP/ATS и сетевые ошибки на
    нескольких размерах iPhone/Android.
-7. Серверный вход по почте: endpoint из `docs/backend-changes.md` («Вход и
-   регистрация по почте») и `ServerAuthFlowSource` на них. До этого в
-   production войти нельзя.
-8. Сохранение паролей системой: в iOS `webcredentials:druna.tg4.dev` уже
-   есть; серверу — `apple-app-site-association` и `assetlinks.json`
-   (`docs/backend-changes.md`). Проверить на физическом iPhone: Associated
-   Domains требует платную команду Apple.
+7. Вход через Telegram: входа по почте на сервере не будет (2026-11-04).
+   Согласовать с бэкендом механизм и контракт (`docs/backend-changes.md`,
+   «Вход и регистрация через Telegram»), затем новые шаги онбординга по
+   дизайну автора и `ServerAuthFlowSource` на них. До этого в production
+   войти нельзя.
+8. Сохранение паролей системой: нужна платная команда Apple — личная не
+   поддерживает Associated Domains, поэтому entitlement
+   `webcredentials:druna.tg4.dev` из iOS убран. Вернуть его вместе с
+   `apple-app-site-association` и `assetlinks.json` на сервере
+   (`docs/backend-changes.md`, «Сохранение паролей системой») и проверить на
+   физическом iPhone.
 
 ## P1 — качество продукта
 

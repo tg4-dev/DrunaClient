@@ -112,6 +112,34 @@ void main() {
   testWidgets('no friends yet: offers to add some', (tester) async {
     await pumpBar(tester, friends: const []);
     expect(find.text('Добавить друзей'), findsOneWidget);
+    final button = find.byKey(const ValueKey('add-friends'));
+    final open = tester.getRect(button).left;
+    // In my mode it has slid past the right edge, after the finger.
+    mode.value = 0.5;
+    await tester.pump();
+    final width = tester.getSize(find.byType(FriendBar)).width;
+    expect(tester.getRect(button).left, greaterThan(open));
+    mode.value = 0;
+    await tester.pump();
+    expect(tester.getRect(button).left, greaterThan(width));
+  });
+
+  testWidgets('the row comes in as a staircase, the left first', (
+    tester,
+  ) async {
+    await pumpBar(tester);
+    final step = leftOf(tester, 'БОРИС') - leftOf(tester, 'АЛИНА');
+    // Partway in: each is further from its place than the one on its left,
+    // so the gaps are wider and close as they arrive.
+    mode.value = 0.6;
+    await tester.pump();
+    final gap1 = leftOf(tester, 'БОРИС') - leftOf(tester, 'АЛИНА');
+    final gap2 = leftOf(tester, 'ВЕРА') - leftOf(tester, 'БОРИС');
+    expect(gap1, greaterThan(step));
+    expect(gap2, greaterThan(step));
+    expect(friendBarFoldAt(0.6, 0), lessThan(friendBarFoldAt(0.6, 1)));
+    expect(friendBarFoldAt(1, 5), 0);
+    expect(friendBarFoldAt(0, 0), 1);
   });
 
   testWidgets('in my mode: my avatar with "Мои события", and an arrow to '
