@@ -6,9 +6,6 @@ import 'package:druna_app/features/event_page/fit_title.dart';
 import 'package:druna_app/features/onboarding/widgets/code_boxes.dart';
 import 'package:druna_app/shared/ui/edge_blur.dart';
 
-/// Runs before every test file: see [EdgeBlur.enabled] and
-/// [EventGradient.enabled], [BandShader.enabled], [FitTitle.blink] and
-/// [CodeBoxes.blink].
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   EdgeBlur.enabled = false;
   EventGradient.enabled = false;

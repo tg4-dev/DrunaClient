@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/core/storage/token_store.dart';
@@ -157,7 +158,7 @@ void main() {
       },
     );
 
-    test('failed refresh clears the stored session', () async {
+    test('a refused refresh clears the session and says it expired', () async {
       final harness = _Harness(
         (options) => options.path.endsWith('/auth/renew-token')
             ? _json(401, {
@@ -170,6 +171,8 @@ void main() {
               }),
         tokens: const TokenPair(accessToken: 'old', refreshToken: 'bad'),
       );
+      var expired = 0;
+      harness.client.onSessionExpired = () => expired++;
 
       await expectLater(
         harness.client.request<void>('/protected', decode: (_) {}),
@@ -181,6 +184,50 @@ void main() {
           ),
         ),
       );
+      expect(await harness.store.read(), isNull);
+      expect(expired, 1);
+    });
+
+    test('a lost connection while renewing keeps the session', () async {
+      var expired = 0;
+      final harness = _Harness(
+        (options) => options.path.endsWith('/auth/renew-token')
+            ? throw DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+              )
+            : _json(401, {
+                'data': null,
+                'error': {'message': 'expired', 'code': 401},
+              }),
+        tokens: const TokenPair(accessToken: 'old', refreshToken: 'good'),
+      );
+      harness.client.onSessionExpired = () => expired++;
+
+      await expectLater(
+        harness.client.request<void>('/protected', decode: (_) {}),
+        throwsA(
+          isA<ApiException>().having((e) => e.isNetwork, 'network', isTrue),
+        ),
+      );
+      expect((await harness.store.read())?.refreshToken, 'good');
+      expect(expired, 0);
+    });
+
+    test('a refused refresh sends the user back to sign in', () async {
+      final harness = _Harness(
+        (options) => _json(401, {
+          'data': null,
+          'error': {'message': 'expired', 'code': 401},
+        }),
+        tokens: const TokenPair(accessToken: 'old', refreshToken: 'bad'),
+      );
+      final session = SessionController(DrunaRepository(harness.client));
+      await session.restore();
+
+      expect(session.state, SessionState.signedOut);
+      expect(session.takeExpiredSignOut(), isTrue);
+      expect(session.takeExpiredSignOut(), isFalse);
       expect(await harness.store.read(), isNull);
     });
   });

@@ -16,21 +16,15 @@ import 'package:flutter/services.dart';
 export 'package:druna_app/features/calendar/day_events.dart'
     show dayTimelineOrigin;
 
-const dayTimelineDayCount = 365 * 130;
+const dayTimelineDayCount = calendarDayCount;
 
-/// Hour the timeline opens on when the day has no events and is not today.
 const timelineMorningHour = 8;
 
-/// Near an edge while drawing or moving, the timeline scrolls on its own.
 const timelineEdgeZone = 56.0;
 const timelineEdgeSpeed = 900.0;
 
-/// A drawn event shorter than one step becomes this long, or one step when
-/// that is longer.
 const drawnEventDefault = Duration(hours: 1);
 
-/// Zoom steps are binary fractions, so `itemCount × 24 × pixels` stays exact
-/// and the list's extent is always a whole number of days.
 double quantizePixels(double pixelsPerHour) =>
     (pixelsPerHour * 32).round() / 32;
 
@@ -48,7 +42,6 @@ class DayScrollMetrics extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sets the values without notifying, for use while widgets are building.
   void seed(double offset, double pixelsPerHour) {
     this.offset = offset;
     this.pixelsPerHour = pixelsPerHour;
@@ -61,8 +54,6 @@ class DayScrollMetrics extends ChangeNotifier {
   }
 }
 
-/// Where the timeline opens: an hour before the day's first event, else the
-/// current hour today, else [timelineMorningHour].
 int openingHour(CalendarEventIndex index, DateTime day, DateTime now) {
   final date = dateOnly(day);
   double? first;
@@ -83,7 +74,6 @@ class DayTimeline extends StatefulWidget {
     required this.day,
     required this.onVisibleDay,
     this.metrics,
-    this.hourLabelOpacity = 1,
     this.events = const [],
     this.sharedEvents = const [],
     this.hiddenEventId,
@@ -100,36 +90,23 @@ class DayTimeline extends StatefulWidget {
   final DateTime day;
   final ValueChanged<DateTime> onVisibleDay;
 
-  /// Carries the zoom between openings and drives the day titles.
   final DayScrollMetrics? metrics;
-  final double hourLabelOpacity;
   final List<CalendarEvent> events;
 
-  /// Events with other people: cells behind every row for their time, still
-  /// while the mode changes (design-system §9.8).
   final List<CalendarEvent> sharedEvents;
   final String? hiddenEventId;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
 
-  /// A long press on empty time draws an event from the press to the release.
   final void Function(DateTime start, DateTime end)? onCreateRange;
 
-  /// A long press on a timed event picks it up; this reports its new start.
   final void Function(CalendarEvent event, DateTime start)? onMoveEvent;
 
-  /// 0 shows the user's events in lanes, 1 friends' rows; see
-  /// [DayFriendsGeometry]. Only matters with [friends].
   final ValueListenable<double> mode;
 
-  /// Without it the timeline shows only the user's events.
   final DayFriendsView? friends;
 
-  /// In friends' rows with friends picked, drawing makes an invite: the
-  /// event being drawn takes their colours.
   final List<Color>? inviteColors;
 
-  /// Their faces, the user first: an invite being drawn is a dashed outline
-  /// with them, as the unanswered cell it will become.
   final List<FriendInfo>? invitePeople;
 
   @override
@@ -138,7 +115,6 @@ class DayTimeline extends StatefulWidget {
 
 typedef _Ghost = ({DateTime start, DateTime end, int lane, String? title});
 
-/// A press being turned into a new event, or an event being moved.
 class _Hold {
   _Hold.create(DateTime at) : event = null, grab = Duration.zero, anchor = at {
     current = at;
@@ -152,21 +128,15 @@ class _Hold {
 
   final CalendarEvent? event;
 
-  /// Moving: how far into the event the finger took hold.
   final Duration grab;
 
-  /// Drawing: the time where the press began.
   final DateTime anchor;
 
-  /// Drawing: the time under the finger. Moving: the event's new start.
   late DateTime current;
 
-  /// Finger x in the timeline's viewport.
   double x = 0;
   int lane = 0;
 
-  /// The snapping step at the zoom the hold started in (see
-  /// [timelineStepFor]); the sheet's wheels still offer 15 minutes.
   Duration step = const Duration(minutes: 30);
 
   ({DateTime start, DateTime end}) get span {
@@ -213,7 +183,6 @@ class DayTimelineState extends State<DayTimeline>
   Duration? _lastEdgeTick;
   final _ghost = ValueNotifier<_Ghost?>(null);
 
-  /// The drawn or moved event fades in on hold and out on release.
   late final AnimationController _ghostFade = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 160),
@@ -277,9 +246,6 @@ class DayTimelineState extends State<DayTimeline>
     return box != null && box.hasSize ? box.size.width : 0;
   }
 
-  /// [raw] snapped for drawing or moving at the current zoom: on the step,
-  /// pulled to labelled lines, holding [current] near a boundary
-  /// ([snapWithMagnet]).
   DateTime _snapTime(DateTime raw, DateTime? current) {
     final day = dateOnly(raw);
     double minutesOf(DateTime time) => time.difference(day).inSeconds / 60.0;
@@ -294,7 +260,6 @@ class DayTimelineState extends State<DayTimeline>
     return atClock(addCalendarDays(day, days), rest ~/ 60, rest % 60);
   }
 
-  /// The unsnapped time under viewport x.
   DateTime _timeAtX(double x) {
     final minutes = ((_scroll.offset + x) / _pixels * 60).floor();
     final day = minutes ~/ (24 * 60);
@@ -306,7 +271,6 @@ class DayTimelineState extends State<DayTimeline>
     );
   }
 
-  /// First row free of events across [start]…[end] on [start]'s day.
   int _freeLane(DateTime start, DateTime end) {
     final day = dateOnly(start);
     final lanes = _index.lanesAround(day);
@@ -323,8 +287,6 @@ class DayTimelineState extends State<DayTimeline>
     return lane;
   }
 
-  /// Friends' rows are in view: the user's events are folded into their
-  /// band, and a new one is drawn on the user's row.
   bool get _friendsShown =>
       widget.friends != null && widget.mode.value > calendarModeHalfway;
 
@@ -377,7 +339,6 @@ class DayTimelineState extends State<DayTimeline>
     _follow(hold);
   }
 
-  /// Re-reads the time under the finger, after it moved or the list scrolled.
   void _follow(_Hold hold) {
     final raw = _timeAtX(hold.x);
     final next = _snapTime(
@@ -386,7 +347,6 @@ class DayTimelineState extends State<DayTimeline>
     );
     if (next != hold.current) {
       hold.current = next;
-      // A firmer tick on a labelled line: the hour the user aims for.
       final division = timelineDivisionFor(_pixels);
       if ((next.hour * 60 + next.minute) % division == 0) {
         HapticFeedback.lightImpact();
@@ -648,8 +608,6 @@ class DayTimelineState extends State<DayTimeline>
     );
   }
 
-  /// With friends, the user's bars fold up into their row as friends'
-  /// rows come in, squeezed towards it like the month's chips.
   LaneMotion? _laneMotion() {
     if (widget.friends == null) return null;
     return (lane, child) => ChipMotion(
@@ -714,7 +672,6 @@ class DayTimelineState extends State<DayTimeline>
             ),
           ),
         ),
-        // Folded away, the user's bars take no taps.
         Positioned.fill(
           child: ValueListenableBuilder<double>(
             valueListenable: widget.mode,
@@ -738,7 +695,6 @@ class DayTimelineState extends State<DayTimeline>
     );
   }
 
-  /// The event being drawn or moved, following the finger in view.
   Widget _ghostLayer() {
     return FadeTransition(
       opacity: _ghostFade,
@@ -752,7 +708,6 @@ class DayTimelineState extends State<DayTimeline>
           final left = timelineX(ghost.start, _pixels) - _scroll.offset;
           final right = timelineX(ghost.end, _pixels) - _scroll.offset;
           final top = timelineLaneTop(ghost.lane);
-          // Drawn on the user's row among friends' rows: as tall as it.
           final height = _friendsShown
               ? DayFriendsGeometry.rowHeight
               : timelineEventHeight;
@@ -845,10 +800,7 @@ class DayTimelineState extends State<DayTimeline>
                   final day = addCalendarDays(dayTimelineOrigin, index);
                   return RepaintBoundary(
                     child: CustomPaint(
-                      painter: _HourGridPainter(
-                        pixelsPerHour: _pixels,
-                        hourLabelOpacity: widget.hourLabelOpacity,
-                      ),
+                      painter: _HourGridPainter(pixelsPerHour: _pixels),
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onLongPressStart: (details) =>
@@ -878,15 +830,10 @@ class DayTimelineState extends State<DayTimeline>
 }
 
 class _HourGridPainter extends CustomPainter {
-  const _HourGridPainter({
-    required this.pixelsPerHour,
-    required this.hourLabelOpacity,
-  });
+  const _HourGridPainter({required this.pixelsPerHour});
 
   final double pixelsPerHour;
-  final double hourLabelOpacity;
 
-  /// Hour labels by hour and opacity step; the labels never change text.
   static final _labels = <int, TextPainter>{};
 
   @override
@@ -900,7 +847,7 @@ class _HourGridPainter extends CustomPainter {
       final opacity = hourLineOpacity(hour, pixelsPerHour);
       final x = hour * pixelsPerHour;
       if (opacity > 0.02) {
-        if (hourLabelOpacity > 0.02) _label(canvas, hour, x, opacity);
+        _label(canvas, hour, x, opacity);
         hourPaint.color = Colors.white.withValues(alpha: 0.34 * opacity);
         canvas.drawLine(
           Offset(x, hour == 0 ? 0 : 28),
@@ -916,7 +863,7 @@ class _HourGridPainter extends CustomPainter {
   }
 
   void _label(Canvas canvas, int hour, double x, double opacity) {
-    final step = (opacity * hourLabelOpacity * 20).round();
+    final step = (opacity * 20).round();
     if (step == 0) return;
     final painter = _labels.putIfAbsent(
       hour * 32 + step,
@@ -937,11 +884,9 @@ class _HourGridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HourGridPainter oldDelegate) =>
-      oldDelegate.pixelsPerHour != pixelsPerHour ||
-      oldDelegate.hourLabelOpacity != hourLabelOpacity;
+      oldDelegate.pixelsPerHour != pixelsPerHour;
 }
 
-/// The time of the event being drawn or moved, floating under it.
 class _TimeBubble extends StatelessWidget {
   const _TimeBubble({required this.label});
 
@@ -971,8 +916,6 @@ class _TimeBubble extends StatelessWidget {
   }
 }
 
-/// An invite being drawn: a dashed outline on black with the faces of the
-/// people in it, like the month's chip for one.
 class _InviteGhost extends StatelessWidget {
   const _InviteGhost({required this.people});
 

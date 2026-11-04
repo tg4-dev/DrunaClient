@@ -10,12 +10,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// "Отметить присутствие" on a shared event (design-system §9.8): "Да" and
-/// "Нет" with the people who gave that answer. Who has not answered shows
-/// under the title, in "Вместе с".
-/// The user's answer fills its button in their colour; ✕ by the title
-/// takes it back. The organizer always goes: "Нет" shakes, and a second
-/// tap soon after asks to call the event off.
 class AttendanceBlock extends StatefulWidget {
   const AttendanceBlock({
     required this.me,
@@ -34,7 +28,6 @@ class AttendanceBlock extends StatefulWidget {
   final Color own;
   final RsvpStatus mine;
 
-  /// The user organizes it: their answer is always yes.
   final bool organizer;
   final List<FriendInfo> going;
   final List<FriendInfo> notGoing;
@@ -42,7 +35,6 @@ class AttendanceBlock extends StatefulWidget {
   final VoidCallback onCancelEvent;
   final bool enabled;
 
-  /// A second "Нет" from the organizer within this asks to cancel.
   static const doubleTap = Duration(milliseconds: 1500);
 
   @override
@@ -102,11 +94,8 @@ class _AttendanceBlockState extends State<AttendanceBlock>
                 ),
               ),
             ),
-            // The organizer always goes: nothing to answer or take back.
             if (!widget.organizer) ...[
               const SizedBox(width: 10),
-              // One fixed slot for the avatar and ✕, so swapping them
-              // moves nothing.
               SizedBox(
                 width: 32,
                 height: 32,
@@ -202,9 +191,6 @@ class _AttendanceBlockState extends State<AttendanceBlock>
     );
   }
 
-  /// «Да» and «Нет» with their faces: a block as wide as a button and six
-  /// faces, centred under the centred title, so the buttons stand on the
-  /// page's axis instead of at its left edge.
   static const _rowWidth = PillStyle.wide + 16 + _FacesState.fullWidth;
 
   Widget _row({required Widget button, required List<FriendInfo> people}) {
@@ -225,9 +211,6 @@ class _AttendanceBlockState extends State<AttendanceBlock>
   }
 }
 
-/// Overlapping avatars, left to right, each lying over the one on its
-/// right. One that arrives after the row was first shown lands from the
-/// left on top of the others while they slide right to make room.
 class _Faces extends StatefulWidget {
   const _Faces({required this.people, required this.me, required this.own});
 
@@ -240,18 +223,12 @@ class _Faces extends StatefulWidget {
 }
 
 class _FacesState extends State<_Faces> {
-  /// A little smaller than the button beside them.
   static const _size = 36.0;
   static const _step = 26.0;
   static const _shown = 6;
 
-  /// Six faces and the «+N» after them.
   static const fullWidth = _size + (_shown - 1) * _step + 44;
 
-  /// Who was in the row when it was first shown: they do not land. Taken
-  /// in [initState]: a lazy field was first read only once someone was in
-  /// the row, so the first one into an empty row counted as always there
-  /// and never landed.
   late final Set<int> _first;
 
   @override
@@ -276,7 +253,6 @@ class _FacesState extends State<_Faces> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // Painted right to left: the leftmost ends up on top.
             for (var i = shown.length - 1; i >= 0; i--)
               AnimatedPositioned(
                 key: ValueKey('face-${shown[i].id}'),
@@ -312,8 +288,6 @@ class _FacesState extends State<_Faces> {
   }
 }
 
-/// Drops in the first time it is built: from [from] to the left and a
-/// little above, slightly large and clear, onto its place.
 class _Land extends StatelessWidget {
   const _Land({required this.play, required this.from, required this.child});
 

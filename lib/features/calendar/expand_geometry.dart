@@ -5,7 +5,6 @@ const dayTitleRide = 6.0;
 const dayTitleSlot = dayMidnightInset + dayTitleRide;
 const expandOpenDuration = Duration(milliseconds: 360);
 
-/// The sheet settles to full opacity early so the rest is just the move.
 const expandVeilCurve = Interval(0, 0.28, curve: Curves.easeOutCubic);
 
 class ExpandLayout {
@@ -16,14 +15,11 @@ class ExpandLayout {
     required this.veil,
   });
 
-  /// Raw progress, 0 at the month and 1 when the day fills the screen.
   final double motion;
 
-  /// Top of the day sheet. Follows [motion] from the tapped week to the screen.
   final double top;
   final double bottom;
 
-  /// Sheet opacity. It settles early so the rest of the move is just the sheet.
   final double veil;
 }
 

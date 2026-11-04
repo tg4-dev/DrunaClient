@@ -8,15 +8,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Look of the friends column of the open day.
 abstract final class FriendColumnStyle {
-  /// The chevron of the user's own mode, and its gap over the stack.
   static const hintSize = 24.0;
   static const hintGap = 8.0;
 
-  /// The timeline passing under the column darkens and blurs towards the
-  /// screen edge ([DayDetail]). Sigma is in physical pixels, as the shader
-  /// takes it.
   static const blurSigma = 30.0;
   static const shade = [
     Color(0xE6000000),
@@ -28,15 +23,6 @@ abstract final class FriendColumnStyle {
   static const divider = Color(0x3DFFFFFF);
 }
 
-/// The friend bar of the open day, standing on the left edge: the user's
-/// avatar pinned on top, a divider, then every friend, each level with
-/// their row on the timeline. The friends scroll by [offset], under the
-/// user's avatar. Picked friends have a ring and come first.
-///
-/// While the user's events are shown ([mode] near 0) the picked friends
-/// fold down into a stack at the bottom, next to the band of their busy
-/// time; the rest slide off the bottom edge. Only positions and scales
-/// change per frame.
 class FriendColumn extends StatelessWidget {
   const FriendColumn({
     required this.friends,
@@ -49,17 +35,14 @@ class FriendColumn extends StatelessWidget {
     super.key,
   });
 
-  /// Null while loading.
   final List<FriendInfo>? friends;
   final FriendSelection selection;
   final ValueListenable<double> mode;
   final ValueListenable<double> offset;
   final DayFriendsGeometry geometry;
 
-  /// The user's avatar, [DayFriendsGeometry.avatar] wide.
   final Widget me;
 
-  /// A tap on the folded stack: back to friends' rows.
   final VoidCallback onShowFriends;
 
   void _toggle(FriendInfo friend) {
@@ -79,8 +62,6 @@ class FriendColumn extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // The timeline goes under the column: darker towards the edge.
-          // It blurs itself there ([DayDetail]).
           const Positioned.fill(
             child: IgnorePointer(
               child: DecoratedBox(
@@ -94,8 +75,6 @@ class FriendColumn extends StatelessWidget {
               ),
             ),
           ),
-          // Friends scroll under the user's avatar: nothing above the
-          // divider.
           Positioned(
             top: clipTop,
             left: 0,
@@ -137,7 +116,6 @@ class FriendColumn extends StatelessWidget {
     );
   }
 
-  /// [shift]: the friends' area starts this far down the column.
   Widget _friends(
     List<FriendInfo> friends,
     bool open, {
@@ -154,8 +132,6 @@ class FriendColumn extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // Not picked first, so the picked ones paint over them; in the
-        // stack each lower avatar lies over the one above.
         for (final i in [
           for (var k = selectedCount; k < ordered.length; k++) k,
           for (var k = 0; k < selectedCount; k++) k,
@@ -179,9 +155,6 @@ class FriendColumn extends StatelessWidget {
             top: geometry.stackTop(DayFriendsGeometry.stackMax) - shift,
             mode: mode,
           ),
-        // In the user's own mode: a chevron up over the stack (or where it
-        // would be) — friends' rows are a swipe up. It rides up from below
-        // with the friends going down, and takes a tap too.
         _ColumnHint(
           top:
               (selectedCount > 0
@@ -215,8 +188,6 @@ class FriendColumn extends StatelessWidget {
   }
 }
 
-/// One friend of the column. Their place in the list animates when the
-/// order changes; their way into the stack follows the mode directly.
 class _ColumnSlot extends StatelessWidget {
   const _ColumnSlot({
     required this.friend,
@@ -235,7 +206,6 @@ class _ColumnSlot extends StatelessWidget {
   final FriendInfo friend;
   final int index;
 
-  /// Position in the folded stack; null for friends that are not picked.
   final int? stackIndex;
   final DayFriendsGeometry geometry;
   final Listenable motion;
@@ -244,7 +214,6 @@ class _ColumnSlot extends StatelessWidget {
   final double shift;
   final bool selected;
 
-  /// Null while folded: the stack as a whole takes the tap.
   final VoidCallback? onTap;
 
   @override
@@ -276,8 +245,6 @@ class _ColumnSlot extends StatelessWidget {
           var foldedScale = 1.0;
           var hidden = false;
           if (stack != null) {
-            // The same way as the friend's bar ([DayFriendLayer]), so the
-            // two stay level. Beyond the stack: shrinks under "+N".
             top = geometry.avatarTop(
               row: slot,
               stack: stack,
@@ -317,12 +284,9 @@ class _ColumnSlot extends StatelessWidget {
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
-/// The end of the fold, while the stack forms: "+N" grows in and the
-/// friends past the third shrink under it.
 double _settling(double fold) =>
     Curves.easeOut.transform(((fold - 0.6) / 0.4).clamp(0.0, 1.0));
 
-/// "+N" under the stack: grows in as the column folds.
 class _ColumnMore extends StatelessWidget {
   const _ColumnMore({
     required this.count,
@@ -352,7 +316,6 @@ class _ColumnMore extends StatelessWidget {
   }
 }
 
-/// The swipe hint of the user's own mode in the open day: a chevron up.
 class _ColumnHint extends StatelessWidget {
   const _ColumnHint({
     required this.top,

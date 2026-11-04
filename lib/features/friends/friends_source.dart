@@ -2,8 +2,6 @@ import 'package:druna_app/core/api/api_exception.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 
-/// Everything the friends page asks of the server, so the page can run on
-/// demo data until the new UI is wired to a live backend.
 abstract interface class FriendsSource {
   Future<List<FriendInfo>> listFriends();
   Future<List<FriendInfo>> incomingRequests();
@@ -40,21 +38,16 @@ class ServerFriendsSource implements FriendsSource {
   Future<void> remove(String username) => _repository.deleteFriend(username);
 }
 
-/// In-memory friends for trying the page without a server: twelve friends
-/// (enough to overflow the friend bar), one incoming request and a few
-/// people to find by username.
 class DemoFriendsSource implements FriendsSource {
   DemoFriendsSource({this.delay = const Duration(milliseconds: 300)});
 
   final Duration delay;
 
-  /// Every request fails as if there were no network: for the error states.
   bool offline = false;
 
   final _friends = <FriendInfo>[
     const FriendInfo(id: 101, name: 'Алина Смирнова', username: 'alina'),
     const FriendInfo(id: 102, name: 'Марк Ли', username: 'mark'),
-    // Ten more, to see the friend bar and the month overflow.
     const FriendInfo(id: 107, name: 'Ольга Петрова', username: 'olga'),
     const FriendInfo(id: 108, name: 'Дима Соколов', username: 'dima'),
     const FriendInfo(id: 109, name: 'Катя Лебедева', username: 'katya'),

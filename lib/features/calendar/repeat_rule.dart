@@ -2,7 +2,6 @@ import 'package:druna_app/features/calendar/month_layout.dart';
 
 enum RepeatUnit { day, week, month, year }
 
-/// The choice shown in the repeat list. [custom] is "Дополнительно".
 enum RepeatPreset { daily, weekly, biweekly, monthly, yearly, custom }
 
 const repeatPresetLabels = {
@@ -25,7 +24,6 @@ class RepeatRule {
     this.until,
   });
 
-  /// [day] seeds the weekday for weekly rules.
   factory RepeatRule.fromPreset(RepeatPreset preset, DateTime day) {
     final weekday = {day.weekday};
     return switch (preset) {
@@ -69,10 +67,8 @@ class RepeatRule {
   final RepeatUnit unit;
   final int interval;
 
-  /// ISO weekdays (1 = Monday) for weekly rules; empty means the first day's.
   final Set<int> weekdays;
 
-  /// Last day an occurrence may start on, inclusive. Null repeats forever.
   final DateTime? until;
 
   bool get usesWeekdays => unit == RepeatUnit.week;
@@ -114,11 +110,6 @@ class RepeatRule {
   );
 }
 
-/// First days of the series that fall in [from]…[to], inclusive.
-///
-/// [first] is the series' own first day and is always an occurrence. Monthly
-/// and yearly rules skip months without that date, so a series on the 31st
-/// only lands on months that have one.
 List<DateTime> repeatDaysBetween({
   required RepeatRule rule,
   required DateTime first,
@@ -191,7 +182,6 @@ String repeatUnitLabel(RepeatUnit unit, int count) => switch (unit) {
   RepeatUnit.year => russianPlural(count, 'год', 'года', 'лет'),
 };
 
-/// "Каждые 3 недели" / "Каждую неделю" for the custom row.
 String repeatEveryLabel(RepeatUnit unit, int interval) {
   if (interval == 1) {
     return switch (unit) {

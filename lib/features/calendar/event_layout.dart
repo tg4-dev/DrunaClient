@@ -3,21 +3,16 @@ import 'dart:math' as math;
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/month_layout.dart';
 
-/// Pinching down through this height snaps the month to [monthRowMin].
 final monthBarSnapThreshold = (monthRowLevels[0] + monthRowLevels[1]) / 2;
 
 final monthDetailThreshold = (monthRowLevels[1] + monthRowLevels[2]) / 2;
 
-/// From here chips are tall, with the title on two lines.
 final monthFullThreshold = (monthRowLevels[2] + monthRowLevels[3]) / 2;
 
-/// The day number's circle sits [dayNumberTop] below the week line and the
-/// first chip as far below the circle: equal space on both sides of "today".
 const dayNumberTop = 6.0;
 const dayNumberSize = 28.0;
 const monthEventHeader = dayNumberTop * 2 + dayNumberSize;
 
-/// Gap between the last chip and the week divider.
 const monthEventBottomPad = 12.0;
 
 class EventDensity {
@@ -34,15 +29,12 @@ class EventDensity {
   final double itemHeight;
   final double gap;
 
-  /// Two in the tallest month: the title wraps, as in Apple Calendar.
   final int titleLines;
 
   bool get showTitle => !bars;
 
   double get slot => itemHeight + gap;
 
-  /// Sizes in between, for a chip gliding to a new density; the flags are
-  /// [b]'s, so text never shows on a half-grown bar for long.
   static EventDensity lerp(EventDensity a, EventDensity b, double t) {
     if (t >= 1 || a == b) return b;
     return EventDensity(
@@ -96,7 +88,6 @@ const fullDensity = EventDensity(
   titleLines: 2,
 );
 
-/// Friends' chips carry no titles, so they stop at the middle density.
 EventDensity friendDensityFor(EventDensity density) =>
     density.itemHeight > titleDensity.itemHeight ? titleDensity : density;
 
@@ -176,12 +167,8 @@ class MonthWeekLayout {
   final List<SpanPlacement> spans;
   final List<ColumnLayout> columns;
 
-  /// Bars in lanes below this are drawn. When anything overflows, the last
-  /// lane is kept for "+N" so no bar can cover it.
   final int barCapacity;
 
-  /// The same per day, when days hold different numbers of lanes (a shared
-  /// cell's title takes the bottom of its days).
   final List<int>? barCapacities;
 
   bool showsSpan(SpanPlacement span) => span.lane < _barCapacityOf(span);
@@ -303,9 +290,6 @@ MonthWeekLayout layoutWeek({
   );
 }
 
-/// One shared event's cell in a week (design-system §9.8): the days it
-/// covers, top to bottom in its run of overlapping cells. [eventId] is null
-/// for the "+N" piece that stands for [more] cells that did not fit.
 class SharedPiece {
   const SharedPiece({
     required this.eventId,
@@ -322,7 +306,6 @@ class SharedPiece {
   final int startColumn;
   final int endColumn;
 
-  /// Its place in the stack of the run, 0 on top, out of [slots].
   final int slot;
   final int slots;
   final bool continuesBefore;
@@ -332,14 +315,8 @@ class SharedPiece {
   bool covers(int column) => column >= startColumn && column <= endColumn;
 }
 
-/// At most this many cells stack in a day; the last becomes "+N" when more
-/// would.
 const sharedMaxSlots = 2;
 
-/// Shared events as cells of a week: an event over several days is one
-/// cell across them. Cells that overlap form a run and stack top to
-/// bottom, each in its own gradient — never blended. A run needing more
-/// than [sharedMaxSlots] keeps the first and puts "+N" under it, per day.
 List<SharedPiece> layoutSharedWeek({
   required List<CalendarEvent> events,
   required List<DateTime> days,
@@ -378,7 +355,6 @@ List<SharedPiece> layoutSharedWeek({
       ),
     );
   }
-  // Runs of cells that touch the same days, left to right.
   final runs = <List<SpanPlacement>>[];
   var runEnd = -1;
   for (final span in placed) {
@@ -444,7 +420,6 @@ class EventDaySlice {
   final double startHour;
   final double endHour;
 
-  /// The event goes on into the previous or the next day.
   final bool continuesBefore;
   final bool continuesAfter;
 }
@@ -472,9 +447,6 @@ EventDaySlice? sliceOnDay(CalendarEvent event, DateTime day) {
   );
 }
 
-/// X of an event title that sticks to the viewport's left edge while the
-/// event scrolls past, but never leaves the event. Null once the event is
-/// off screen to the left.
 double? stickyTitleX({
   required double eventLeft,
   required double eventRight,
@@ -576,13 +548,11 @@ ColumnLayout _columnLayout({
       overflowLane: null,
     );
   }
-  // Bars stay below [barCapacity], so the last lane is free for "+N" whenever
-  // something is hidden. A one-lane row has room for "+N" alone.
   final extras = hiddenSpans + timed.length;
   if (free.isEmpty) {
     return ColumnLayout(chips: const [], overflow: extras, overflowLane: null);
   }
-  final shown = free.length - 1;
+  final shown = math.min(free.length - 1, timed.length);
   return ColumnLayout(
     chips: [
       for (var index = 0; index < shown; index++)

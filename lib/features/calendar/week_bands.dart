@@ -1,6 +1,5 @@
 import 'package:flutter/painting.dart';
 
-/// One event's place along a week, in grid x.
 class BandChip {
   const BandChip({
     required this.left,
@@ -16,7 +15,6 @@ class BandChip {
   double get weight => right - left;
 }
 
-/// A run of busy time along a week: one band with a horizontal gradient.
 class WeekBand {
   const WeekBand({
     required this.left,
@@ -28,26 +26,16 @@ class WeekBand {
   final double left;
   final double right;
 
-  /// Gradient colours and their positions, 0 at [left] and 1 at [right].
   final List<Color> colors;
   final List<double> stops;
 
   double get width => right - left;
 }
 
-/// Chips this close (with their 2 pt insets, days in a row are 4 pt apart)
-/// make one band.
 const bandJoinGap = 6.0;
 
-/// Colour points closer than this share of a day merge into one.
 const bandMinColorSpacing = 0.5;
 
-/// Busy time of a week as bands, the way the hidden layer of the month is
-/// drawn: consecutive days run together; along a band, each event puts its
-/// colour at its centre and the gradient blends neighbours in plain RGB.
-/// (OKLab/OKLCH invent a third hue — yellow and blue meet as green — which
-/// reads as someone else.) Points closer than half a day merge, the longer
-/// event winning, so a busy day shows at most about two colours.
 List<WeekBand> buildWeekBands(
   List<BandChip> chips, {
   required double columnWidth,
@@ -81,7 +69,6 @@ WeekBand _band(List<BandChip> run, double minSpacing) {
       if (points[i + 1].center - points[i].center >= minSpacing) continue;
       final a = points[i];
       final b = points[i + 1];
-      // Longer wins; on a tie the earlier one stays.
       points.removeAt(b.weight > a.weight ? i : i + 1);
       merged = true;
       break;
@@ -107,7 +94,6 @@ WeekBand _band(List<BandChip> run, double minSpacing) {
   return WeekBand(left: left, right: right, colors: colors, stops: stops);
 }
 
-/// A band of one colour per run, for the user's own events.
 List<WeekBand> buildSolidBands(List<BandChip> chips, Color color) {
   return [
     for (final band in buildWeekBands([

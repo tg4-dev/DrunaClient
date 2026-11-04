@@ -46,47 +46,29 @@ class MonthCalendar extends StatefulWidget {
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
   final void Function(DateTime day, Rect chipRect)? onCreate;
 
-  /// Glass buttons left and right of the month title pill.
   final Widget? leading;
   final Widget? trailing;
 
-  /// A tap on the title pill; by default it goes back to today.
   final VoidCallback? onTitleTap;
 
-  /// Room taken at the bottom by what stands over the month (the friend
-  /// bar): the weeks scroll on under it.
   final double bottomInset;
 
-  /// How far up from the bottom edge the weeks are blurred, under the bar.
   final double bottomBlur;
 
-  /// Busy time of the selected friends, in their colours. One friend's
-  /// events on one day show as one chip ([mergeBusyByDay]).
   final List<CalendarEvent> friendEvents;
 
-  /// Events with other people in them: cells of their days, in both modes
-  /// (design-system §9.8).
   final List<CalendarEvent> sharedEvents;
 
-  /// 0 shows the user's events, 1 friends'; see [MonthWeekGrid].
   final ValueListenable<double> mode;
 
-  /// A tap on the band of the user's events while friends are shown.
   final VoidCallback? onShowMine;
 
-  /// `true` when a second finger lands and the month starts to zoom,
-  /// `false` when the zoom ends: sideways swipes must wait meanwhile.
   final ValueChanged<bool>? onPinchChanged;
 
-  /// In friends' calendar with friends picked, a hold invites them: the
-  /// chip being placed takes their colours and says so.
   final List<Color>? inviteColors;
 
-  /// The people of that invite, the user first: their faces on the chip.
   final List<FriendInfo>? invitePeople;
 
-  /// [day] is the event's new first day: the drop day shifted back by how far
-  /// into the event it was grabbed.
   final void Function(CalendarEvent event, DateTime day)? onMove;
 
   @override
@@ -100,8 +82,6 @@ class MonthCalendarState extends State<MonthCalendar>
   late final AnimationController _rowSnap;
   late DateTime _visibleMonth;
 
-  /// Today's week is not on screen (under the pinned top or the friend
-  /// bar does not count): the title pill lights up to bring it back.
   var _awayFromToday = false;
   late DateTime _today;
   late final ValueNotifier<double> _rows = ValueNotifier(monthRowLevels[1]);
@@ -123,14 +103,12 @@ class MonthCalendarState extends State<MonthCalendar>
   final _holdLocal = ValueNotifier<Offset?>(null);
   String _chipTitle = 'Название';
 
-  /// The drag chip fades in on hold and out on release instead of popping.
   late final AnimationController _chipFade = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 160),
   );
   DateTime? _hoverDay;
 
-  /// The days the held event would land on, tinted in every row they cross.
   final _dropRange = ValueNotifier<DropRange?>(null);
   late CalendarEventIndex _index;
   late CalendarEventIndex _friendIndex;
@@ -160,7 +138,6 @@ class MonthCalendarState extends State<MonthCalendar>
     _scroll = ScrollController(
       initialScrollOffset: stripUnits(index) * _rowHeight,
     )..addListener(_onScroll);
-    // Rows change height on a pinch without the offset always following.
     _rows.addListener(_updateAway);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateAway());
     _rowSnap = AnimationController(
@@ -216,16 +193,10 @@ class MonthCalendarState extends State<MonthCalendar>
 
   double get scrollOffset => _scroll.hasClients ? _scroll.offset : 0;
 
-  /// The position in rows, not pixels: it means the same week whatever the
-  /// row height is when it is restored ([restoreUnits]). Pixels saved at
-  /// one height and restored at another land years away — from 2026 at
-  /// 180 pt rows to 148 pt rows is 2039.
   double get scrollUnits => scrollOffset / _rowHeight;
 
   void restoreUnits(double units) => restoreOffset(units * _rowHeight);
 
-  /// Ends a pinch's settling at once, at its level: a day opened by a tap
-  /// right after a pinch must not see the rows change under it.
   void finishRowSnap() {
     if (!_snapping) return;
     _rowSnap.stop();
@@ -246,7 +217,6 @@ class MonthCalendarState extends State<MonthCalendar>
     _scroll.jumpTo(offset.clamp(0, max).toDouble());
   }
 
-  /// Whether today's week crosses the visible band of the month.
   bool _todayShown() {
     if (!_scroll.hasClients || !_scroll.position.hasViewportDimension) {
       return true;
@@ -280,7 +250,6 @@ class MonthCalendarState extends State<MonthCalendar>
     setState(() => _visibleMonth = month);
   }
 
-  /// Back to the week of today, as a tap on the title of Apple's Calendar.
   void scrollToToday() {
     if (!_scroll.hasClients) return;
     final offset = stripUnits(stripIndexOfDay(_today)) * _rowHeight;
@@ -440,7 +409,6 @@ class MonthCalendarState extends State<MonthCalendar>
     return (points[0] - points[1]).distance;
   }
 
-  /// The colours of an invite a hold would make now; null for an own event.
   List<Color>? get _invitingColors {
     final colors = widget.inviteColors;
     if (colors == null || colors.length < 2) return null;
@@ -448,8 +416,6 @@ class MonthCalendarState extends State<MonthCalendar>
   }
 
   void _beginHold(CalendarEvent? event, Offset global) {
-    // An invite is not the user's to move: its page changes it. Neither is
-    // an event of the device's calendar.
     if (event?.invite != null || event?.external != null) return;
     if (_holding || _pointers.length != 1) return;
     _holdPointer = _pointers.keys.single;
@@ -642,8 +608,6 @@ class MonthCalendarState extends State<MonthCalendar>
     );
   }
 
-  /// A hold that invites the picked friends: a dashed outline with their
-  /// faces, as the unanswered cell it will become (design-system §9.8).
   Widget _inviteChip(Offset local, List<FriendInfo> people) {
     const face = 26.0;
     const padding = 8.0;
@@ -682,25 +646,18 @@ class MonthCalendarState extends State<MonthCalendar>
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
     final chrome = top + monthChrome;
-    // Exactly as far as the weeks show under the top and the bar: every
-    // week laid out is rebuilt on each frame of a pinch.
     final above = chrome + chromeFade;
     final below = widget.bottomInset;
     final cache = math.max(above, below);
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // The weeks run on under the top and the friend bar: the list is
-        // unclipped and lays out that far past its edges. The month blurs
-        // itself there (`progressive_blur` blurs its child), strongest at
-        // the screen edges.
         Positioned.fill(
           child: LayoutBuilder(
             builder: (context, constraints) => EdgeBlur(
               sigma: chromeBlurSigma,
               gradient: _edgeBlur(
                 height: constraints.maxHeight,
-                // Reaches 15% further down than the shaded top (2026-11-02).
                 top: above * topBlurReach,
                 bottom: widget.bottomBlur,
               ),
@@ -790,8 +747,6 @@ class MonthCalendarState extends State<MonthCalendar>
               SizedBox(width: PillStyle.size, child: widget.leading),
               Expanded(
                 child: Center(
-                  // Away from this month the title lights up: a tap brings
-                  // today back.
                   child: PillButton(
                     key: const ValueKey('month-title'),
                     label: '${monthTitle(_visibleMonth)}, к сегодня',
@@ -836,8 +791,6 @@ class MonthCalendarState extends State<MonthCalendar>
   }
 }
 
-/// The top of the month darkens towards the screen edge under the glass
-/// row and the weekdays, fading out below them; the blur is the month's own.
 class _ShadedTop extends StatelessWidget {
   const _ShadedTop();
 
@@ -855,13 +808,8 @@ class _ShadedTop extends StatelessWidget {
   );
 }
 
-/// Blur at the screen edges of the month, under the pinned top and the
-/// bottom. Sigma is in physical pixels, as the shader takes it.
 const chromeBlurSigma = 24.0;
 
-/// Full blur at the top edge fading out [top] below it, and at the bottom
-/// edge fading out [bottom] above it; none between.
-/// How far down the top blur reaches, against the pinned top's height.
 const topBlurReach = 1.15;
 
 LinearGradientBlur _edgeBlur({
@@ -1083,8 +1031,6 @@ class _MonthStripSliver extends SliverMultiBoxAdaptorWidget {
 
   final double rowHeight;
 
-  /// How far past the top and the bottom of the list weeks still show,
-  /// under the blurred top and the friend bar.
   final double paintAbove;
   final double paintBelow;
 
@@ -1138,9 +1084,6 @@ class _RenderMonthStrips extends RenderSliverVariedExtentList {
     markNeedsPaint();
   }
 
-  /// The list paints only the weeks inside it; these run on under the top
-  /// and the bar, so a week stays until it has left the screen, not the
-  /// list. Laid out by the cache extent, they only need painting.
   @override
   void paint(PaintingContext context, Offset offset) {
     assert(constraints.axisDirection == AxisDirection.down);

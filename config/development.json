@@ -1,5 +1,4 @@
 {
-  "APP_ENV": "development",
   "API_BASE_URL": "https://druna.tg4.dev",
   "DEMO_DATA": "true"
 }

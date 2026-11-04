@@ -4,40 +4,24 @@ import 'package:druna_app/features/calendar/band_paint.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/day_events.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
+import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-/// Shared events in the month (design-system §9.8) are cells of their days:
-/// an answered one fills the day with a gradient of the people in it, left
-/// to right; one waiting for the user's answer is only a dashed outline
-/// with "+", no colours. Both
-/// show the people's faces at the bottom. They belong to both calendars, so
-/// they stay put while the swipe folds the user's chips and friends' around
-/// them.
-
-/// From an unanswered cell to an answered one, after the user said yes on
-/// the event page and closed it.
 const sharedMorphDuration = Duration(milliseconds: 620);
 
-/// Gap between stacked cells of a day and on their sides: the same 2 pt
-/// the chips keep from the edge of their day.
 const sharedCellGap = 2.0;
 const sharedPendingRadius = 12.0;
 const sharedRimWidth = 2.5;
 
-/// The stroke of an unanswered cell's "+".
 const sharedPlusStroke = 2.5;
 
-/// The faces sit this far above the bottom of the cell.
 const sharedFacesBottom = 6.0;
 
-/// Chips stay this far above a cell's faces.
 const sharedChipClearance = 3.0;
 
-/// Where [piece] sits in a week [rowHeight] tall: the days it covers, from
-/// line to line, its share of a stack.
 Rect sharedPieceRect(SharedPiece piece, double columnWidth, double rowHeight) {
   final left =
       piece.startColumn * columnWidth +
@@ -50,9 +34,6 @@ Rect sharedPieceRect(SharedPiece piece, double columnWidth, double rowHeight) {
   return Rect.fromLTWH(left, y, right - left, math.max(0, height));
 }
 
-/// The whole days of [piece], edge to edge: an unanswered cell's dashed
-/// edge runs on its sides, right in the middle of the gap between the chips
-/// of neighbouring days.
 Rect sharedDaysRect(SharedPiece piece, double columnWidth, Rect cell) =>
     Rect.fromLTRB(
       piece.startColumn * columnWidth,
@@ -61,16 +42,11 @@ Rect sharedDaysRect(SharedPiece piece, double columnWidth, Rect cell) =>
       cell.bottom,
     );
 
-/// Size of the faces on a cell [width] wide.
 double sharedFaceSize(double width) =>
     ((width - 8) / 2.2).clamp(12.0, 22.0).toDouble();
 
-/// The "+" of an unanswered cell, against its faces.
 const sharedPlusShare = 1.1;
 
-/// How far up from the bottom of [cell] its front reaches: the faces, and
-/// on an unanswered cell room for "+" over them; all of a "+N". Chips stay
-/// above it.
 double sharedFrontHeight(CalendarEvent? event, Rect cell) {
   final invite = event?.invite;
   if (invite == null) return cell.height;
@@ -80,24 +56,13 @@ double sharedFrontHeight(CalendarEvent? event, Rect cell) {
   return math.min(cell.height, faces + face * sharedPlusShare + 8);
 }
 
-/// A cell's colours are fully there at its bottom, at [sharedFillMiddle]
-/// on the top of the faces, and gone [sharedFillGap] under what is over the
-/// cell — the day number or the lowest chip. Those two anchors follow the
-/// chips as the mode folds them. Alpha, not a shade: one draw.
 const sharedFillMiddle = 0.45;
 const sharedFillGap = 4.0;
 
-/// And a radial mask on top, for the arc: centred on the cell just under
-/// what is over it, reaching [sharedArcReach] of the way past the cell's
-/// bottom; clear inside [sharedArcClear] of its radius, full from
-/// [sharedArcFull]. The sides, farther from the centre, show higher than
-/// the middle.
 const sharedArcReach = 1.1;
 const sharedArcClear = 0.23;
 const sharedArcFull = 0.69;
 
-/// Holds the morphs of cells the user just said yes to. Wraps the month in
-/// the calendar.
 class SharedCells extends StatefulWidget {
   const SharedCells({
     required this.events,
@@ -106,11 +71,8 @@ class SharedCells extends StatefulWidget {
     super.key,
   });
 
-  /// The shared events as the month shows them.
   final List<CalendarEvent> events;
 
-  /// The invite whose page is open now: a cell answered there morphs once
-  /// the page is closed, where the user sees it.
   final ValueListenable<String?>? openInvite;
   final Widget child;
 
@@ -122,7 +84,6 @@ class _SharedCellsState extends State<SharedCells>
     with TickerProviderStateMixin {
   final _morphs = _Morphs();
 
-  /// Answered while their page was open; they play when it closes.
   final _queued = <String>{};
 
   @override
@@ -174,7 +135,6 @@ class _SharedCellsState extends State<SharedCells>
       _SharedScope(morphs: _morphs, child: widget.child);
 }
 
-/// Morphs in flight, by invite id.
 class _Morphs extends ChangeNotifier {
   final _running = <String, AnimationController>{};
 
@@ -219,8 +179,6 @@ class _SharedScope extends InheritedNotifier<_Morphs> {
 double _span(double from, double to, double x) =>
     ((x - from) / (to - from)).clamp(0.0, 1.0);
 
-/// Builds [builder] with where the cell of [invite] stands between
-/// unanswered (0) and answered (1), following its morph if one plays.
 Widget _withAnswer(
   BuildContext context,
   EventInvite invite,
@@ -234,10 +192,6 @@ Widget _withAnswer(
   );
 }
 
-/// The back of a cell: under the day numbers, the bands and the chips.
-/// Its colours fade out upwards to nothing just under what is over it
-/// ([upperBottom], as for [SharedCellFront]): the day number, or the chips
-/// crossing it, following them as the mode folds and unfolds them.
 class SharedCellBack extends StatelessWidget {
   const SharedCellBack({
     required this.event,
@@ -251,8 +205,6 @@ class SharedCellBack extends StatelessWidget {
   final ValueListenable<double> mode;
   final double Function(double mode) upperBottom;
 
-  /// How far up from the bottom the faces reach; by default the month's
-  /// ([sharedFacesBottom] and [sharedFaceSize]).
   final double? facesTop;
 
   @override
@@ -282,13 +234,6 @@ class SharedCellBack extends StatelessWidget {
   }
 }
 
-/// The front of a cell, over the chips: the faces, and on an unanswered
-/// cell the dashed edge and "+". It spans the whole days
-/// ([sharedDaysRect]); [cell] is where the cell itself sits inside them.
-///
-/// "+" stands halfway between the faces and what is above them: the
-/// lowest chip of the day, or the day number. [upperBottom] says where that
-/// is, from the top of this box, at each step of the mode.
 class SharedCellFront extends StatelessWidget {
   const SharedCellFront({
     required this.event,
@@ -306,13 +251,8 @@ class SharedCellFront extends StatelessWidget {
   final ValueListenable<double> mode;
   final double Function(double mode) upperBottom;
 
-  /// The faces drawn elsewhere (the day's sticky ones): their size and
-  /// distance from the bottom, for the "+" to sit over them. Null — the
-  /// month's faces, drawn here.
   final ({double size, double bottom})? faces;
 
-  /// The days start or end at the edge of the screen: the dashed edge stays
-  /// inside it there.
   final bool onScreenLeft;
   final bool onScreenRight;
 
@@ -341,8 +281,6 @@ class SharedCellFront extends StatelessWidget {
                   ),
                 ),
               if (pending > 0) ...[
-                // On the edges of the days: the middle of the gap between
-                // the chips of neighbouring days, never over them.
                 CustomPaint(
                   painter: DashedRimPainter(
                     color: Colors.white.withValues(alpha: 0.6 * pending),
@@ -388,7 +326,6 @@ class SharedCellFront extends StatelessWidget {
   }
 }
 
-/// A "+N" cell: more shared events on this day than fit.
 class SharedMoreCell extends StatelessWidget {
   const SharedMoreCell({required this.count, super.key});
 
@@ -410,11 +347,6 @@ class SharedMoreCell extends StatelessWidget {
   );
 }
 
-/// The people's colours left to right, the organizer's on the left; fully
-/// there at the bottom, [sharedFillMiddle] on the top of the faces, gone
-/// just under what is over the cell, and shaped into an arc by a radial
-/// mask. Repaints with the mode, never
-/// rebuilds.
 class _CellFill extends CustomPainter {
   _CellFill({
     required this.colors,
@@ -434,7 +366,6 @@ class _CellFill extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (colors.isEmpty || size.isEmpty) return;
     final spread = colors.length == 1 ? [colors.first, colors.first] : colors;
-    // Distances up from the bottom of the cell.
     final middle = facesTop ?? sharedFacesBottom + sharedFaceSize(size.width);
     final upper = upperBottom(mode.value);
     final gone = math.max(middle + 8, size.height - upper - sharedFillGap);
@@ -466,8 +397,6 @@ class _CellFill extends CustomPainter {
       !listEquals(old.colors, colors);
 }
 
-/// The "+" of an unanswered cell: two rounded strokes, bolder than the
-/// icon font's, centred in a square of the box's height.
 class _Plus extends CustomPainter {
   const _Plus();
 
@@ -488,8 +417,6 @@ class _Plus extends CustomPainter {
   bool shouldRepaint(covariant _Plus old) => false;
 }
 
-/// The bottom [grow] of the box: an answered cell's colours rise into it
-/// from below.
 class _RisingEdge extends CustomClipper<Rect> {
   const _RisingEdge(this.grow);
 
@@ -503,8 +430,6 @@ class _RisingEdge extends CustomClipper<Rect> {
   bool shouldReclip(covariant _RisingEdge old) => old.grow != grow;
 }
 
-/// Up to three faces overlapping, the rightmost on top; with more people
-/// the third is "+N".
 class FaceStack extends StatelessWidget {
   const FaceStack({required this.people, required this.size, super.key});
 
@@ -525,7 +450,6 @@ class FaceStack extends StatelessWidget {
       height: size,
       child: Stack(
         children: [
-          // Painted left to right: the rightmost ends up on top.
           for (var i = 0; i < shown.length; i++)
             Positioned(
               left: step * i,
@@ -550,21 +474,11 @@ class FaceStack extends StatelessWidget {
   }
 }
 
-/// In the open day the shared cells stand behind everything for the time
-/// of their event, across every row, the way the month's stand behind a
-/// day: the colours rise from the bottom (gone by [sharedDayFade] of the
-/// height), the faces at the bottom, an unanswered one dashed with "+".
-/// They do not fold with the mode. Overlapping ones stack top to bottom,
-/// at most [sharedMaxSlots]; a tap opens the event.
 const sharedDayFade = 0.12;
 
-/// The day's faces: bigger than the month's and higher off the bottom,
-/// drawn by [DaySharedFaces], sticky at the left.
 const sharedDayFaceSize = 30.0;
 const sharedDayFacesBottom = 28.0;
 
-/// Lanes for cells in time ([spans] sorted by start), and how many share
-/// each run of overlapping ones, at most [sharedMaxSlots].
 ({List<int> lanes, List<int> slots}) sharedTimeLanes(
   List<(double, double)> spans,
 ) {
@@ -602,6 +516,37 @@ const sharedDayFacesBottom = 28.0;
   return (lanes: lanes, slots: slots);
 }
 
+typedef DaySharedCell = ({
+  CalendarEvent event,
+  EventDaySlice slice,
+  int lane,
+  int slots,
+});
+
+List<DaySharedCell> daySharedCells(
+  Iterable<CalendarEvent> events,
+  DateTime day,
+) {
+  final slices = [
+    for (final event in events)
+      if (event.invite != null)
+        if (sliceOnDay(event, day) case final slice?) (event, slice),
+  ]..sort((a, b) => a.$2.startHour.compareTo(b.$2.startHour));
+  final (:lanes, :slots) = sharedTimeLanes([
+    for (final (_, slice) in slices) (slice.startHour, slice.endHour),
+  ]);
+  return [
+    for (var i = 0; i < slices.length; i++)
+      if (lanes[i] < sharedMaxSlots)
+        (
+          event: slices[i].$1,
+          slice: slices[i].$2,
+          lane: lanes[i],
+          slots: slots[i],
+        ),
+  ];
+}
+
 class DaySharedLayer extends StatelessWidget {
   const DaySharedLayer({
     required this.day,
@@ -616,8 +561,6 @@ class DaySharedLayer extends StatelessWidget {
   final double pixelsPerHour;
   final List<CalendarEvent> events;
 
-  /// The faces, dashed edges and "+", over the bars; otherwise the colours,
-  /// under them.
   final bool front;
   final void Function(CalendarEvent event, Rect rect)? onTap;
 
@@ -625,24 +568,15 @@ class DaySharedLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final slices = [
-      for (final event in events)
-        if (event.invite != null)
-          if (sliceOnDay(event, day) case final slice?) (event, slice),
-    ]..sort((a, b) => a.$2.startHour.compareTo(b.$2.startHour));
-    if (slices.isEmpty) return const SizedBox.shrink();
-    final (:lanes, :slots) = sharedTimeLanes([
-      for (final (_, slice) in slices) (slice.startHour, slice.endHour),
-    ]);
+    final cells = daySharedCells(events, day);
+    if (cells.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = constraints.maxHeight;
         final children = <Widget>[];
-        for (var i = 0; i < slices.length; i++) {
-          final (event, slice) = slices[i];
-          if (lanes[i] >= sharedMaxSlots) continue;
-          final share = (height - sharedCellGap * (slots[i] - 1)) / slots[i];
-          final top = lanes[i] * (share + sharedCellGap);
+        for (final (:event, :slice, :lane, :slots) in cells) {
+          final share = (height - sharedCellGap * (slots - 1)) / slots;
+          final top = lane * (share + sharedCellGap);
           final days = Rect.fromLTRB(
             slice.startHour * pixelsPerHour,
             top,
@@ -708,10 +642,6 @@ class DaySharedLayer extends StatelessWidget {
   }
 }
 
-/// The faces of the shared events in view of the open day, at the bottom
-/// of their cells, sticky at the left: they stay in view (clear of the
-/// friends' column, [leftInset]) while the event runs on past the left
-/// edge, like the bars' titles.
 class DaySharedFaces extends StatelessWidget {
   const DaySharedFaces({
     required this.events,
@@ -732,28 +662,29 @@ class DaySharedFaces extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shared = [
-      for (final event in events)
-        if (event.invite?.people.isNotEmpty ?? false) event,
-    ]..sort((a, b) => a.start.compareTo(b.start));
-    final (:lanes, :slots) = sharedTimeLanes([
-      for (final event in shared)
-        (
-          timelineX(event.start, pixelsPerHour),
-          timelineX(event.end, pixelsPerHour),
-        ),
-    ]);
+    final dayWidth = 24 * pixelsPerHour;
+    double dayX(DateTime day) =>
+        calendarDaysBetween(dayTimelineOrigin, day) * dayWidth;
+    final cellsByDay = <DateTime, List<DaySharedCell>>{};
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final height = constraints.maxHeight;
           final children = <Widget>[];
-          for (var i = 0; i < shared.length; i++) {
-            if (lanes[i] >= sharedMaxSlots) continue;
-            final event = shared[i];
-            final people = event.invite!.people;
-            final left = timelineX(event.start, pixelsPerHour) - scrollOffset;
-            final right = timelineX(event.end, pixelsPerHour) - scrollOffset;
+          for (final event in events) {
+            final people = event.invite?.people ?? const [];
+            if (people.isEmpty) continue;
+            final first = eventFirstDay(event);
+            final last = eventLastDay(event);
+            final firstSlice = sliceOnDay(event, first);
+            final lastSlice = sliceOnDay(event, last);
+            if (firstSlice == null || lastSlice == null) continue;
+            final left =
+                dayX(first) +
+                firstSlice.startHour * pixelsPerHour -
+                scrollOffset;
+            final right =
+                dayX(last) + lastSlice.endHour * pixelsPerHour - scrollOffset;
             if (right <= leftInset || left >= viewportWidth) continue;
             final shown = math.min(people.length, 3);
             final width = sharedDayFaceSize * (1 + 0.6 * (shown - 1));
@@ -762,9 +693,21 @@ class DaySharedFaces extends StatelessWidget {
               right - _padding - width,
             );
             if (x < left) continue;
-            // The bottom of this cell's share of the height.
-            final share = (height - sharedCellGap * (slots[i] - 1)) / slots[i];
-            final cellBottom = lanes[i] * (share + sharedCellGap) + share;
+            var day = addCalendarDays(
+              dayTimelineOrigin,
+              ((x + scrollOffset) / dayWidth).floor(),
+            );
+            if (day.isBefore(first)) day = first;
+            if (day.isAfter(last)) day = last;
+            final cells = cellsByDay.putIfAbsent(
+              day,
+              () => daySharedCells(events, day),
+            );
+            final cell = cells.where((cell) => cell.event.id == event.id);
+            if (cell.isEmpty) continue;
+            final (:lane, :slots, event: _, slice: _) = cell.first;
+            final share = (height - sharedCellGap * (slots - 1)) / slots;
+            final cellBottom = lane * (share + sharedCellGap) + share;
             children.add(
               Positioned(
                 key: ValueKey('day-shared-faces-${event.id}'),

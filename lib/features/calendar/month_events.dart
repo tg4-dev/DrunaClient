@@ -9,13 +9,11 @@ import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/features/calendar/week_bands.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 
 export 'package:druna_app/features/calendar/chip_motion.dart'
     show chipFoldGap, friendsFoldAt, myFoldAt;
 
-/// Month chips are pills at the thin densities. From the title-and-time
-/// chip up the corners are only rounded: a pill that tall would round the
-/// text away.
 double monthChipRadius(EventDensity density) => math.min(
   density.itemHeight / 2,
   density.showTime
@@ -26,31 +24,25 @@ double monthChipRadius(EventDensity density) => math.min(
 const monthChipMaxRadius = 14.0;
 const monthChipDetailRadius = 8.0;
 
-/// A chip's title in one line.
 const monthChipTitleStyle = TextStyle(
   fontSize: 11,
   fontWeight: FontWeight.w600,
   height: 1.1,
 );
 
-/// A chip running on past the week fades out over this much at that end.
 const chipContinueFade = 16.0;
 
-/// A one-line title fades into the chip over this much at its end.
 const chipTitleFadeWidth = 10.0;
 
-/// Room for the title inside a pill, clear of its round ends.
 double monthChipPadding(EventDensity density) =>
     math.max(4, monthChipRadius(density) * 0.6);
 
-/// Days a dragged event would cover if dropped now.
 class DropRange {
   const DropRange(this.first, this.last, {required this.moving});
 
   final DateTime first;
   final DateTime last;
 
-  /// An existing event is being moved, not a new one placed.
   final bool moving;
 
   bool covers(DateTime day) => !day.isBefore(first) && !day.isAfter(last);
@@ -66,22 +58,14 @@ class DropRange {
   int get hashCode => Object.hash(first, last, moving);
 }
 
-/// How the month shows events: 0 — the user's in full and friends' as a
-/// band at the bottom of each week; 1 — friends' in full and the user's as
-/// a band at the top. Values between follow the finger.
 const myEventsMode = AlwaysStoppedAnimation<double>(0);
 
-/// Below this mode the user's events take taps; above it friends' are shown.
 const calendarModeHalfway = 0.5;
 
-/// The hidden layer's band reaches this share of the week's height from its
-/// line, within [bandMinHeight] and [bandMaxHeight].
 const bandHeightShare = 0.2;
 const bandMinHeight = 16.0;
 const bandMaxHeight = 40.0;
 
-/// Only this strip along the line switches to the user's events, so a tap
-/// on a day number still opens the day: "tap the red carefully".
 const bandTapHeight = 14.0;
 
 double bandHeightFor(double rowHeight) =>
@@ -117,22 +101,16 @@ class MonthWeekGrid extends StatelessWidget {
   final ValueChanged<DateTime> onDayTap;
   final CalendarEventIndex index;
 
-  /// Busy time of the selected friends, drawn in their colours.
   final CalendarEventIndex? friendIndex;
 
-  /// Shared events: cells of their days under both layers, still while
-  /// the mode changes (design-system §9.8).
   final CalendarEventIndex? sharedIndex;
   final ValueListenable<double> mode;
 
-  /// A tap on the band of the user's events while friends are shown.
   final VoidCallback? onShowMine;
   final String? hiddenEventId;
 
-  /// The event being dragged stays in place, faded, until it is dropped.
   final String? dimmedEventId;
 
-  /// The day under a dragged event; only the matching column repaints.
   final ValueListenable<DropRange?>? hoverDay;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
   final void Function(CalendarEvent? event, Offset global)? onHoldStart;
@@ -154,12 +132,8 @@ class MonthWeekGrid extends StatelessWidget {
         );
         final shared = _sharedCells(days, visible, columnWidth, size.height);
         final capacity = monthEventCapacity(size.height, density);
-        // Friends' busy time has no titles: it never grows past the middle
-        // density, however far the month is zoomed in.
         final friendDensity = friendDensityFor(density);
         final friendCapacity = monthEventCapacity(size.height, friendDensity);
-        // On a day with a shared cell, chips stop above its title (or its
-        // "+" and faces): they never cross it.
         final chipLimit = <int, double>{};
         for (final cell in shared) {
           final limit =
@@ -239,13 +213,10 @@ class MonthWeekGrid extends StatelessWidget {
                 mode: mode,
                 rowHeight: size.height,
                 columnWidth: columnWidth,
-                onEventTap: onEventTap,
               );
         return Stack(
           clipBehavior: Clip.hardEdge,
           children: [
-            // Shared cells under everything; their taps go through the
-            // day columns ([_column]).
             for (final cell in shared)
               Positioned.fromRect(
                 key: ValueKey('shared-back-${cell.key}'),
@@ -267,11 +238,9 @@ class MonthWeekGrid extends StatelessWidget {
                         ),
                 ),
               ),
-            // Under the day numbers, so they stay readable over a band.
             Positioned.fill(
               child: IgnorePointer(
                 child: RepaintBoundary(
-                  // Repaints on every mode change without rebuilding.
                   child: CustomPaint(
                     painter: _BandPainter(
                       mine: mineBands,
@@ -309,11 +278,6 @@ class MonthWeekGrid extends StatelessWidget {
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      // Both layers stay mounted at every mode, so friends'
-                      // chips keep their state and never replay their
-                      // entrance after a swipe. Folded away, a layer is
-                      // not painted; each chip moves on its own
-                      // ([ChipMotion]), clipped to the week.
                       Positioned.fill(
                         child: IgnorePointer(
                           ignoring: friendsShown,
@@ -323,8 +287,6 @@ class MonthWeekGrid extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // Friends' busy time takes no taps; the invites among
-                      // it open their page ([_FriendChips]).
                       if (friendChips != null)
                         Positioned.fill(
                           child: IgnorePointer(
@@ -356,8 +318,6 @@ class MonthWeekGrid extends StatelessWidget {
                 },
               ),
             ),
-            // Faces, dashed edges and "+" of shared cells: over the chips,
-            // across the whole days.
             for (final cell in shared)
               if (cell.event case final event?)
                 Positioned.fromRect(
@@ -391,9 +351,6 @@ class MonthWeekGrid extends StatelessWidget {
     );
   }
 
-  /// Where the lowest thing above a cell's faces ends, from the top of the
-  /// cell, at each step of the mode: the chips shown then, folding with
-  /// their layer, or the day number.
   double Function(double mode) _upperBottom(
     _SharedCell cell, {
     required double? mine,
@@ -448,11 +405,6 @@ class MonthWeekGrid extends StatelessWidget {
     ];
   }
 
-  /// The density the row's height allows, but no further than shows
-  /// something new: the title-and-time chip only with a timed event to
-  /// show the time of, the two-line chip only with a title that does not
-  /// fit in one line. Otherwise the smaller chips stay, and more of them
-  /// fit.
   EventDensity _densityWorthIt(
     EventDensity allowed, {
     required List<DateTime> days,
@@ -481,7 +433,6 @@ class MonthWeekGrid extends StatelessWidget {
 
   static final _titleWidths = <String, double>{};
 
-  /// How wide [title] is in a chip's one line.
   static double _titleWidth(String title) =>
       _titleWidths.putIfAbsent(title, () {
         final painter = TextPainter(
@@ -511,8 +462,6 @@ class MonthWeekGrid extends StatelessWidget {
     return (start, end);
   }
 
-  /// The day number and the empty space under it: tap opens the day, a long
-  /// press creates an event there. Chips are drawn on top by the layers.
   Widget _column({
     required List<DateTime> days,
     required int column,
@@ -531,7 +480,6 @@ class MonthWeekGrid extends StatelessWidget {
     final content = Builder(
       builder: (context) => GestureDetector(
         behavior: HitTestBehavior.opaque,
-        // Below the number, a shared cell opens its event ("+N" its day).
         onTapUp: (details) {
           final at = details.localPosition;
           final x = at.dx + column * columnWidth;
@@ -584,7 +532,6 @@ class MonthWeekGrid extends StatelessWidget {
   );
 }
 
-/// A shared event's cell (or "+N") of the week, where it is drawn.
 class _SharedCell {
   const _SharedCell({
     required this.piece,
@@ -599,7 +546,6 @@ class _SharedCell {
   String get key => '${piece.eventId ?? 'more'}-${piece.startColumn}';
 }
 
-/// One chip or bar of a week, in grid columns and lanes.
 class _Placed {
   const _Placed({
     required this.event,
@@ -617,7 +563,6 @@ class _Placed {
   final bool continuesBefore;
   final bool continuesAfter;
 
-  /// 2 pt inset each side, none where the bar runs on past the week edge.
   double left(double columnWidth) =>
       startColumn * columnWidth + (continuesBefore ? 0 : 2);
 
@@ -625,8 +570,6 @@ class _Placed {
       (endColumn + 1) * columnWidth - (continuesAfter ? 0 : 2);
 }
 
-/// Everything one source of events puts into a week: chips, "+N" counts
-/// and the busy spans its band is built from.
 class _WeekLayer {
   const _WeekLayer({
     required this.placed,
@@ -700,8 +643,6 @@ class _WeekLayer {
             layout.columns[column].overflow,
           ),
     ];
-    // Every event of the week counts, also those hidden behind "+N": the
-    // band shows when someone is busy, not which chips fit.
     final bandChips = <BandChip>[];
     for (final event in shown) {
       int? first;
@@ -720,9 +661,7 @@ class _WeekLayer {
         BandChip(
           left: first * columnWidth + (before ? 0 : 2),
           right: (last + 1) * columnWidth - (after ? 0 : 2),
-          color: event.invite != null
-              ? mixedColor(event.invite!.colors)
-              : event.color ?? calendarEventColor,
+          color: event.color ?? defaultOwnColor,
         ),
       );
     }
@@ -736,17 +675,12 @@ class _WeekLayer {
 
   final List<_Placed> placed;
 
-  /// (column, lane, hidden count) for every "+N".
   final List<(int, int, int)> overflow;
 
-  /// Where each event of the week sits along it, for the band.
   final List<BandChip> bandChips;
 
-  /// Every event of the week, also those behind "+N".
   final Set<String> eventIds;
 
-  /// The bottom of the lowest chip or "+N" on the days of [piece], laid
-  /// out at [density]; null when there is none.
   double? bottomIn(SharedPiece piece, EventDensity density) {
     var lanes = 0;
     for (final item in placed) {
@@ -764,8 +698,6 @@ class _WeekLayer {
   }
 }
 
-/// The user's chips: tappable, draggable, with "+N" opening the day. They
-/// fold up under the top line of the week while friends are shown.
 class _MineChips extends StatelessWidget {
   const _MineChips({
     required this.layer,
@@ -850,8 +782,6 @@ class _MineChips extends StatelessWidget {
   }
 }
 
-/// Chip sizes glide when the month crosses into another density, instead of
-/// jumping. Pinching moves the rows, not the density, so it never lags.
 class _AnimatedDensity extends StatelessWidget {
   const _AnimatedDensity({required this.density, required this.builder});
 
@@ -886,8 +816,6 @@ class _OverflowLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => OverflowBox(
-    // Taller than the thinnest lane: laid out at its own height, centred
-    // on the lane, never cut.
     alignment: Alignment.centerLeft,
     minHeight: 0,
     maxHeight: double.infinity,
@@ -903,16 +831,12 @@ class _OverflowLabel extends StatelessWidget {
   );
 }
 
-/// How fast friends' chips react to the selection changing.
 abstract final class FriendChipMotion {
   static const appear = Duration(milliseconds: 160);
   static const leave = Duration(milliseconds: 140);
   static const move = Duration(milliseconds: 180);
 }
 
-/// Friends' busy time. Picking a friend fades their chips in, letting one go
-/// fades them out, and the chips around slide to their new lanes. Lanes are
-/// animated rather than pixels, so pinching the month never lags.
 class _FriendChips extends StatefulWidget {
   const _FriendChips({
     required this.layer,
@@ -920,7 +844,6 @@ class _FriendChips extends StatefulWidget {
     required this.mode,
     required this.rowHeight,
     required this.columnWidth,
-    this.onEventTap,
   });
 
   final _WeekLayer layer;
@@ -929,19 +852,13 @@ class _FriendChips extends StatefulWidget {
   final double rowHeight;
   final double columnWidth;
 
-  /// For the invites among friends' busy time.
-  final void Function(CalendarEvent event, Rect rect)? onEventTap;
-
   @override
   State<_FriendChips> createState() => _FriendChipsState();
 }
 
 class _FriendChipsState extends State<_FriendChips> {
-  /// Chips whose friend was let go, playing their exit.
   final _leaving = <String, _Placed>{};
 
-  /// Events of a friend just picked: only they play the entrance. A chip
-  /// coming out from behind "+N" as the month is zoomed just shows.
   late Set<String> _fresh = widget.layer.eventIds;
 
   @override
@@ -951,8 +868,6 @@ class _FriendChipsState extends State<_FriendChips> {
     final before = oldWidget.layer.eventIds;
     final now = widget.layer.eventIds;
     _fresh = now.difference(before);
-    // Gone from the week, not just hidden behind "+N": that chip would
-    // fade out over the count.
     final gone = [
       for (final item in oldWidget.layer.placed)
         if (!now.contains(item.event.id)) item,
@@ -994,15 +909,14 @@ class _FriendChipsState extends State<_FriendChips> {
               width: widget.columnWidth - 6,
               top: monthEventHeader + lane * d.slot,
               height: d.itemHeight,
-              child: _motion(lane, d, _OverflowLabel(count)),
+              child: _motion(lane.toDouble(), d, _OverflowLabel(count)),
             ),
         ],
       ),
     );
   }
 
-  /// Friends' chips fold down onto the bottom line of the week.
-  Widget _motion(int lane, EventDensity d, Widget child) => ChipMotion(
+  Widget _motion(double lane, EventDensity d, Widget child) => ChipMotion(
     mode: widget.mode,
     awayAt: friendsFoldAt,
     homeTop: monthEventHeader + lane * d.slot,
@@ -1028,7 +942,7 @@ class _FriendChipsState extends State<_FriendChips> {
         width: width,
         top: monthEventHeader + lane * density.slot,
         height: density.itemHeight,
-        child: _motion(item.lane, density, child!),
+        child: _motion(lane, density, child!),
       ),
       child: TweenAnimationBuilder<double>(
         tween: Tween(
@@ -1049,16 +963,13 @@ class _FriendChipsState extends State<_FriendChips> {
             child: child,
           ),
         ),
-        // Busy time is only a colour; an invite has a title and opens.
         child: IgnorePointer(
-          ignoring: item.event.invite == null || leaving,
           child: _MonthEventBlock(
             event: item.event,
             density: density,
             continuesBefore: item.continuesBefore,
             continuesAfter: item.continuesAfter,
-            showTitle: item.event.invite != null,
-            onTap: item.event.invite == null ? null : widget.onEventTap,
+            showTitle: false,
           ),
         ),
       ),
@@ -1066,11 +977,6 @@ class _FriendChipsState extends State<_FriendChips> {
   }
 }
 
-/// The layer not shown in full lives on as bands on its week line: the
-/// user's from the top line down, friends' from the bottom line up. Each
-/// band is cut clean at the line and fades towards the middle of the week;
-/// along it run the colours of the events (see [buildWeekBands]). A band
-/// grows out of the line as its chips fold into it.
 class _BandPainter extends CustomPainter {
   _BandPainter({
     required this.mine,
@@ -1138,7 +1044,6 @@ class _DayNumber extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final weekend = day.weekday >= DateTime.saturday;
-    // Today: a white disc with the number cut out of it in black.
     final color = today
         ? Colors.black
         : weekend
@@ -1179,7 +1084,6 @@ class _MonthEventBlock extends StatelessWidget {
   final CalendarEvent event;
   final EventDensity density;
 
-  /// Friends' busy time has no title to show.
   final bool showTitle;
   final bool dimmed;
   final bool continuesBefore;
@@ -1190,8 +1094,6 @@ class _MonthEventBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final own = OwnEventColor.of(context);
-    // Apple Calendar's dark look ([gridTone]): a deep fill with light text
-    // of the same hue; a chip with no title is the light tone itself.
     final tone = gridTone(eventColor(event, own));
     final titled = density.showTitle && showTitle;
     final fill = titled ? tone.fill : tone.ink;
@@ -1216,45 +1118,29 @@ class _MonthEventBlock extends StatelessWidget {
         onLongPressStart: onHoldStart == null
             ? null
             : (details) => onHoldStart!(event, details.globalPosition),
-        child: _InviteRim(
-          event: event,
-          own: own,
-          radius: monthChipRadius(density),
-          child: _ChipFill(
-            decoration: event.invite == null
-                ? BoxDecoration(color: fill, borderRadius: radius)
-                : eventFill(event, own, radius: radius),
-            fadeBefore: continuesBefore,
-            fadeAfter: continuesAfter,
-            child: titled
-                // The title fades out while the layer folds, so squeezed
-                // letters never show.
-                ? ChipFoldInk(
-                    builder: (context, alpha) => _title(
-                      ink.withValues(alpha: ink.a * alpha),
-                      // Where the chip itself fades out, the title is
-                      // just cut: a fade in the fill's colour would
-                      // show there.
-                      continuesAfter ? null : fill,
-                    ),
-                  )
-                : const SizedBox.expand(),
-          ),
+        child: _ChipFill(
+          decoration: BoxDecoration(color: fill, borderRadius: radius),
+          fadeBefore: continuesBefore,
+          fadeAfter: continuesAfter,
+          child: titled
+              ? ChipFoldInk(
+                  builder: (context, alpha) => _title(
+                    ink.withValues(alpha: ink.a * alpha),
+                    continuesAfter ? null : fill,
+                  ),
+                )
+              : const SizedBox.expand(),
         ),
       ),
     );
   }
 
-  /// Narrow chips cut the title off rather than spend a third of the room
-  /// on an ellipsis: "Бейсб" says more than "Бейс…".
   Widget _title(Color ink, Color? fill) {
     if (density.titleLines > 1) {
       return _TallChipText(event: event, ink: ink, density: density);
     }
     final padding = monthChipPadding(density);
     final title = monthChipTitleStyle.copyWith(color: ink);
-    // Laid out at its own height and clipped, like Apple Calendar: while
-    // the chip grows or shrinks between densities nothing reflows or jumps.
     if (density.showTime && !event.allDay) {
       return ClipRect(
         child: OverflowBox(
@@ -1291,10 +1177,6 @@ class _MonthEventBlock extends StatelessWidget {
         ),
       );
     }
-    // One line: cut off and faded into the chip before its round end, as
-    // Apple does, rather than an ellipsis eating a third of a narrow chip.
-    // The fade stays inside the padding, so it never pokes past the round
-    // end.
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: padding),
       child: ClipRect(
@@ -1333,8 +1215,6 @@ class _MonthEventBlock extends StatelessWidget {
   }
 }
 
-/// A chip's fill. A chip that runs on into the next week or month fades
-/// out over [chipContinueFade] at that end instead of being cut square.
 class _ChipFill extends StatelessWidget {
   const _ChipFill({
     required this.decoration,
@@ -1381,9 +1261,6 @@ class _ChipFill extends StatelessWidget {
   }
 }
 
-/// The tallest chip: the title on up to two lines, the start time under
-/// it. Clipped and laid out at its own height, so it reads cleanly while the
-/// chip grows into it.
 class _TallChipText extends StatelessWidget {
   const _TallChipText({
     required this.event,
@@ -1439,33 +1316,6 @@ class _TallChipText extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// The dashed edge of an invite the user has not answered; other events
-/// pass through.
-class _InviteRim extends StatelessWidget {
-  const _InviteRim({
-    required this.event,
-    required this.own,
-    required this.radius,
-    required this.child,
-  });
-
-  final CalendarEvent event;
-  final Color own;
-  final double radius;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final invite = event.invite;
-    if (invite == null || !invite.pending) return child;
-    return PendingInviteRim(
-      color: eventColor(event, own),
-      radius: radius,
-      child: child,
     );
   }
 }

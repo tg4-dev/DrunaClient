@@ -3,9 +3,6 @@ import 'package:druna_app/features/event_page/event_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Hours and minutes on two looping wheels, in the page's type: the picked
-/// value large in the middle, the rest smaller and fainter (design-system
-/// §9.1). Minutes go in steps of [minuteStep].
 class TimeWheel extends StatefulWidget {
   const TimeWheel({
     required this.hour,
@@ -18,7 +15,6 @@ class TimeWheel extends StatefulWidget {
   final int minute;
   final void Function(int hour, int minute) onChanged;
 
-  /// The calendar's quarter hours.
   static const minuteStep = calendarMinuteStep;
   static const height = 196.0;
   static const itemExtent = 52.0;

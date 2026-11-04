@@ -4,20 +4,8 @@ import 'package:device_calendar_plus/device_calendar_plus.dart' as plugin;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-/// Whether the app may read the device's calendars.
-enum CalendarAccess {
-  /// Never asked: the system will show its prompt.
-  unknown,
-  granted,
+enum CalendarAccess { unknown, granted, denied, unsupported }
 
-  /// Refused, restricted or add-only: only the system settings change it.
-  denied,
-
-  /// No calendar on this platform (desktop, tests).
-  unsupported,
-}
-
-/// A calendar on the device: «Работа», «Дом», «Праздники».
 @immutable
 class DeviceCalendarInfo {
   const DeviceCalendarInfo({
@@ -32,15 +20,11 @@ class DeviceCalendarInfo {
   final String name;
   final Color color;
 
-  /// The account that holds it: iCloud, Gmail, «На iPhone».
   final String account;
 
-  /// Subscriptions and system calendars (holidays, birthdays).
   final bool readOnly;
 }
 
-/// One occurrence of an event on the device; a series comes as one per
-/// occurrence.
 @immutable
 class DeviceEvent {
   const DeviceEvent({
@@ -50,29 +34,20 @@ class DeviceEvent {
     required this.start,
     required this.end,
     this.allDay = false,
-    this.free = false,
     this.recurring = false,
   });
 
-  /// Opens this occurrence in the system's event screen.
   final String instanceId;
   final String calendarId;
   final String title;
   final DateTime start;
 
-  /// Exclusive, for all-day events too: a one-day event ends at the next
-  /// midnight.
   final DateTime end;
   final bool allDay;
 
-  /// Marked «свободен»: it does not take the time.
-  final bool free;
-
-  /// One occurrence of a series: deleting it means deleting the series.
   final bool recurring;
 }
 
-/// An event Druna writes into its own calendar on the device.
 @immutable
 class DeviceEventDraft {
   const DeviceEventDraft({
@@ -86,42 +61,31 @@ class DeviceEventDraft {
   final String title;
   final DateTime start;
 
-  /// Exclusive, as in [DeviceEvent.end].
   final DateTime end;
   final bool allDay;
 
-  /// RFC 5545 without the `RRULE:` prefix; null — no repeat.
   final String? rrule;
 }
 
-/// The device's calendars: Apple Calendar on iOS, the calendar provider on
-/// Android.
 abstract interface class DeviceCalendar {
   Future<CalendarAccess> access();
 
-  /// Shows the system prompt if it was never shown.
   Future<CalendarAccess> requestAccess();
 
-  /// The app's page in the system settings, to grant access after a
-  /// refusal.
   Future<void> openSettings();
 
   Future<List<DeviceCalendarInfo>> calendars();
 
-  /// Occurrences overlapping `[from, to)` in [calendarIds].
   Future<List<DeviceEvent>> events(
     DateTime from,
     DateTime to,
     List<String> calendarIds,
   );
 
-  /// The system's own screen for the event.
   Future<void> show(String instanceId);
 
-  /// Returns the new calendar's id.
   Future<String> createCalendar(String name, Color color);
 
-  /// Puts the name and the colour back (the user may have changed them).
   Future<void> updateCalendar(
     String id, {
     required String name,
@@ -129,25 +93,20 @@ abstract interface class DeviceCalendar {
   });
   Future<void> deleteCalendar(String id);
 
-  /// Returns the new event's id.
   Future<String> createEvent(String calendarId, DeviceEventDraft draft);
 
-  /// Removes the event with all its repeats; a missing one is not an error.
   Future<void> deleteEvent(String id, {required bool series});
 }
 
-/// The plugin on iOS and Android; nothing elsewhere.
 DeviceCalendar platformDeviceCalendar() {
   if (kIsWeb) return const NoDeviceCalendar();
   if (Platform.isIOS || Platform.isAndroid) return PluginDeviceCalendar();
   return const NoDeviceCalendar();
 }
 
-/// What the device's calendar is called in the interface.
 String deviceCalendarName() =>
     !kIsWeb && Platform.isIOS ? 'Apple Календарь' : 'Календарь устройства';
 
-/// A platform without calendars: everything is unsupported.
 class NoDeviceCalendar implements DeviceCalendar {
   const NoDeviceCalendar();
 
@@ -225,7 +184,6 @@ class PluginDeviceCalendar implements DeviceCalendar {
     DateTime to,
     List<String> calendarIds,
   ) async {
-    // An empty list means every calendar to the plugin.
     if (calendarIds.isEmpty) return const [];
     return [
       for (final event in await _calendar.listEvents(
@@ -241,7 +199,6 @@ class PluginDeviceCalendar implements DeviceCalendar {
             start: event.startDate,
             end: event.endDate,
             allDay: event.isAllDay,
-            free: event.availability == plugin.EventAvailability.free,
             recurring: event.isRecurring,
           ),
     ];
@@ -293,7 +250,6 @@ class PluginDeviceCalendar implements DeviceCalendar {
   }
 }
 
-/// `#RRGGBB`, as the system calendars take it.
 String colorHex(Color color) {
   String part(double channel) =>
       (channel * 255).round().toRadixString(16).padLeft(2, '0');

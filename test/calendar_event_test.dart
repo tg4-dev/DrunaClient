@@ -123,7 +123,6 @@ void main() {
 
   test('a hidden bar is counted even when its day has a free lane', () {
     final days = daysOfWeek(weekIndexOf(DateTime(2026, 10, 12)));
-    // Mon–Wed, Mon–Tue and Tue–Wed: the third needs a third lane on Tuesday.
     final layout = layoutWeek(
       events: [bar('c', 12, 14), bar('a', 12, 13), bar('b', 13, 14)],
       days: days,
@@ -139,6 +138,27 @@ void main() {
         expect(layout.columns[column].overflow, greaterThan(0));
       }
     }
+  });
+
+  test('a day with only a hidden bar shows +1 and no chips', () {
+    final days = daysOfWeek(weekIndexOf(DateTime(2026, 10, 12)));
+    final layout = layoutWeek(
+      events: [
+        bar('a', 12, 13),
+        bar('b', 12, 13),
+        bar('c', 12, 13),
+        bar('d', 13, 16),
+      ],
+      days: days,
+      visibleStart: 0,
+      visibleEnd: 6,
+      capacity: 3,
+    );
+
+    final thursday = layout.columns[3];
+    expect(thursday.chips, isEmpty);
+    expect(thursday.overflow, 1);
+    expect(thursday.overflowLane, isNotNull);
   });
 
   test('a multi-day bar is clipped to each week', () {

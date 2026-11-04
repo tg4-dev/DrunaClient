@@ -1,8 +1,8 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
-/// Native confirmation: Liquid Glass alert on iOS 26+, Cupertino on older iOS,
-/// Material elsewhere. Resolves to `false` when dismissed without confirming.
+const dialogAccent = CupertinoColors.systemBlue;
+
 Future<bool> confirmAction(
   BuildContext context, {
   required String title,
@@ -11,24 +11,60 @@ Future<bool> confirmAction(
   bool destructive = false,
 }) async {
   var confirmed = false;
-  await AdaptiveAlertDialog.show(
+  final actions = [
+    AlertAction(
+      title: 'Отмена',
+      style: AlertActionStyle.cancel,
+      onPressed: () {},
+    ),
+    AlertAction(
+      title: confirmLabel,
+      style: destructive
+          ? AlertActionStyle.destructive
+          : AlertActionStyle.primary,
+      onPressed: () => confirmed = true,
+    ),
+  ];
+  if (!PlatformInfo.isIOS) {
+    await AdaptiveAlertDialog.show(
+      context: context,
+      title: title,
+      message: message,
+      actions: actions,
+    );
+    return confirmed;
+  }
+  final native = PlatformInfo.isIOS26OrHigher();
+  await showCupertinoDialog<void>(
     context: context,
-    title: title,
-    message: message,
-    actions: [
-      AlertAction(
-        title: 'Отмена',
-        style: AlertActionStyle.cancel,
-        onPressed: () {},
-      ),
-      AlertAction(
-        title: confirmLabel,
-        style: destructive
-            ? AlertActionStyle.destructive
-            : AlertActionStyle.primary,
-        onPressed: () => confirmed = true,
-      ),
-    ],
+    barrierColor: native ? CupertinoColors.transparent : null,
+    builder: (dialogContext) => CupertinoTheme(
+      data: CupertinoTheme.of(
+        dialogContext,
+      ).copyWith(primaryColor: dialogAccent),
+      child: native
+          ? IOS26AlertDialog(title: title, message: message, actions: actions)
+          : CupertinoAlertDialog(
+              title: Text(title),
+              content: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(message),
+              ),
+              actions: [
+                for (final action in actions)
+                  CupertinoDialogAction(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      action.onPressed();
+                    },
+                    isDefaultAction: action.style == AlertActionStyle.primary,
+                    isDestructiveAction:
+                        action.style == AlertActionStyle.destructive,
+                    child: Text(action.title),
+                  ),
+              ],
+            ),
+    ),
   );
   return confirmed;
 }

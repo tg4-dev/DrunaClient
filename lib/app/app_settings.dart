@@ -1,5 +1,3 @@
-import 'package:druna_app/features/calendar/calendar_event.dart';
-import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/avatar_style.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
@@ -7,7 +5,6 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Where settings live between launches.
 abstract interface class SettingsStorage {
   Future<bool?> getBool(String key);
   Future<void> setBool(String key, bool value);
@@ -43,58 +40,36 @@ class MemorySettingsStorage implements SettingsStorage {
   Future<void> setString(String key, String value) async => values[key] = value;
 }
 
-/// Switches on the settings page that make testing easier. In production the
-/// demo switches are always off.
 class AppSettings extends ChangeNotifier {
-  AppSettings({
-    required SettingsStorage storage,
-    required bool demoByDefault,
-    this.allowDemo = true,
-  }) : _storage = storage,
-       _demoFriends = allowDemo && demoByDefault,
-       _demoSchedules = allowDemo && demoByDefault;
+  AppSettings({required SettingsStorage storage, required bool demoByDefault})
+    : _storage = storage,
+      _demo = demoByDefault;
 
-  static const _demoFriendsKey = 'settings.demo_friends';
+  static const _demoKey = 'settings.demo';
   static const _demoOfflineKey = 'settings.demo_offline';
-  static const _demoSchedulesKey = 'settings.demo_schedules';
   static const _slowMotionKey = 'settings.slow_motion';
   static const _ownColorKey = 'settings.own_color';
   static const _ownFontKey = 'settings.own_font';
 
-  /// How much slower every animation runs with [slowMotion].
   static const slowMotionFactor = 5.0;
 
   final SettingsStorage _storage;
-  final bool allowDemo;
 
-  /// For other small state kept between launches, e.g. picked friends.
   SettingsStorage get storage => _storage;
 
-  bool _demoFriends;
+  bool _demo;
   bool _demoOffline = false;
-  bool _demoSchedules;
   bool _slowMotion = false;
   int? _ownColorSlot;
   String? _ownFontId;
   bool _disposed = false;
 
-  /// Friends come from [DemoFriendsSource] instead of the server.
-  bool get demoFriends => _demoFriends;
+  bool get demo => _demo;
 
-  /// Selected friends show generated busy time. The server has no endpoint
-  /// for a friend's schedule, so without this the calendar shows none.
-  bool get demoSchedules => _demoSchedules;
+  bool get demoOffline => _demo && _demoOffline;
 
-  /// Demo data answers every request with a network error.
-  bool get demoOffline => _demoOffline;
-
-  /// Every animation runs [slowMotionFactor] times slower.
   bool get slowMotion => _slowMotion;
 
-  /// The colour the user picked for themselves, as a slot of
-  /// [avatarPalette]; null — the one their id gives. Kept on this device
-  /// only: the server has no field for it yet. A slot of the old palette of
-  /// 16 past its end is dropped.
   int? get ownColorSlot => _ownColorSlot;
 
   set ownColorSlot(int? slot) {
@@ -104,8 +79,6 @@ class AppSettings extends ChangeNotifier {
     _storage.setString(_ownColorKey, valid ? '$slot' : '');
   }
 
-  /// The font of the user's avatar letter ([AvatarFont.id]); null — the
-  /// default. On this device only, like the colour.
   String? get ownFontId => _ownFontId;
 
   set ownFontId(String? id) {
@@ -115,12 +88,8 @@ class AppSettings extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    if (allowDemo) {
-      _demoFriends = await _storage.getBool(_demoFriendsKey) ?? _demoFriends;
-      _demoOffline = await _storage.getBool(_demoOfflineKey) ?? false;
-      _demoSchedules =
-          await _storage.getBool(_demoSchedulesKey) ?? _demoSchedules;
-    }
+    _demo = await _storage.getBool(_demoKey) ?? _demo;
+    _demoOffline = await _storage.getBool(_demoOfflineKey) ?? false;
     _slowMotion = await _storage.getBool(_slowMotionKey) ?? false;
     final slot = int.tryParse(await _storage.getString(_ownColorKey) ?? '');
     _ownColorSlot = slot != null && slot >= 0 && slot < avatarPalette.length
@@ -139,16 +108,12 @@ class AppSettings extends ChangeNotifier {
     super.dispose();
   }
 
-  set demoFriends(bool value) => _set(_demoFriendsKey, value, () {
-    _demoFriends = allowDemo && value;
+  set demo(bool value) => _set(_demoKey, value, () {
+    _demo = value;
   });
 
   set demoOffline(bool value) => _set(_demoOfflineKey, value, () {
-    _demoOffline = allowDemo && value;
-  });
-
-  set demoSchedules(bool value) => _set(_demoSchedulesKey, value, () {
-    _demoSchedules = allowDemo && value;
+    _demoOffline = value;
   });
 
   set slowMotion(bool value) => _set(_slowMotionKey, value, () {
@@ -167,15 +132,8 @@ class AppSettings extends ChangeNotifier {
   }
 }
 
-/// The user's colour: the one they picked, else the one their id gives,
-/// else the calendar's default until the profile has loaded.
-Color ownColorFor(AppSettings settings, UserProfile? profile) {
-  final slot = settings.ownColorSlot;
-  if (slot != null) return avatarPalette[slot];
-  if (profile == null) return calendarEventColor;
-  return avatarColorFor(id: profile.id, username: profile.username);
-}
+Color ownColorFor(AppSettings settings) =>
+    avatarPalette[settings.ownColorSlot ?? defaultOwnColorSlot];
 
-/// The user's avatar font: the one they picked, else the default.
 AvatarFont ownFontFor(AppSettings settings) =>
     avatarFontById(settings.ownFontId);

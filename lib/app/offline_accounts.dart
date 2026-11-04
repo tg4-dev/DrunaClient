@@ -3,9 +3,6 @@ import 'dart:convert';
 import 'package:druna_app/app/app_settings.dart';
 import 'package:druna_app/models/models.dart';
 
-/// The accounts and the session of the mode without a server (`OFFLINE`,
-/// [AppConfig.offline]): made in the onboarding, kept on this device only,
-/// no tokens. The rest of the app runs on its demo data.
 class OfflineAccounts {
   OfflineAccounts(this.storage);
 
@@ -14,7 +11,6 @@ class OfflineAccounts {
   static const _accountsKey = 'offline.accounts';
   static const _currentKey = 'offline.current';
 
-  /// Ids far from the demo friends', so colours do not repeat theirs.
   static const _firstId = 900;
 
   Future<Map<String, UserProfile>> accounts() async {
@@ -44,7 +40,6 @@ class OfflineAccounts {
     }),
   );
 
-  /// Makes an account and signs into it.
   Future<UserProfile> create({
     required String email,
     required String username,
@@ -63,11 +58,17 @@ class OfflineAccounts {
     return profile;
   }
 
+  Future<UserProfile?> byUsername(String username) async {
+    for (final account in (await accounts()).values) {
+      if (account.username == username) return account;
+    }
+    return null;
+  }
+
   Future<void> signIn(String email) => storage.setString(_currentKey, email);
 
   Future<void> signOut() => storage.setString(_currentKey, '');
 
-  /// The signed-in account, or null.
   Future<UserProfile?> current() async {
     final email = await storage.getString(_currentKey);
     if (email == null || email.isEmpty) return null;

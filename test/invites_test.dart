@@ -64,7 +64,6 @@ void main() {
         hasLength(1),
       );
       expect(invites.where((i) => i.isOrganizer(_me.id)), hasLength(1));
-      // The user is themselves, not a placeholder.
       expect(invites.first.participants.first.person, _me);
     });
 

@@ -1,8 +1,6 @@
 import 'package:druna_app/features/event_page/event_style.dart';
 import 'package:flutter/material.dart';
 
-/// The privacy policy: a dark card from the bottom, like the event page's
-/// (design-system §9.9). The text is a placeholder.
 Future<void> showPolicySheet(BuildContext context) =>
     showModalBottomSheet<void>(
       context: context,

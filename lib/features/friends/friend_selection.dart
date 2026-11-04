@@ -5,8 +5,6 @@ import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/foundation.dart';
 
-/// Which friends the calendar shows, and how often each was picked. Kept
-/// between launches.
 class FriendSelection extends ChangeNotifier {
   FriendSelection(this._storage);
 
@@ -17,7 +15,6 @@ class FriendSelection extends ChangeNotifier {
   final _usage = <int, int>{};
   bool _disposed = false;
 
-  /// Selected friend ids in the order they were picked.
   List<int> get selected => List.unmodifiable(_selected);
 
   bool isSelected(int id) => _selected.contains(id);
@@ -39,13 +36,11 @@ class FriendSelection extends ChangeNotifier {
             int.parse(entry.key as String): entry.value as int,
         });
     } on Object {
-      // A broken entry starts the selection over.
       return;
     }
     notifyListeners();
   }
 
-  /// Picking a friend counts as a use; letting go does not.
   void toggle(int id) {
     if (!_selected.remove(id)) {
       _selected.add(id);
@@ -54,7 +49,6 @@ class FriendSelection extends ChangeNotifier {
     _changed();
   }
 
-  /// Forgets friends that are gone, e.g. removed on the friends page.
   void keepOnly(Iterable<int> ids) {
     final keep = ids.toSet();
     final before = _selected.length;
@@ -68,8 +62,6 @@ class FriendSelection extends ChangeNotifier {
     _changed();
   }
 
-  /// Selected first, in the order they were picked; the rest by how often
-  /// they were picked, then by name.
   List<FriendInfo> ordered(List<FriendInfo> friends) {
     final byId = {for (final friend in friends) friend.id: friend};
     final rest = [
@@ -109,6 +101,5 @@ class FriendSelection extends ChangeNotifier {
   }
 }
 
-/// Name to show, falling back to the username.
 String friendName(FriendInfo friend) =>
     friend.name.trim().isEmpty ? friend.username : shownName(friend.name);

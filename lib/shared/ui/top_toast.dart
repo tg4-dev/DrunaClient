@@ -5,10 +5,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The app's one system message (design-system §9.10): a small capsule in
-/// the button's style drops in under the status bar and leaves by itself
-/// after [ToastStyle.hold]. A tap or a swipe up sends it away at once. A
-/// new message replaces the one on screen.
 void showToast(BuildContext context, String message, {bool error = false}) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
@@ -32,11 +28,9 @@ void showToast(BuildContext context, String message, {bool error = false}) {
 OverlayEntry? _current;
 
 abstract final class ToastStyle {
-  /// Under the status bar.
   static const top = 8.0;
   static const side = 16.0;
 
-  /// Under the capsule's own fill, so it reads over any screen.
   static const base = Color(0xF21C1C1E);
   static const icon = 18.0;
   static const danger = Color(0xFFFF3B30);
@@ -130,8 +124,6 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
                   child: child,
                 ),
               ),
-              // No Material above an overlay entry: without this the text
-              // takes the fallback style with its yellow underline.
               child: Material(
                 type: MaterialType.transparency,
                 child: Semantics(

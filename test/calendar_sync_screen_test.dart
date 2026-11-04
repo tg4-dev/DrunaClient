@@ -66,17 +66,13 @@ void main() {
         home: HomePager(
           session: SessionController(repository),
           settings: AppSettings(storage: storage, demoByDefault: true),
-          config: const AppConfig(
-            apiBaseUrl: 'https://example.test',
-            environment: 'test',
-          ),
+          config: const AppConfig(apiBaseUrl: 'https://example.test'),
           sync: sync,
           demoDelay: Duration.zero,
         ),
       ),
     );
     await tester.pumpAndSettle();
-    // My calendar: a swipe to the right.
     await tester.flingFrom(const Offset(200, 500), const Offset(300, 0), 1500);
     await tester.pumpAndSettle();
     return (device, sync);

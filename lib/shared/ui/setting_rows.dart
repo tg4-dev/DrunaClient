@@ -3,15 +3,12 @@ import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-/// The rows of the settings' blocks (design-system §9.3): at least 44 pt,
-/// a title 17 white, a subtitle 13 grey.
 abstract final class SettingRowStyle {
   static const title = TextStyle(color: Colors.white, fontSize: 17);
   static const subtitle = TextStyle(color: SheetStyle.muted, fontSize: 13);
   static const success = Color(0xFF34C759);
 }
 
-/// The result of a check shown at the right of a row.
 class SettingCheck {
   const SettingCheck.running() : running = true, ok = false, text = '';
   const SettingCheck.ok(this.text) : running = false, ok = true;
@@ -22,8 +19,6 @@ class SettingCheck {
   final String text;
 }
 
-/// A row at least 44 pt tall: title, optional subtitle, and on the right a
-/// value or the result of a check.
 class SettingRow extends StatelessWidget {
   const SettingRow({
     required this.title,
@@ -41,7 +36,6 @@ class SettingRow extends StatelessWidget {
   final String? value;
   final SettingCheck? status;
 
-  /// In place of [value]: a menu, a chevron.
   final Widget? trailing;
   final Color color;
   final VoidCallback? onTap;
@@ -115,7 +109,6 @@ class SettingRow extends StatelessWidget {
   }
 }
 
-/// A row with a switch at the right; [leading] stands before the title.
 class SettingSwitchRow extends StatelessWidget {
   const SettingSwitchRow({
     required this.title,

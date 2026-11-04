@@ -15,8 +15,6 @@ void main() {
       for (final color in avatarPalette) {
         final (l, a, b) = oklab(color);
         final (sl, sa, sb) = oklab(avatarShade(color));
-        // Saturated colours leave sRGB when darkened and are clipped back:
-        // the lightness drops all the same, the hue barely moves.
         expect(sl, lessThan(l * 0.8));
         final hue = math.atan2(b, a);
         final shadeHue = math.atan2(sb, sa);
@@ -134,7 +132,6 @@ void main() {
       'HapticFeedbackType.selectionClick',
     ]);
 
-    // The picked one again: nothing happens, no tick.
     await tester.tap(find.byKey(const ValueKey('color-3')));
     await tester.pumpAndSettle();
     expect(ticks, hasLength(2));

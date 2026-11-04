@@ -14,11 +14,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The onboarding from the settings, played without the server
-/// ([RehearsalAuthFlowSource]): no account is made, and the end — or ✕ on
-/// the welcome screen — brings the user back where they were. [signIn]:
-/// every email has an account, so the flow goes to the password.
-/// [colorSlot] and [font] — the user's own, for «Всё готово» after it.
 Future<void> showOnboardingRehearsal(
   BuildContext context, {
   bool signIn = false,
@@ -45,10 +40,6 @@ Future<void> showOnboardingRehearsal(
   );
 }
 
-/// Sign-in and registration (design-system §9.9): one screen over the
-/// moving background, its steps sliding in and out. The arrows stay put
-/// under the field; system back, the Android back button and a swipe from
-/// the left edge go a step back.
 class OnboardingFlow extends StatefulWidget {
   const OnboardingFlow({
     required this.source,
@@ -63,20 +54,14 @@ class OnboardingFlow extends StatefulWidget {
 
   final AuthFlowSource source;
 
-  /// The device's calendar for the step before the profile.
   final CalendarSync? calendarSync;
 
-  /// Tokens are saved: let the app in ([SessionController.adopt]).
   final Future<void> Function() onFinished;
 
-  /// The rehearsal from the settings: ✕ on the welcome screen, and back
-  /// from it leaves.
   final VoidCallback? onClose;
 
-  /// The account is made: keep the picked colour and font.
   final void Function(int colorSlot, AvatarFont font)? onProfile;
 
-  /// This device's colour and font for its user, shown after a sign-in.
   final int? knownColorSlot;
   final AvatarFont? knownFont;
 
@@ -104,9 +89,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     WidgetsBinding.instance.addObserver(this);
   }
 
-  /// A new step takes the keyboard into its field once it is built; the
-  /// old field hands it over, so the keyboard stays up. Welcome and the end
-  /// have no field: there it goes down.
   void _stepChanged() {
     if (_flow.step == _step) return;
     _step = _flow.step;
@@ -121,8 +103,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     });
   }
 
-  /// The keyboard cannot be put away on a step with a field: if it went
-  /// down (Android's back, a system sheet closed), it comes back.
   @override
   void didChangeMetrics() {
     _keyboardCheck?.cancel();
@@ -130,8 +110,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
       if (!mounted) return;
       final focus = _flow.focus;
       if (focus == null) return;
-      // The user may be in another field of the step (the repeat of the
-      // password): leave the focus there.
       if (!_flow.stepFocus.any((node) => node.hasFocus)) {
         return focus.requestFocus();
       }
@@ -142,7 +120,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     });
   }
 
-  /// How far a swipe from the left edge has gone.
   var _edgeDrag = 0.0;
 
   static const _edge = 20.0;
@@ -165,10 +142,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     _ => FormStepPage(controller: _flow, step: step),
   };
 
-  /// In from the side the user moves to, out to the other. The old page is
-  /// gone by the middle and the new one comes in after it starts to leave,
-  /// so the two never blur into each other; the slide is short and eased
-  /// both ways.
   Widget _transition(Widget child, Animation<double> animation) =>
       AnimatedBuilder(
         animation: animation,
@@ -177,7 +150,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           final leaving = animation.status == AnimationStatus.reverse;
           final dir = _flow.back ? -1 : 1;
           final v = animation.value;
-          // Leaving runs 1 → 0: it fades over the first 55% of the time.
           final opacity = leaving
               ? const Interval(0.45, 1, curve: Curves.easeIn).transform(v)
               : const Interval(0.3, 1, curve: Curves.easeOut).transform(v);
@@ -211,10 +183,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           child: Scaffold(
             backgroundColor: OnboardingStyle.black,
             resizeToAvoidBottomInset: false,
-            // One autofill context for the whole flow. A group per step
-            // would end its context on every step change, and iOS drops
-            // the keyboard when that happens; the password is committed
-            // for saving by the controller instead.
             body: AutofillGroup(
               onDisposeAction: AutofillContextAction.cancel,
               child: Stack(
@@ -284,9 +252,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
     );
   }
 
-  /// The arrows follow the field. A new step glides them to its place;
-  /// the keyboard, meanwhile and at any other time, moves that place and
-  /// they keep up at once ([_FollowTop]).
   Widget _arrows(OnboardingStep step, bool reduce) {
     final shown = _hasField(step);
     return LayoutBuilder(
@@ -320,10 +285,6 @@ class _OnboardingFlowState extends State<OnboardingFlow>
   }
 }
 
-/// [child] at [target] from the top. When [step] changes it glides there
-/// from where it stood; while gliding, and always otherwise, a moving
-/// [target] (the keyboard) is followed at once — the glide is towards the
-/// live target, not a stale one.
 class _FollowTop extends StatefulWidget {
   const _FollowTop({
     required this.step,

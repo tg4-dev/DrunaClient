@@ -1,8 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-/// [color] in OKLab (L, a, b): the shader mixes there, so a blend of two
-/// colours keeps its lightness and hue instead of going grey.
 (double, double, double) oklab(Color color) {
   double linear(double c) =>
       c <= 0.04045 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
@@ -20,7 +18,6 @@ import 'dart:ui';
   );
 }
 
-/// [oklab]'s inverse: (L, a, b) back to an opaque sRGB colour.
 Color fromOklab((double, double, double) lab) {
   final (l, a, b) = lab;
   double cube(double v) => v * v * v;
@@ -50,7 +47,6 @@ Color fromOklab((double, double, double) lab) {
   );
 }
 
-/// Whether [lab] is an sRGB colour, with nothing clipped.
 bool inSrgbGamut((double, double, double) lab) {
   final (l, a, b) = lab;
   double cube(double v) => v * v * v;

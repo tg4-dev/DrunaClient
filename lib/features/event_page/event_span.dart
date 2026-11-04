@@ -4,10 +4,6 @@ import 'package:druna_app/features/calendar/repeat_rule.dart';
 import 'package:druna_app/features/event_page/event_labels.dart';
 import 'package:flutter/foundation.dart';
 
-/// When an event runs, as the event page edits it: a first and a last day
-/// (both included) and, for timed events, the minutes of day it starts and
-/// ends at. The clocks are kept while "Весь день" is on, so turning it off
-/// brings the times back.
 @immutable
 class EventSpan {
   const EventSpan({
@@ -18,8 +14,6 @@ class EventSpan {
     required this.allDay,
   });
 
-  /// An all-day event gets [defaultEventSpan]'s clocks for when it turns
-  /// timed.
   factory EventSpan.of(CalendarEvent event, {DateTime? now}) {
     if (event.allDay) {
       final first = eventFirstDay(event);
@@ -53,13 +47,10 @@ class EventSpan {
 
   DateTime get start => allDay ? firstDay : _at(firstDay, startMinute);
 
-  /// Exclusive for timed events; the last day itself for all-day ones.
   DateTime get end => allDay ? lastDay : _at(lastDay, endMinute);
 
   bool get oneDay => sameDay(firstDay, lastDay);
 
-  /// "1 день 2 ч", "2 часа 30 м"; all day: "весь день" for one day, the
-  /// number of days ("3 дня") for several.
   String get durationLabel {
     if (!allDay) return durationPillLabel(start, end);
     if (oneDay) return 'весь день';
@@ -69,7 +60,6 @@ class EventSpan {
 
   EventSpan withAllDay(bool value) => _copy(allDay: value)._normal();
 
-  /// The event moves to [day] and keeps its length in days.
   EventSpan withStartDay(DateTime day) {
     final shift = calendarDaysBetween(firstDay, day);
     return _copy(
@@ -80,18 +70,15 @@ class EventSpan {
 
   EventSpan withEndDay(DateTime day) => _copy(lastDay: dateOnly(day))._normal();
 
-  /// A new start keeps the event's length.
   EventSpan withStartClock(int hour, int minute) {
     final length = end.difference(start);
     final next = _at(firstDay, hour * 60 + minute);
     return EventSpan.timed(next, next.add(length), allDay: allDay);
   }
 
-  /// An end at or before the start on the same day runs past midnight.
   EventSpan withEndClock(int hour, int minute) =>
       _copy(endMinute: hour * 60 + minute)._normal();
 
-  /// [event] with this span, [title] and [repeat].
   CalendarEvent applyTo(
     CalendarEvent event, {
     required String title,
@@ -120,8 +107,6 @@ class EventSpan {
     allDay: allDay ?? this.allDay,
   );
 
-  /// The last day is never before the first; a timed end never at or
-  /// before the start.
   EventSpan _normal() {
     var span = this;
     if (span.lastDay.isBefore(span.firstDay)) {

@@ -11,24 +11,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Measurements of the friend bar at the bottom of the calendar.
 abstract final class FriendBarStyle {
   static const avatar = 56.0;
 
-  /// The hint line above the row.
   static const hint = 32.0;
   static const hintGap = 8.0;
   static const step = 68.0;
   static const gutter = 20.0;
   static const height = 64.0;
 
-  /// The stack of selected friends while the user's own events are shown.
   static const stackAvatar = 48.0;
   static const stackStep = 22.0;
   static const stackMax = 3;
 
-  /// The user's own mode: their avatar and caption on the left, the swipe
-  /// hint on the right.
   static const mineGap = 10.0;
   static const mineCaption = TextStyle(
     fontSize: 15,
@@ -38,17 +33,11 @@ abstract final class FriendBarStyle {
   static const arrow = Color(0xB3FFFFFF);
   static const arrowSize = 24.0;
 
-  /// The corner and the hint start this far past the left edge.
   static const flyOver = 48.0;
 
-  /// While the corner flies in, the arrow rides this far right of it and
-  /// leaves for its place on the second half of the way (author,
-  /// 2026-11-04).
   static const followGap = 10.0;
   static const followFrom = 0.5;
 
-  /// Each avatar in the row sets off this share of the way after the one on
-  /// its left, the sixth and on together (author, 2026-11-04).
   static const lag = 0.06;
   static const lagMax = 5;
 
@@ -59,15 +48,9 @@ abstract final class FriendBarStyle {
   static const select = Duration(milliseconds: 160);
 }
 
-/// Height the friend bar takes over the bottom of the month above the safe
-/// area: hint, row and the margin under it.
 const friendBarExtent =
     FriendBarStyle.hint + FriendBarStyle.hintGap + FriendBarStyle.height + 4;
 
-/// All friends at the bottom of the calendar. Picked friends get a ring and
-/// move to the front; their busy time shows in the month. While the user's
-/// own events are shown ([mode] near 0) the bar folds into a stack of the
-/// picked friends at the right, following the finger.
 class FriendBar extends StatefulWidget {
   const FriendBar({
     required this.friends,
@@ -81,25 +64,18 @@ class FriendBar extends StatefulWidget {
     super.key,
   });
 
-  /// Null while loading.
   final List<FriendInfo>? friends;
   final FriendSelection selection;
   final ValueListenable<double> mode;
 
-  /// A tap on the folded stack: back to friends' calendar.
   final VoidCallback onShowFriends;
 
-  /// No friends yet: go to the friends page.
   final VoidCallback onAddFriends;
 
-  /// False when there is no way to get friends' busy time.
   final bool schedulesAvailable;
 
-  /// The user's avatar: in the user's own mode it stands at the bottom
-  /// left with "Мои события".
   final Widget? me;
 
-  /// Makes the corner with [me] a button: the menu of the user's calendar.
   final VoidCallback? onOpenMine;
 
   @override
@@ -109,7 +85,6 @@ class FriendBar extends StatefulWidget {
 class _FriendBarState extends State<FriendBar> {
   final _scroll = ScrollController();
 
-  /// The corner with "Мои события": the arrow measures it to ride beside.
   final _corner = GlobalKey();
 
   @override
@@ -126,8 +101,6 @@ class _FriendBarState extends State<FriendBar> {
   @override
   Widget build(BuildContext context) {
     final friends = widget.friends;
-    // Rebuilt for the selection and when the swipe crosses the middle —
-    // never per frame. Per frame only the avatars move ([_FriendSlot]).
     return LayoutBuilder(
       builder: (context, constraints) => ListenableBuilder(
         listenable: widget.selection,
@@ -155,9 +128,6 @@ class _FriendBarState extends State<FriendBar> {
                       )
                     else
                       _row(friends, constraints.maxWidth, expanded),
-                    // The user's own mode says whose events these are, and
-                    // with nobody picked, that friends' calendar is a swipe
-                    // to the left.
                     if (widget.me case final me?)
                       _MineCorner(
                         boxKey: _corner,
@@ -225,8 +195,6 @@ class _FriendBarState extends State<FriendBar> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Not picked first, so the picked ones paint over them and
-                  // the stack hides friends sliding out under it.
                   for (final i in [
                     for (var k = selectedCount; k < ordered.length; k++) k,
                     for (var k = 0; k < selectedCount; k++) k,
@@ -276,8 +244,6 @@ class _FriendBarState extends State<FriendBar> {
   }
 }
 
-/// Rebuilds [builder] only when [mode] crosses [threshold], so whatever
-/// depends on "open or folded" does not rebuild on every frame of a swipe.
 class ModeGate extends StatefulWidget {
   const ModeGate({
     required this.mode,
@@ -328,7 +294,6 @@ class _ModeGateState extends State<ModeGate> {
   Widget build(BuildContext context) => widget.builder(context, _on);
 }
 
-/// Where the folded stack of selected friends sits, right-aligned.
 class _StackGeometry {
   _StackGeometry({required this.width, required int selected})
     : shown = selected.clamp(0, FriendBarStyle.stackMax),
@@ -342,7 +307,6 @@ class _StackGeometry {
 
   int get slots => shown + (extra > 0 ? 1 : 0);
 
-  /// Screen x of slot [k], counted from the left of the stack.
   double slotLeft(int k) =>
       width -
       FriendBarStyle.gutter -
@@ -352,19 +316,12 @@ class _StackGeometry {
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
-/// How far the row is scrolled. For a frame the controller can hold two
-/// positions — the row rebuilt under a new parent attaches before the old one detaches — and `offset` asserts there: the
-/// newest one is the row on screen.
 double _offsetOf(ScrollController scroll) =>
     scroll.hasClients ? scroll.positions.last.pixels : 0.0;
 
-/// How far the bar is folded into the stack: 0 open, 1 folded.
 double friendBarFold(double mode) =>
     Curves.easeInOutCubic.transform(1 - mode.clamp(0.0, 1.0));
 
-/// [friendBarFold] for the avatar [k] places from the left of the screen:
-/// it sets off [FriendBarStyle.lag]·k of the way later and catches up, so
-/// the row comes in as a staircase and leaves as one, the right first.
 double friendBarFoldAt(double mode, double k) {
   final lag =
       FriendBarStyle.lag * k.clamp(0.0, FriendBarStyle.lagMax.toDouble());
@@ -372,9 +329,6 @@ double friendBarFoldAt(double mode, double k) {
   return Curves.easeInOutCubic.transform(1 - open);
 }
 
-/// One friend. Its place in the row animates when the order changes; its
-/// way into the stack follows the mode directly. Per frame only a position
-/// and a scale change: no opacity, no relayout of the avatar.
 class _FriendSlot extends StatelessWidget {
   const _FriendSlot({
     required this.friend,
@@ -392,7 +346,6 @@ class _FriendSlot extends StatelessWidget {
   final FriendInfo friend;
   final int index;
 
-  /// Position in the folded stack; null for friends that are not picked.
   final int? stackIndex;
   final _StackGeometry geometry;
   final Listenable motion;
@@ -431,8 +384,6 @@ class _FriendSlot extends StatelessWidget {
             (rowLeft - FriendBarStyle.gutter - offset) / FriendBarStyle.step,
           );
           final stack = stackIndex;
-          // Picked friends glide into the stack; the rest always slide off
-          // to the right, under the stack (they are painted below it).
           final double foldedLeft;
           final double foldedScale;
           var hidden = false;
@@ -443,7 +394,6 @@ class _FriendSlot extends StatelessWidget {
                 offset;
             foldedScale = FriendBarStyle.stackAvatar / avatar;
           } else if (stack != null) {
-            // Beyond the stack: shrinks under "+N".
             foldedLeft =
                 geometry.slotLeft(FriendBarStyle.stackMax) -
                 (avatar - FriendBarStyle.stackAvatar) / 2 +
@@ -451,9 +401,6 @@ class _FriendSlot extends StatelessWidget {
             foldedScale = 0;
             hidden = true;
           } else {
-            // Past the right edge of the screen, keeping their order and
-            // their spacing: the row slides out, it does not fold to a
-            // point.
             foldedLeft =
                 offset +
                 geometry.width +
@@ -467,7 +414,6 @@ class _FriendSlot extends StatelessWidget {
             top: (FriendBarStyle.height - avatar) / 2,
             width: avatar,
             height: avatar,
-            // Off screen or under "+N": gone for VoiceOver too.
             child: ExcludeSemantics(
               excluding: hidden && fold > 0.5,
               child: Transform.scale(
@@ -482,7 +428,6 @@ class _FriendSlot extends StatelessWidget {
   }
 }
 
-/// The avatar, with a ring in a lighter shade of its colour when picked.
 class RingedAvatar extends StatelessWidget {
   const RingedAvatar({required this.friend, required this.selected, super.key});
 
@@ -559,7 +504,6 @@ class _MoreSlot extends StatelessWidget {
           top: (FriendBarStyle.height - FriendBarStyle.stackAvatar) / 2,
           width: FriendBarStyle.stackAvatar,
           height: FriendBarStyle.stackAvatar,
-          // Grows in as the bar folds; a scale, not a fade.
           child: Transform.scale(
             scale: friendBarFold(mode.value),
             child: child,
@@ -643,8 +587,6 @@ class _Placeholder extends StatelessWidget {
   }
 }
 
-/// No friends yet: the button stands where the row would and leaves the
-/// way the row does — to the right, after the finger, no fade.
 class _AddFriends extends StatelessWidget {
   const _AddFriends({
     required this.visible,
@@ -681,15 +623,9 @@ class _AddFriends extends StatelessWidget {
   }
 }
 
-/// How far in from the left the user's own mode's corner and hint are
-/// while the bar is [fold]ed: they fly in from beyond the left edge, the
-/// way the plane moves and the friends leave to the right — same curve,
-/// same distance.
 Offset _flyIn(double fold, double width) =>
     Offset(-(width + FriendBarStyle.flyOver) * (1 - fold), 0);
 
-/// In the user's own mode, bottom left: their avatar and "Мои события".
-/// With [onTap] it is a button that opens the menu of the user's calendar.
 class _MineCorner extends StatelessWidget {
   const _MineCorner({
     required this.boxKey,
@@ -753,10 +689,6 @@ class _MineCorner extends StatelessWidget {
   );
 }
 
-/// In the user's own mode with nobody picked, bottom right: a chevron to
-/// the left — friends' calendar is a swipe that way. A tap goes there too.
-/// Flying in, it rides beside [corner] and only on the second half of the
-/// way leaves it for its place; back, mirrored.
 class _SwipeHint extends StatelessWidget {
   const _SwipeHint({
     required this.corner,
@@ -772,12 +704,10 @@ class _SwipeHint extends StatelessWidget {
   final double width;
   final VoidCallback onTap;
 
-  /// How far the chevron stands from its place.
   double _shift(double t) {
     final fly = _flyIn(friendBarFold(t), width).dx;
     final box = corner?.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return fly;
-    // Beside the corner, against the chevron's own left at its place.
     final beside =
         FriendBarStyle.gutter + box.size.width + FriendBarStyle.followGap;
     final place = width - FriendBarStyle.gutter - FriendBarStyle.arrowSize;

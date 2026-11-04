@@ -10,13 +10,10 @@ import 'package:druna_app/features/event_page/time_wheel.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 
-/// Which value of the span is being changed.
 enum WhenField { startDate, startTime, endDate, endTime }
 
-/// The four ways the block is laid out (design-system §9.1).
 enum _Layout { severalDays, oneDay, allDay, allDaySeveral }
 
-/// Look of the block.
 abstract final class WhenStyle {
   static final time = onest(36, weight: FontWeight.w700, height: 1.1);
   static final date = onest(
@@ -34,22 +31,11 @@ abstract final class WhenStyle {
   static const pillFill = Color(0x33FFFFFF);
   static const pillPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 8);
 
-  /// A value's capsule while editing; viewing, the same room stays clear,
-  /// so the values sit where the capsules will be.
   static const capsule = EdgeInsets.symmetric(horizontal: 10, vertical: 3);
 
-  /// The narrowest the pill's slot may get before the whole row shrinks.
   static const pillMin = 104.0;
 }
 
-/// When the event runs: the times with their dates on the sides and how
-/// long in a pill between them. One day shows its date in full above the
-/// times; all day shows the dates and "весь день". Editing always shows
-/// both dates, as capsules with the times, and opens a wheel or a month
-/// under the row for the capsule tapped.
-///
-/// The side columns are as wide as their longest possible value and the
-/// pill sits in the middle, so nothing moves while the values change.
 class WhenBlock extends StatefulWidget {
   const WhenBlock({
     required this.span,
@@ -63,7 +49,6 @@ class WhenBlock extends StatefulWidget {
   final bool editing;
   final ValueChanged<EventSpan> onChanged;
 
-  /// Closes the open picker when the page is tapped elsewhere.
   final PickerScope? pickers;
 
   @override
@@ -71,7 +56,6 @@ class WhenBlock extends StatefulWidget {
 }
 
 class _WhenBlockState extends State<WhenBlock> {
-  /// Between a time's capsule and its date's while editing.
   static const _capsuleGap = 6.0;
 
   WhenField? _open;
@@ -141,7 +125,6 @@ class _WhenBlockState extends State<WhenBlock> {
             ),
           ),
         ),
-        // A different layout cross-fades in while the height follows.
         AnimatedSize(
           duration: EventPageStyle.motion,
           curve: Curves.easeOutCubic,
@@ -268,8 +251,6 @@ class _WhenBlockState extends State<WhenBlock> {
     }
   }
 
-  /// Fixed sides, the pill centred between them. When the screen is too
-  /// narrow (or the text too large) the whole row shrinks by one factor.
   Widget _sides(
     double side, {
     required Widget left,
@@ -305,7 +286,6 @@ class _WhenBlockState extends State<WhenBlock> {
     );
   }
 
-  /// The widest of [samples] with a capsule's room around it.
   double _sideWidth(TextScaler scaler, List<(String, TextStyle)> samples) {
     var widest = 0.0;
     for (final (text, style) in samples) {
@@ -321,8 +301,6 @@ class _WhenBlockState extends State<WhenBlock> {
     return widest.ceilToDouble() + WhenStyle.capsule.horizontal + 2;
   }
 
-  /// One value: plain text viewing, a capsule editing (white while its
-  /// picker is open). The capsule's room is kept either way.
   Widget _value(WhenField field, String text, TextStyle style) {
     final editing = widget.editing;
     final open = editing && _open == field;
@@ -394,8 +372,6 @@ class _WhenBlockState extends State<WhenBlock> {
         ),
       ),
     };
-    // Taps inside the picker stay there; elsewhere on the page they close
-    // it (PickerScope).
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {},
@@ -413,7 +389,6 @@ class _WhenBlockState extends State<WhenBlock> {
   }
 }
 
-/// How long, in a see-through capsule; it does not open anything.
 class _Pill extends StatelessWidget {
   const _Pill({required this.text});
 

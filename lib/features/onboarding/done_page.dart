@@ -4,11 +4,6 @@ import 'package:druna_app/features/onboarding/onboarding_style.dart';
 import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/material.dart';
 
-/// The last screen (screen 8, design-system §9.9): the avatar glides in from
-/// the profile step and grows ([ProfileAvatar], drawn by the flow); under
-/// it «ГЛЕБ, всё готово» and «пора найти время» rise in once it lands, in
-/// the steps' own type. The background runs once more and goes dark; the
-/// text leaves just before the app opens.
 class DonePage extends StatefulWidget {
   const DonePage({required this.controller, super.key});
 
@@ -41,12 +36,11 @@ class _DonePageState extends State<DonePage>
   Widget build(BuildContext context) {
     final total = OnboardingController.doneHold.inMilliseconds;
     final glide = ProfileAvatar.glide.inMilliseconds;
-    // After the avatar lands; out over the last 450 ms.
     final appear = CurvedAnimation(
       parent: _play,
       curve: Interval(
-        (glide - 150) / total,
-        (glide + 450) / total,
+        glide / total,
+        (glide + 600) / total,
         curve: Curves.easeOutCubic,
       ),
     );

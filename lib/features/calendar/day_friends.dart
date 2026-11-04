@@ -8,17 +8,8 @@ import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/week_bands.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 
-/// Where things sit in the open day once friends are in it.
-///
-/// Friends' calendar (`t = 1`): the top row is the user's — their avatar
-/// and a band of their busy time — then a divider, then one row per friend,
-/// level with the friend's avatar in the column on the left. Rows scroll
-/// together with the column.
-///
-/// The user's calendar (`t = 0`): the user's events take their lanes from
-/// the top, and the selected friends fold into a stack at the bottom left
-/// next to a band of their busy time.
 class DayFriendsGeometry {
   const DayFriendsGeometry({
     required this.height,
@@ -27,34 +18,27 @@ class DayFriendsGeometry {
     required this.stackSlots,
   });
 
-  /// Height of the timeline.
   final double height;
 
-  /// Room left free at the bottom: the home indicator and a margin.
   final double bottomInset;
 
-  /// Friends in the column; the timeline has rows for the selected ones.
   final int rows;
 
-  /// Avatars in the folded stack, "+N" included.
   final int stackSlots;
 
   static const avatar = 48.0;
   static const gutter = 14.0;
   static const columnWidth = gutter * 2 + avatar;
 
-  /// A row's bar is as tall as the avatar beside it, the user's row too.
   static const rowHeight = avatar;
   static const rowStep = rowHeight + timelineEventGap;
   static const myRowTop = timelineEventTop;
   static const dividerY = myRowTop + rowHeight + 8;
   static const friendsTop = dividerY + 9;
 
-  /// The folded stack: full-size avatars overlapping by this step.
   static const stackStep = 29.0;
   static const stackMax = 3;
 
-  /// From the top of a row's bar to its avatar.
   static const avatarInset = (rowHeight - avatar) / 2;
 
   double rowTop(int row) => friendsTop + row * rowStep;
@@ -68,31 +52,17 @@ class DayFriendsGeometry {
 
   double stackTop(int slot) => bandTop + slot * stackStep;
 
-  /// Where the avatar of the friend picked [stack]-th lands in the folded
-  /// stack; those past [stackMax] go under "+N".
   double stackTarget(int stack) =>
       stackTop(stack < stackMax ? stack : stackMax);
 
-  /// How softly an avatar settles into its place in the stack, in points.
   static const _settle = 10.0;
 
   double _openTop(double row, double offset) =>
       rowTop(0) + row * rowStep + avatarInset - offset;
 
-  /// How far the picked friends travel together while folding: the first
-  /// one's way to the stack, and a little more so it settles there.
   double _groupShift(double offset) =>
       stackTop(0) - _openTop(0, offset) + 6 * _settle;
 
-  /// Top of the picked friend's avatar on row [row] scrolled by [offset],
-  /// folded by [fold] (0 on its row, 1 in the stack at [stack]). The column
-  /// and friends' bars both move by it, so a bar never leaves its avatar's
-  /// level.
-  ///
-  /// All slide down together, as fast as the finger; the lowest reaches the
-  /// stack first and settles, the ones above pile onto it, so the gaps close
-  /// towards the end, like stacked notifications on iOS. Back, they slide
-  /// out of the stack the top one first.
   double avatarTop({
     required double row,
     required int stack,
@@ -105,14 +75,11 @@ class DayFriendsGeometry {
     if (fold >= 1) return target;
     if (open >= target) return open + (target - open) * fold;
     final free = open + fold * _groupShift(offset);
-    // A smooth min(free, target): free far above, target once past it.
     final x = (target - free) / _settle;
     if (x > 30) return free;
     return target - _settle * math.log(1 + math.exp(x));
   }
 
-  /// Top of a friend who is not picked: slides down with the others and on
-  /// past the bottom of the screen, keeping their order.
   double hiddenTop({
     required double row,
     required double offset,
@@ -123,7 +90,6 @@ class DayFriendsGeometry {
     return open + fold * math.max(_groupShift(offset), away);
   }
 
-  /// How far the rows scroll: until the last one is above [bandBottom].
   double get maxOffset => math.max(0, rowTop(rows) - bandBottom);
 
   @override
@@ -138,7 +104,6 @@ class DayFriendsGeometry {
   int get hashCode => Object.hash(height, bottomInset, rows, stackSlots);
 }
 
-/// Friends' busy time as the open day needs it.
 class DayFriendsView {
   const DayFriendsView({
     required this.events,
@@ -147,18 +112,14 @@ class DayFriendsView {
     required this.offset,
   });
 
-  /// Busy time of the selected friends, each event with its owner.
   final CalendarEventIndex events;
 
-  /// Row of each selected friend, by id.
   final Map<int, int> rows;
   final DayFriendsGeometry geometry;
 
-  /// How far the rows are scrolled up.
   final ValueListenable<double> offset;
 }
 
-/// One stretch of busy time within a day, in hours from its midnight.
 @immutable
 class BusySpan {
   const BusySpan(
@@ -188,9 +149,6 @@ class BusySpan {
   String toString() => 'BusySpan($start–$end)';
 }
 
-/// The busy time of [events] on [day]: overlapping or touching events make
-/// one span. A friend is either busy or not; how many things they do at
-/// once is not shown.
 List<BusySpan> busySpansOnDay(Iterable<CalendarEvent> events, DateTime day) {
   final slices = [for (final event in events) ?sliceOnDay(event, day)]
     ..sort((a, b) => a.startHour.compareTo(b.startHour));
@@ -220,9 +178,6 @@ List<BusySpan> busySpansOnDay(Iterable<CalendarEvent> events, DateTime day) {
   return spans;
 }
 
-/// Friends' bars of one day, each on its friend's row. Picking the user's
-/// calendar folds them down into the band at the bottom; only a transform
-/// changes per frame, as in the month.
 class DayFriendLayer extends StatelessWidget {
   const DayFriendLayer({
     required this.day,
@@ -250,7 +205,7 @@ class DayFriendLayer extends StatelessWidget {
     final children = <Widget>[];
     for (final MapEntry(key: owner, value: events) in byOwner.entries) {
       final row = view.rows[owner]!;
-      final color = events.first.color ?? calendarEventColor;
+      final color = events.first.color ?? defaultOwnColor;
       final homeTop = geometry.rowTop(row);
       for (final span in busySpansOnDay(events, day)) {
         children.add(
@@ -272,15 +227,12 @@ class DayFriendLayer extends StatelessWidget {
                       fold: fold,
                     ) -
                     DayFriendsGeometry.avatarInset;
-                // In the stack the bars give way to the band of busy time
-                // growing under them: a fade of the colour, not a layer.
                 final alpha = 1 - _smoothStep(0.8, 1, fold);
                 if (alpha <= 0) return const SizedBox.shrink();
                 return Transform.translate(
                   offset: Offset(0, top - homeTop),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      // Untitled busy time: the light tone, as in the month.
                       color: gridTone(color).ink.withValues(alpha: alpha),
                       borderRadius: BorderRadius.horizontal(
                         left: span.continuesBefore
@@ -300,7 +252,6 @@ class DayFriendLayer extends StatelessWidget {
         );
       }
     }
-    // Rows scroll under the user's row: nothing shows above the divider.
     return ClipRect(
       clipper: const _BelowClipper(DayFriendsGeometry.friendsTop),
       child: Stack(clipBehavior: Clip.none, children: children),
@@ -308,9 +259,6 @@ class DayFriendLayer extends StatelessWidget {
   }
 }
 
-/// How far the open day's column and friends' bars are folded into the
-/// stack: 0 on their rows, 1 in the stack. Straight from the mode, over the
-/// whole pull, so they follow the finger.
 double dayFriendsFold(double mode) => (1 - mode).clamp(0.0, 1.0);
 
 class _BelowClipper extends CustomClipper<Rect> {
@@ -326,10 +274,6 @@ class _BelowClipper extends CustomClipper<Rect> {
       oldClipper.top != top;
 }
 
-/// The two bands of one day for the layer that is folded away: the user's
-/// busy time along the top row while friends are shown, friends' busy time
-/// at the bottom while the user's events are. Each grows out of its line
-/// as its chips fold into it (see the month's band, design-system §9.4).
 class DayBandsPainter extends CustomPainter {
   DayBandsPainter({
     required this.mine,
@@ -340,14 +284,11 @@ class DayBandsPainter extends CustomPainter {
     required this.mode,
   }) : super(repaint: mode);
 
-  /// The user's busy time, in pixels from the day's midnight.
   final List<WeekBand> mine;
   final List<WeekBand> friends;
   final Color ownColor;
   final DayFriendsGeometry geometry;
 
-  /// A band reaching an end of the day goes on into the next one: that end
-  /// stays square.
   final double dayWidth;
   final ValueListenable<double> mode;
 
@@ -361,7 +302,6 @@ class DayBandsPainter extends CustomPainter {
     _paintFriends(canvas, dayFriendsFold(t));
   }
 
-  /// From the top line of the user's row down, fading towards its bottom.
   void _paintMine(Canvas canvas, double away) {
     if (away <= 0 || mine.isEmpty) return;
     final h =
@@ -383,12 +323,8 @@ class DayBandsPainter extends CustomPainter {
     }
   }
 
-  /// The colours of the friends along it, growing up from the bottom line
-  /// next to the stack: cut clean at the line and fading upwards, like the
-  /// month's band. The rounded ends are a clip, not a layer.
   void _paintFriends(Canvas canvas, double away) {
     if (away <= 0 || friends.isEmpty || geometry.bandHeight <= 0) return;
-    // Grows as the bars settle into the stack ([DayFriendLayer]).
     final grow = Curves.easeOutCubic.transform(_smooth(0.6, 1, away));
     final opacity = _smooth(0.6, 0.9, away);
     final h = geometry.bandHeight * grow;
@@ -432,7 +368,6 @@ class DayBandsPainter extends CustomPainter {
       !identical(old.friends, friends);
 }
 
-/// The bands of one day, built from its events and painted under them.
 class DayBands extends StatelessWidget {
   const DayBands({
     required this.day,
@@ -469,7 +404,7 @@ class DayBands extends StatelessWidget {
       friendChips.add(
         chipOf(
           BusySpan(slice.startHour, slice.endHour),
-          event.color ?? calendarEventColor,
+          event.color ?? defaultOwnColor,
         ),
       );
     }
@@ -487,9 +422,6 @@ class DayBands extends StatelessWidget {
   }
 }
 
-/// Titles on the user's band while friends are shown: the first event of
-/// each stretch and how many more it holds ("druna +1"), sticking to the
-/// left edge like the titles of the bars. In the list's viewport.
 class MyBandTitles extends StatelessWidget {
   const MyBandTitles({
     required this.events,
@@ -506,14 +438,12 @@ class MyBandTitles extends StatelessWidget {
   final double pixelsPerHour;
   final double viewportWidth;
 
-  /// The friends column covers this much of the left edge.
   final double leftInset;
   final ValueListenable<double> mode;
 
   @override
   Widget build(BuildContext context) {
     final own = OwnEventColor.of(context);
-    // Light on the band of the user's colour: the grid's light tone.
     final ink = gridTone(own).ink;
     final runs = myBandRuns(events);
     final children = <Widget>[];
@@ -569,7 +499,6 @@ class MyBandTitles extends StatelessWidget {
   }
 }
 
-/// A stretch of the user's busy time: events that overlap or touch.
 typedef MyBandRun = ({
   DateTime start,
   DateTime end,
@@ -577,8 +506,6 @@ typedef MyBandRun = ({
   int more,
 });
 
-/// The user's [events] joined into stretches of busy time, the way the band
-/// draws them.
 List<MyBandRun> myBandRuns(List<CalendarEvent> events) {
   final sorted = [...events]
     ..sort((a, b) => timelineSpan(a).start.compareTo(timelineSpan(b).start));

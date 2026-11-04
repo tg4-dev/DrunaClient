@@ -73,6 +73,15 @@ void main() {
     expect(nameError('Аня'), isNull);
   });
 
+  test('name: no emoji, letters counted as people see them', () {
+    for (final name in ['Глеб 😀', '👩🏽‍💻 Аня', 'Аня 🇷🇺', 'Аня ❤️']) {
+      expect(nameError(name), 'без эмодзи', reason: name);
+    }
+    expect(nameError('Анна-Мария'), isNull);
+    expect(nameError('Zoë'), isNull);
+    expect(nameError('й' * 32), isNull);
+  });
+
   test('names are shown in capitals, the value stays as typed', () {
     expect(shownName(' Глеб '), 'ГЛЕБ');
     expect(upperSameLength('straße'), 'STRAßE');

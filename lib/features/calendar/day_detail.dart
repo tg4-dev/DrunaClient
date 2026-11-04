@@ -11,20 +11,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:druna_app/shared/ui/edge_blur.dart';
 
-/// A vertical pull of this many points takes the mode all the way across.
 const dayModePullRange = 280.0;
 
-/// What a vertical drag on the open day does, decided as it starts.
 enum _Drag { rows, mode, ignored }
 
-/// The open day with friends: the timeline under a friends column on the
-/// left (design-system §9.6).
-///
-/// In friends' calendar a vertical drag scrolls the rows and the column
-/// together; pulled down past the top it switches to the user's calendar,
-/// like pull-to-refresh. In the user's calendar a drag up switches back.
-/// A drag that starts on the user's band switches at once, and a tap on
-/// either band switches too.
 class DayDetail extends StatefulWidget {
   const DayDetail({
     required this.day,
@@ -57,34 +47,25 @@ class DayDetail extends StatefulWidget {
   final void Function(DateTime start, DateTime end)? onCreateRange;
   final void Function(CalendarEvent event, DateTime start)? onMoveEvent;
 
-  /// Everyone in the column; null while loading.
   final List<FriendInfo>? friends;
   final FriendSelection selection;
 
-  /// Busy time of the selected friends, each event with its owner.
   final List<CalendarEvent> friendEvents;
 
-  /// Shared with the month: 0 the user's calendar, 1 friends'.
   final ValueListenable<double> mode;
 
-  /// The user's avatar for the top of the column.
   final Widget me;
   final VoidCallback onShowMine;
   final VoidCallback onShowFriends;
 
-  /// The mode under the finger, while it pulls.
   final ValueChanged<double> onModeDrag;
 
-  /// The pull let go, with its speed in modes per second.
   final ValueChanged<double> onModeSettle;
 
-  /// Colours of an invite drawn in friends' rows ([DayTimeline]).
   final List<Color>? inviteColors;
 
-  /// The people of an invite being drawn, the user first.
   final List<FriendInfo>? invitePeople;
 
-  /// Events with other people: cells behind the rows ([DaySharedLayer]).
   final List<CalendarEvent> sharedEvents;
 
   @override
@@ -93,11 +74,9 @@ class DayDetail extends StatefulWidget {
 
 class _DayDetailState extends State<DayDetail>
     with SingleTickerProviderStateMixin {
-  /// How far friends' rows are scrolled up.
   late final AnimationController _rows = AnimationController.unbounded(
     vsync: this,
   )..addListener(_keepRowsInside);
-  // One friend's events sharing a day are one, as in the month.
   late CalendarEventIndex _friendIndex = CalendarEventIndex(
     mergeBusyByDay(widget.friendEvents),
   );
@@ -105,7 +84,6 @@ class _DayDetailState extends State<DayDetail>
   var _drag = _Drag.ignored;
   final _pointers = <int>{};
 
-  /// Whether the drag that switches the mode began in friends' calendar.
   var _pullFromFriends = false;
 
   @override
@@ -124,7 +102,6 @@ class _DayDetailState extends State<DayDetail>
 
   bool get _friendsShown => widget.mode.value > calendarModeHalfway;
 
-  /// A fling stops at either end instead of running past it.
   void _keepRowsInside() {
     final value = _rows.value;
     final inside = value.clamp(0.0, _maxOffset);
@@ -143,8 +120,6 @@ class _DayDetailState extends State<DayDetail>
     final y = details.localPosition.dy;
     final onMyRow =
         y >= DayFriendsGeometry.myRowTop && y < DayFriendsGeometry.friendsTop;
-    // In the user's calendar there is nothing to scroll: any drag is a
-    // pull. In friends' it scrolls the rows, unless it starts on the band.
     _drag = !_pullFromFriends || onMyRow ? _Drag.mode : _Drag.rows;
   }
 
@@ -155,7 +130,6 @@ class _DayDetailState extends State<DayDetail>
       case _Drag.ignored:
         return;
       case _Drag.rows:
-        // Past the top, the rest of a pull down turns into the switch.
         final past = dy - _rows.value;
         _rows.value = (_rows.value - dy).clamp(0.0, _maxOffset);
         if (dy > 0 && past > 0) {
@@ -219,7 +193,6 @@ class _DayDetailState extends State<DayDetail>
         );
         _maxOffset = geometry.maxOffset;
         if (_rows.value > _maxOffset) {
-          // Fewer friends or a shorter screen: settle inside after the frame.
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _keepRowsInside();
           });
@@ -251,8 +224,6 @@ class _DayDetailState extends State<DayDetail>
             },
             child: Stack(
               children: [
-                // Under the friends column the timeline blurs towards the
-                // screen edge (`progressive_blur` blurs its child).
                 Positioned.fill(
                   child: EdgeBlur(
                     sigma: FriendColumnStyle.blurSigma,
@@ -308,8 +279,6 @@ class _DayDetailState extends State<DayDetail>
     );
   }
 
-  /// A tap on the band of the folded layer brings it back. Translucent: a
-  /// long press there still draws a new event on the timeline.
   List<Widget> _bandTaps(DayFriendsGeometry geometry) => [
     Positioned(
       top: DayFriendsGeometry.myRowTop,

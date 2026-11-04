@@ -13,17 +13,13 @@ import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-/// Measurements of the friends page. Colours and block shape come from
-/// [SheetStyle], so the page reads as the same family as the event sheet.
 abstract final class FriendsStyle {
   static const avatar = 48.0;
   static const searchDebounce = Duration(milliseconds: 350);
 
-  /// A row folds away this fast after ✓, ✕ or delete.
   static const leave = Duration(milliseconds: 180);
   static const fade = Duration(milliseconds: 140);
 
-  /// Bold, like every name in the app (design-system §3).
   static final name = nameStyle(
     const TextStyle(color: Colors.white, fontSize: 17),
   );
@@ -35,14 +31,11 @@ abstract final class FriendsStyle {
   );
 }
 
-/// "Друзья": the page left of the month. Incoming requests with ✓ and ✕,
-/// the friends list, and search by username to send a request.
 class FriendsPage extends StatefulWidget {
   const FriendsPage({required this.source, this.onChanged, super.key});
 
   final FriendsSource source;
 
-  /// After a friend was added or removed, so the friend bar can reload.
   final VoidCallback? onChanged;
 
   @override
@@ -62,10 +55,8 @@ class _FriendsPageState extends State<FriendsPage> {
   List<FriendInfo>? _results;
   var _searching = false;
 
-  /// Usernames with a request in flight: their buttons are disabled.
   final _busy = <String>{};
 
-  /// Rows playing their exit, as `section:username`.
   final _gone = <String>{};
 
   @override
@@ -85,8 +76,6 @@ class _FriendsPageState extends State<FriendsPage> {
       ? Duration.zero
       : FriendsStyle.leave;
 
-  /// With lists on screen a failed load keeps them and shows a snackbar;
-  /// without them the page shows the error with a retry.
   Future<void> _load() async {
     setState(() => _error = null);
     try {
@@ -146,8 +135,6 @@ class _FriendsPageState extends State<FriendsPage> {
     _onQueryChanged('');
   }
 
-  /// Runs [action] for [person]. On success the row in [leaving] (if any)
-  /// plays its exit, then the lists reload. Nothing changes on failure.
   Future<void> _act(
     FriendInfo person,
     Future<void> Function(String username) action, {
@@ -239,7 +226,6 @@ class _FriendsPageState extends State<FriendsPage> {
               const SizedBox(height: 16),
               AnimatedSwitcher(
                 duration: FriendsStyle.fade,
-                // Passthrough: the blocks take the full width of the list.
                 layoutBuilder: (current, previous) => Stack(
                   fit: StackFit.passthrough,
                   alignment: Alignment.topCenter,
@@ -366,7 +352,6 @@ class _FriendsPageState extends State<FriendsPage> {
 String _displayName(FriendInfo person) =>
     person.name.trim().isEmpty ? person.username : shownName(person.name);
 
-/// "1 друг", "3 друга", "11 друзей".
 String friendsCountLabel(int count) {
   final mod10 = count % 10;
   final mod100 = count % 100;
@@ -414,8 +399,6 @@ class _SearchField extends StatelessWidget {
               textInputAction: TextInputAction.search,
               cursorColor: SheetStyle.accent,
               style: PageStyle.body,
-              // The legacy app theme fills and outlines every field; the block
-              // around it is the field here.
               decoration: const InputDecoration(
                 hintText: 'Найти по нику',
                 hintStyle: TextStyle(color: SheetStyle.muted, fontSize: 17),
@@ -611,7 +594,6 @@ class _Status extends StatelessWidget {
   );
 }
 
-/// Folds away and fades when [gone]; nothing on the page vanishes at once.
 class _Collapsible extends StatelessWidget {
   const _Collapsible({
     required this.gone,
@@ -639,7 +621,6 @@ class _Collapsible extends StatelessWidget {
   }
 }
 
-/// Fades a row in the first time it is built.
 class _FadeIn extends StatelessWidget {
   const _FadeIn({required this.child});
 

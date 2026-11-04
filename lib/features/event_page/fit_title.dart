@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// How far the title may give way before it breaks into two lines
-/// (design-system §9.1), in this order: tracking, then a horizontal squeeze,
-/// then the size.
 const titleMinTrackingEm = -0.04;
 const titleMinScaleX = 0.8;
 const titleMinSizeShare = 0.8;
 
-/// [style] at [size] with [spacing] between letters. Tighter letters get
-/// wider gaps between words, so the words never run together.
 TextStyle titleStyleAt(TextStyle style, double size, double spacing) =>
     style.copyWith(
       fontSize: size,
@@ -17,10 +12,8 @@ TextStyle titleStyleAt(TextStyle style, double size, double spacing) =>
       wordSpacing: spacing < 0 ? -spacing * 3 : 0,
     );
 
-/// Lines the title may take on view before it wraps freely.
 const titleMaxLines = 4;
 
-/// The title's lines and how they are set.
 @immutable
 class TitleFit {
   const TitleFit({
@@ -36,25 +29,17 @@ class TitleFit {
   final double fontSize;
   final double letterSpacing;
 
-  /// Horizontal squeeze, 1 for none.
   final double scaleX;
   final double lineHeight;
 
-  /// Even squeezed to the limit, a line is wider than the space: it ends in
-  /// an ellipsis.
   final bool overflows;
 }
 
-/// Fits [text] (set in capitals by the caller) into [maxWidth]. Width is
-/// linear in tracking and in size, so each step is solved from two
-/// measurements instead of a search. Without [wrap] it never breaks the
-/// line: past the limits the text stays at the tightest setting.
 TitleFit fitTitle(
   String text,
   TextStyle style,
   double maxWidth, {
   TextScaler textScaler = TextScaler.noScaling,
-  bool wrap = true,
 }) {
   final base = style.fontSize!;
   double width(String line, double size, double spacing) =>
@@ -116,10 +101,7 @@ TitleFit fitTitle(
   final trimmed = text.trim();
   final one = single([trimmed], trimmed);
   if (one != null) return one;
-  if (!wrap) return _tightest([trimmed], base, textScaler, style);
 
-  // More lines, split by words where the widest line is narrowest; each
-  // count tries the same order of giving way for that line.
   final words = trimmed.split(RegExp(r'\s+'));
   final widths = {for (final word in words) word: width(word, base, 0)};
   final space = width('Ж Ж', base, 0) - 2 * width('Ж', base, 0);
@@ -135,8 +117,6 @@ TitleFit fitTitle(
     final fit = single(lines, widest);
     if (fit != null) return fit;
   }
-  // Nothing fits even squeezed: the smallest setting, wrapping freely —
-  // never cut with an ellipsis: the whole title stays readable.
   final tight = _tightest([trimmed], base, textScaler, style);
   return TitleFit(
     lines: tight.lines,
@@ -148,8 +128,6 @@ TitleFit fitTitle(
   );
 }
 
-/// [words] in [count] lines, in order, so that the widest line is as narrow
-/// as it can be. Titles are short: every split is tried.
 List<String> _balanced(
   List<String> words,
   int count,
@@ -229,15 +207,6 @@ TitleFit _tightest(
   return measured;
 }
 
-/// The event title in capitals, as large as fits on one line
-/// ([fitTitle]); fitted again only when the text or the width changes.
-///
-/// With a [controller] it is also the title's editor, and it looks exactly
-/// the same: the very lines of the title, with a blinking caret after the
-/// text. The typing goes to an invisible field laid over them — a visible
-/// text field lays the text out its own way (on iOS it scrolled a long
-/// title up out of its frame). The caret stays at the end: the title can
-/// be typed and erased, not edited in the middle.
 class FitTitle extends StatefulWidget {
   const FitTitle({
     required this.text,
@@ -253,14 +222,10 @@ class FitTitle extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
 
-  /// Shown, and fitted, while the editor is empty.
   final String placeholder;
 
-  /// Room the caret needs beside the text in the editor.
   static const caretRoom = 8.0;
 
-  /// Off in widget tests (`test/flutter_test_config.dart`): a blinking
-  /// caret never lets frames settle.
   static bool blink = true;
 
   @override
@@ -291,8 +256,6 @@ class _FitTitleState extends State<FitTitle> {
     final controller = widget.controller;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Fitted with the caret's room in viewing too, so switching into
-        // editing changes nothing.
         final width = constraints.maxWidth;
         final room = width - FitTitle.caretRoom;
         if (controller == null) {
@@ -334,8 +297,6 @@ class _FitTitleState extends State<FitTitle> {
   TextStyle _style(TitleFit fit) =>
       titleStyleAt(widget.style, fit.fontSize, fit.letterSpacing);
 
-  /// The title's lines; editing, with the caret at the end of the text
-  /// (before the placeholder while empty) and the placeholder faint.
   Widget _lines(
     TitleFit fit,
     double width, {
@@ -381,8 +342,6 @@ class _FitTitleState extends State<FitTitle> {
     );
   }
 
-  /// One line [width] wide, its content laid out [TitleFit.scaleX] times
-  /// wider and squeezed back.
   Widget _line(TitleFit fit, double width, Widget child) => SizedBox(
     width: width,
     height: fit.lineHeight,
@@ -393,8 +352,6 @@ class _FitTitleState extends State<FitTitle> {
     ),
   );
 
-  /// The invisible field that takes the typing and the taps; it fills the
-  /// title, so a tap anywhere on it brings the keyboard.
   Widget _input() {
     return Opacity(
       opacity: 0,
@@ -423,7 +380,6 @@ class _FitTitleState extends State<FitTitle> {
   }
 }
 
-/// The editor's caret: white, blinking like the system one.
 class _Caret extends StatefulWidget {
   const _Caret({required this.height});
 

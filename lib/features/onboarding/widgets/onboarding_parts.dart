@@ -7,9 +7,6 @@ import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-/// The onboarding's background: the event page's gradient in black and
-/// the brand colour, turning slowly, faster for a moment on every step
-/// ([surge]). [dark] fades it all to black (the last screen).
 class OnboardingBackground extends StatelessWidget {
   const OnboardingBackground({
     this.surge = 0,
@@ -21,12 +18,8 @@ class OnboardingBackground extends StatelessWidget {
   final int surge;
   final bool dark;
 
-  /// The colour with the black: the brand's, from the profile step the
-  /// user's own. A change flows in.
   final Color accent;
 
-  /// The last screen: the gradient runs once more (the step's surge) for
-  /// the first third, then goes dark.
   static const darken = Duration(milliseconds: 3000);
 
   @override
@@ -50,10 +43,6 @@ class OnboardingBackground extends StatelessWidget {
   );
 }
 
-/// ← and → under the field (screen 9). Back is white with a dark arrow.
-/// Forward is white when the step is ready ([lit]) and translucent
-/// otherwise, but still pressable: a press checks the field and says what
-/// is wrong. While a request is out it spins.
 class StepArrows extends StatelessWidget {
   const StepArrows({
     required this.onBack,
@@ -111,9 +100,6 @@ class StepArrows extends StatelessWidget {
   }
 }
 
-/// The red line over the field; it fades in and, with the field under it,
-/// shakes on every new error ([count]). The field stays the same widget,
-/// so it keeps its focus and the keyboard.
 class ErrorShake extends StatefulWidget {
   const ErrorShake({
     required this.error,
@@ -159,7 +145,6 @@ class _ErrorShakeState extends State<ErrorShake>
     builder: (context, child) {
       final t = _shake.value;
       return Transform.translate(
-        // Three swings that die away.
         offset: Offset(8 * math.sin(t * 3 * 2 * math.pi) * (1 - t), 0),
         child: child,
       );
@@ -192,7 +177,6 @@ class _ErrorShakeState extends State<ErrorShake>
   );
 }
 
-/// The title of a step and the line under it.
 class StepTitle extends StatelessWidget {
   const StepTitle({required this.title, this.subtitle, super.key});
 

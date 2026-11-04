@@ -1,22 +1,12 @@
 import 'package:druna_app/shared/ui/oklab.dart';
 import 'package:flutter/material.dart';
 
-/// How a person's avatar looks (design-system §9.11, docs/avatar.md): a
-/// circle filled with a 45° gradient of their colour and the first letter
-/// of their name in their font, centred by eye.
-
-/// The fill: the colour at the top left, a darker shade of it at the
-/// bottom right.
 LinearGradient avatarGradient(Color base) => LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
   colors: [base, avatarShade(base)],
 );
 
-/// [base] darker, the same hue: its OKLab lightness × [avatarShadeFactor].
-/// A darker colour holds less chroma; where it would leave sRGB, the chroma
-/// shrinks just enough to stay inside — clipping would bend the hue
-/// (orange turned red, yellow olive).
 Color avatarShade(Color base) {
   final (l, a, b) = oklab(base);
   final dark = l * avatarShadeFactor;
@@ -36,9 +26,6 @@ Color avatarShade(Color base) {
 
 const avatarShadeFactor = 0.72;
 
-/// One font of the avatar letter, with everything that fits it to the
-/// circle. Tune the numbers on the «Подгонка аватаров» screen (settings →
-/// demo data) and paste what it copies; docs/avatar.md has the details.
 @immutable
 class AvatarFont {
   const AvatarFont({
@@ -56,35 +43,25 @@ class AvatarFont {
     this.descender = 0.22,
   }) : ascender = ascender ?? capHeight * 1.04;
 
-  /// Stored as the user's choice: never change it for a font in use.
   final String id;
 
-  /// Read by VoiceOver.
   final String label;
   final String family;
 
-  /// Through the `wght` axis of a variable font.
   final FontWeight weight;
 
-  /// The letter in capitals, or small.
   final bool uppercase;
 
-  /// The font size as a share of the circle's diameter.
   final double scale;
 
-  /// A nudge by eye, as a share of the diameter: + right, + down.
   final double dx;
   final double dy;
 
-  /// Shares of the em, from the font's OS/2 table: the height of a capital,
-  /// of a small letter without ascender, of an ascender, and the depth of a
-  /// descender. The letter's ink is centred on them.
   final double capHeight;
   final double xHeight;
   final double ascender;
   final double descender;
 
-  /// [letter] in this font's case.
   String cased(String letter) =>
       uppercase ? letter.toUpperCase() : letter.toLowerCase();
 
@@ -112,8 +89,6 @@ class AvatarFont {
     descender: descender,
   );
 
-  /// The constructor call that recreates this font, for pasting into
-  /// [avatarFonts] after tuning.
   String toCode() {
     String n(double v) => v.toStringAsFixed(3);
     return 'AvatarFont(\n'
@@ -133,8 +108,6 @@ class AvatarFont {
   }
 }
 
-/// The fonts to choose from, in the picker's order. Add at the end; the
-/// user's choice is kept by [AvatarFont.id].
 const avatarFonts = <AvatarFont>[
   defaultAvatarFont,
   AvatarFont(
@@ -186,7 +159,6 @@ const avatarFonts = <AvatarFont>[
   ),
 ];
 
-/// The default, and what friends get until the server tells their choice.
 const defaultAvatarFont = AvatarFont(
   id: 'onest',
   label: 'Гротеск',
@@ -202,18 +174,15 @@ AvatarFont avatarFontById(String? id) => avatarFonts.firstWhere(
   orElse: () => defaultAvatarFont,
 );
 
-/// Small letters that rise to the capitals' height.
 const _ascenders =
     'bdfhklt'
     'бё';
 
-/// Letters that hang below the baseline.
 const _descenders =
     'gjpqy'
     'друфцщ'
     'ДЦЩ';
 
-/// Where [letter]'s ink lies, in ems above (+) and below (−) the baseline.
 (double top, double bottom) inkBox(AvatarFont font, String letter) {
   final small = letter != letter.toUpperCase();
   final top = !small
@@ -225,7 +194,6 @@ const _descenders =
   return (top, bottom);
 }
 
-/// [letter] in [font], its ink centred in a [size] box (the circle).
 class AvatarLetter extends StatelessWidget {
   const AvatarLetter({
     required this.letter,
@@ -236,13 +204,11 @@ class AvatarLetter extends StatelessWidget {
     super.key,
   });
 
-  /// Already in the font's case ([AvatarFont.cased]).
   final String letter;
   final AvatarFont font;
   final double size;
   final Color color;
 
-  /// The tuning screen: the centre lines and the ink's frame.
   final bool guides;
 
   @override
@@ -273,7 +239,6 @@ class _LetterPainter extends CustomPainter {
       TextBaseline.alphabetic,
     );
     final (top, bottom) = inkBox(font, letter);
-    // The baseline goes where the ink's middle meets the centre.
     final baselineY = d / 2 + (top + bottom) / 2 * fontSize + font.dy * d;
     final offset = Offset(
       (d - painter.width) / 2 + font.dx * d,

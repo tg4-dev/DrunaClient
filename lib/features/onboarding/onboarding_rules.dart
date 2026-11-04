@@ -1,8 +1,7 @@
-/// The checks of the onboarding's fields (design-system §9.9). Each returns
-/// the red line's text, or null when the value is fine.
 library;
 
-/// The email as it is sent: no spaces around, the domain in lower case.
+import 'package:flutter/widgets.dart' show StringCharacters;
+
 String normalizeEmail(String raw) {
   final email = raw.trim();
   final at = email.lastIndexOf('@');
@@ -15,8 +14,6 @@ final _email = RegExp(
   r'(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$',
 );
 
-/// Something like an email: an "@" with a dot after it. Enough to light
-/// the arrow; [emailError] decides on submit.
 bool looksLikeEmail(String raw) {
   final email = raw.trim();
   final at = email.indexOf('@');
@@ -37,7 +34,6 @@ String? emailError(String raw) {
   return valid ? null : 'неверный формат';
 }
 
-/// Common mail domains, for [emailSuggestion].
 const _domains = [
   'gmail.com',
   'mail.ru',
@@ -55,8 +51,6 @@ const _domains = [
   'proton.me',
 ];
 
-/// The same email with a mistyped well-known domain fixed — "gmial.com"
-/// → "gmail.com" — or null when the domain is fine or unlike any.
 String? emailSuggestion(String raw) {
   final email = normalizeEmail(raw);
   final at = email.lastIndexOf('@');
@@ -72,12 +66,10 @@ String? emailSuggestion(String raw) {
       bestDistance = distance;
     }
   }
-  // One letter off for short domains, two for long ones.
   if (best == null || bestDistance > (best.length > 8 ? 2 : 1)) return null;
   return '${email.substring(0, at)}@$best';
 }
 
-/// Damerau–Levenshtein distance (with swaps of neighbours).
 int _distance(String a, String b) {
   final d = List.generate(a.length + 1, (i) => List.filled(b.length + 1, 0));
   for (var i = 0; i <= a.length; i++) {
@@ -103,7 +95,6 @@ int _distance(String a, String b) {
   return d[a.length][b.length];
 }
 
-/// The server's minimum.
 const minPassword = 8;
 
 String? passwordError(String password, String repeat) {
@@ -115,8 +106,6 @@ String? passwordError(String password, String repeat) {
 const minUsername = 3;
 const maxUsername = 32;
 
-/// What is typed into the username field, made into a username: lower
-/// case, no "@" in front, no spaces.
 String normalizeUsername(String raw) =>
     raw.trim().replaceFirst(RegExp(r'^@+'), '').toLowerCase();
 
@@ -135,14 +124,37 @@ String? usernameError(String raw) {
 const minName = 3;
 const maxName = 32;
 
+const _emojiRanges = [
+  (0x00A9, 0x00A9),
+  (0x00AE, 0x00AE),
+  (0x203C, 0x203C),
+  (0x2049, 0x2049),
+  (0x20E3, 0x20E3),
+  (0x2122, 0x2122),
+  (0x2139, 0x2139),
+  (0x2194, 0x21AA),
+  (0x231A, 0x23FF),
+  (0x24C2, 0x24C2),
+  (0x25AA, 0x25FE),
+  (0x2600, 0x27BF),
+  (0x2934, 0x2935),
+  (0x2B05, 0x2B55),
+  (0x3030, 0x3030),
+  (0x303D, 0x303D),
+  (0x3297, 0x3299),
+  (0xFE0F, 0xFE0F),
+  (0x1F000, 0x1FAFF),
+];
+
+bool _hasEmoji(String text) => text.runes.any(
+  (rune) => _emojiRanges.any((range) => rune >= range.$1 && rune <= range.$2),
+);
+
 String? nameError(String raw) {
   final name = raw.trim();
-  if (name.letterCount < minName) return 'минимум $minName символа';
-  if (name.letterCount > maxName) return 'максимум $maxName символа';
+  if (_hasEmoji(name)) return 'без эмодзи';
+  final length = name.characters.length;
+  if (length < minName) return 'минимум $minName символа';
+  if (length > maxName) return 'максимум $maxName символа';
   return null;
-}
-
-extension on String {
-  /// Letters as people count them (an emoji is one).
-  int get letterCount => runes.length;
 }

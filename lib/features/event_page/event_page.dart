@@ -24,14 +24,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Every event in one form (design-system §9.1, §9.8): the user's own, an
-/// invite being made, and an invite that exists. A sheet rises from the
-/// bottom over an animated gradient; the top pulls it down. It shows the
-/// event, and the pencil turns it into its editor.
-///
-/// Own events: a pull down while editing saves at once, as before.
-/// Invites go out or change only by ✓, after a question; a pull only
-/// closes them.
 class EventPage extends StatefulWidget {
   const EventPage({
     required this.subject,
@@ -48,28 +40,20 @@ class EventPage extends StatefulWidget {
 
   final EventSubject subject;
 
-  /// The user: their answer, whether they organize, their avatar.
   final FriendInfo me;
 
-  /// The store a [SharedInvite] lives in.
   final InvitesStore? invites;
 
-  /// An own event was saved; the page may stay open on it.
   final ValueChanged<CalendarEvent>? onSave;
 
-  /// An own event (with its series) is to be removed.
   final VoidCallback? onDelete;
 
-  /// Sends a [NewInvite]; throws if it failed, and the page stays.
   final Future<void> Function(InviteDraft draft)? onSendInvite;
 
-  /// The page starts leaving: the calendar may take touches again.
   final VoidCallback? onClosing;
 
-  /// The page has left and can be removed.
   final VoidCallback onGone;
 
-  /// A [DeviceEventSubject]: opens it in the device's calendar.
   final VoidCallback? onOpenExternal;
 
   @override
@@ -102,16 +86,12 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   var _closing = false;
   var _busy = false;
 
-  /// The own event as last saved; the page shows it.
   CalendarEvent? _event;
   late EventSpan _span;
   RepeatRule? _repeat;
 
-  /// The user's answer before the store has it, so the page answers at
-  /// once; dropped when the store agrees or the call fails.
   RsvpStatus? _answer;
 
-  /// The last known shared invite, kept to play the exit after it is gone.
   Invite? _last;
 
   @override
@@ -172,8 +152,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     _ => null,
   };
 
-  /// The invite on screen: the shared one, or the one being made, with the
-  /// user as its organizer.
   Invite? get _invite => switch (widget.subject) {
     OwnEvent() || DeviceEventSubject() => null,
     NewInvite(:final invitees) => Invite(
@@ -192,7 +170,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     SharedInvite() => _shared ?? _last,
   };
 
-  /// Not an invite: the user's own event, or one of the device's calendar.
   bool get _own =>
       widget.subject is OwnEvent || widget.subject is DeviceEventSubject;
 
@@ -205,7 +182,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   void _onStore() {
     final invite = _shared;
     if (invite == null) {
-      // Called off, here or elsewhere: the page goes.
       if (_last != null) _close();
       return;
     }
@@ -213,8 +189,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     if (_answer == invite.statusOf(widget.me.id)) _answer = null;
     setState(() {});
   }
-
-  // Motion
 
   void _onSettle() {
     final t = Curves.easeOutCubic.transform(_settle.value);
@@ -225,7 +199,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     if (_closing) return;
     _settle.stop();
     final next = _drag.value + (details.primaryDelta ?? 0);
-    // Upward pulls resist; the sheet only leaves downward.
     _drag.value = next < 0 ? next * 0.25 : next;
   }
 
@@ -241,8 +214,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     _settle.forward(from: 0);
   }
 
-  /// Saves an own event being edited the moment the finger lifts, then
-  /// slides out fast while the calendar already takes touches.
   void _swipeAway() {
     _closing = true;
     _dropKeyboard();
@@ -283,8 +254,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     );
   }
 
-  // Editing
-
   CalendarEvent _draft(CalendarEvent event) =>
       _span.applyTo(event, title: _title.text, repeat: _repeat);
 
@@ -318,8 +287,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     setState(() => _editing = true);
   }
 
-  /// ✓: own events save and show; a new invite asks, sends and closes; a
-  /// shared one asks, saves and shows.
   Future<void> _confirm() async {
     if (_busy) return;
     _dropKeyboard();
@@ -369,11 +336,8 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     }
   }
 
-  /// Whatever field has the keyboard — the title or the description —
-  /// lets it go; otherwise it stays on screen after the page is gone.
   void _dropKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 
-  /// 🗑: removes an own event, drops a new invite, calls a shared one off.
   Future<void> _delete() async {
     if (_busy) return;
     _dropKeyboard();
@@ -403,25 +367,27 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   }
 
   Future<void> _cancelInvite() async {
-    if (widget.subject is NewInvite) {
-      _close();
-      return;
-    }
+    final draft = widget.subject is NewInvite;
     final ok = await confirmAction(
       context,
       title: 'Отменить событие?',
-      message: 'Оно пропадёт у всех участников.',
+      message: draft
+          ? 'Приглашение ещё не отправлено, черновик пропадёт.'
+          : 'Оно пропадёт у всех участников.',
       confirmLabel: 'Отменить событие',
       destructive: true,
     );
     if (!ok || !mounted) return;
+    if (draft) {
+      _close();
+      return;
+    }
     final subject = widget.subject;
     if (subject is SharedInvite) {
       await _run(() => widget.invites!.cancel(subject.id));
     }
   }
 
-  /// Runs [action] with the buttons off; false and a toast if it failed.
   Future<bool> _run(Future<void> Function() action) async {
     setState(() => _busy = true);
     try {
@@ -448,8 +414,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
       _toast(error);
     }
   }
-
-  // Building
 
   @override
   Widget build(BuildContext context) {
@@ -490,7 +454,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(EventPageStyle.radius),
             ),
-            // White caret, handles and selection over any gradient.
             child: Theme(
               data: Theme.of(context).copyWith(
                 textSelectionTheme: const TextSelectionThemeData(
@@ -533,9 +496,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     );
   }
 
-  /// The gradient's stops, from the centre out: everyone who goes, in their
-  /// colours (the user's own event: just the user). A single colour gets
-  /// black as its second stop.
   List<Color> _colors(Invite? invite) {
     final own = OwnEventColor.of(context);
     Color colorOf(FriendInfo person) => person.id == widget.me.id
@@ -555,20 +515,12 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   RsvpStatus _mine(Invite invite) =>
       _answer ?? invite.statusOf(widget.me.id) ?? RsvpStatus.pending;
 
-  /// Everyone by answer, the user's taken from [_answer] while it travels.
-  ({
-    List<FriendInfo> going,
-    List<FriendInfo> notGoing,
-    List<FriendInfo> pending,
-  })
-  _people(Invite invite) {
+  ({List<FriendInfo> going, List<FriendInfo> notGoing}) _people(Invite invite) {
     final me = widget.me.id;
     final mine = _mine(invite);
-    // The user who said yes stands first, left of the organizer.
     final going = <FriendInfo>[invite.organizer];
     var meGoing = false;
     final notGoing = <FriendInfo>[];
-    final pending = <FriendInfo>[];
     for (final participant in invite.participants) {
       final person = participant.person;
       final status = person.id == me ? mine : participant.status;
@@ -582,16 +534,13 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
         case RsvpStatus.notGoing:
           notGoing.add(person);
         case RsvpStatus.pending:
-          // The user's own avatar waits by "Отметить присутствие".
-          if (person.id != me) pending.add(person);
+          break;
       }
     }
     if (meGoing) going.insert(0, widget.me);
-    return (going: going, notGoing: notGoing, pending: pending);
+    return (going: going, notGoing: notGoing);
   }
 
-  /// The corner buttons swap with a fade and a small grow, in step with
-  /// the rest of the page.
   List<Widget> _buttons() {
     const inset = EventPageStyle.buttonInset;
     Widget corner(Widget? child) => AnimatedSwitcher(
@@ -673,8 +622,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
     final title = invite?.title ?? event?.title ?? '';
     final description = invite?.description.trim() ?? '';
     final repeat = _editing ? _repeat : event?.repeat;
-    // A tap on empty space closes an open wheel or month; buttons, fields
-    // and the pickers themselves take their own taps first.
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: _pickers.closeAll,
@@ -689,8 +636,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
         children: [
           _status(invite),
           const SizedBox(height: EventPageStyle.statusGap),
-          // The frame is always there, clear while viewing: switching into
-          // editing changes no size and moves nothing.
           AnimatedContainer(
             duration: EventPageStyle.motion,
             curve: Curves.easeOutCubic,
@@ -732,8 +677,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
                       padding: const EdgeInsets.only(
                         top: EventPageStyle.descriptionGap,
                       ),
-                      // A small light frame says the description can be
-                      // written.
                       child: Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 280),
@@ -789,7 +732,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
                       ),
                     ),
             ),
-          // The description first, right under the title; then who else goes.
           if (invite != null) _Together(invite: invite, me: widget.me),
           const SizedBox(height: 32),
           WhenBlock(
@@ -885,7 +827,6 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   }
 }
 
-/// "Алина" from "Алина Смирнова"; the username without a name.
 String _firstName(FriendInfo person) {
   final name = person.name.trim();
   return name.isEmpty
@@ -907,8 +848,6 @@ class _Grabber extends StatelessWidget {
   );
 }
 
-/// "Вместе с" and everyone invited but the organizer, overlapping a
-/// little; the user in their own colour.
 class _Together extends StatelessWidget {
   const _Together({required this.invite, required this.me});
 

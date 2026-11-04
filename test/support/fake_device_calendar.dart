@@ -2,8 +2,6 @@ import 'dart:ui';
 
 import 'package:druna_app/features/calendar_sync/device_calendar.dart';
 
-/// A device calendar in memory: access is asked like the system would,
-/// and what Druna writes can be read back.
 class FakeDeviceCalendar implements DeviceCalendar {
   FakeDeviceCalendar({
     this.status = CalendarAccess.unknown,
@@ -15,13 +13,11 @@ class FakeDeviceCalendar implements DeviceCalendar {
 
   CalendarAccess status;
 
-  /// What the prompt answers.
   bool grant;
   final List<DeviceCalendarInfo> _calendars;
   List<DeviceCalendarInfo> get calendarList => _calendars;
   final List<DeviceEvent> deviceEvents;
 
-  /// Druna's writes: event id → its calendar and draft.
   final written = <String, (String, DeviceEventDraft)>{};
   final deleted = <String>[];
   final shown = <String>[];

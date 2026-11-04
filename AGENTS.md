@@ -43,11 +43,16 @@ Druna помогает вести личные события, добавлят�
 
 ## Что работает на сервере, а что на демо
 
-- Сервер: вход по нику, регистрация, профиль (имя), друзья и заявки.
+- Сервер: вход по нику и паролю, регистрация (имя, ник, почта, пароль, без
+  подтверждения почты), профиль (имя), друзья и заявки.
 - Демо, потому что сервер этого не умеет: календарь (события в памяти),
-  занятость друзей, приглашения, код из письма, проверка ника, вход по почте.
-  **В production войти нельзя**, пока сервер не получит контракт из
-  `docs/backend-changes.md`.
+  занятость друзей, приглашения. Код из письма, проверка ника и вход по почте
+  выключены блоком (`OnboardingController.verifyEmail`) до решения бэкенда.
+- **Демо-версия** — переключатель в настройках «Для разработчика»: всё на
+  устройстве (аккаунт в `OfflineAccounts`, друзья, приглашения, занятость),
+  сервер не трогается, свои события не уходят в календарь iOS. Переключение
+  выходит из аккаунта. Всё демо и разработческое — только в секции «Для
+  разработчика», чтобы потом вырезать её целиком.
 - Без UI, только в `DrunaRepository`: личные и групповые события, свободное
   время, группы.
 - Только на устройстве: календарь устройства (Apple Календарь / календарь
@@ -62,7 +67,7 @@ Druna помогает вести личные события, добавлят�
 lib/
   app/             DrunaApp, HomePager (плоскость страниц), сессия, настройки
   core/api/        Dio-клиент, envelope, refresh и ApiException
-  core/config/     APP_ENV, API_BASE_URL, DEMO_DATA, OFFLINE
+  core/config/     API_BASE_URL, DEMO_DATA (демо-версия при первом запуске)
   core/storage/    модель токенов и secure storage
   features/onboarding/ вход и регистрация: шаги, контроллер, источники
   features/calendar/   календарь: месяц и день
@@ -75,16 +80,16 @@ lib/
   repositories/    типизированные операции DrunaServer
   shared/ui/       общие виджеты: PersonAvatar, PillButton, ActionPill,
                    PillField, showToast, имя капсом, бренд, confirmAction,
-                   строки настроек, меню значения
+                   строки настроек, меню значения, пикеры профиля, стиль
+                   аватара и OKLab, Onest, размытие краёв, части страниц
 test/              unit- и widget-тесты
 assets/            логотип, стрелка, шрифты (OFL)
 shaders/           фон формы события, полосы недели
-config/            development, offline (без сервера), production example
-scripts/           dev_server.sh: DrunaServer в Docker для телефона в LAN
+config/            development: API_BASE_URL и DEMO_DATA
 ```
 
-Точки входа: `lib/main.dart` (build config), `lib/app/druna_app.dart` (API,
-repository, session), `lib/app/session_controller.dart`,
+Точки входа: `lib/main.dart` (build config, `ApiClient`, `DrunaRepository`),
+`lib/app/druna_app.dart` (сессия, настройки, демо-версия), `lib/app/session_controller.dart`,
 `lib/core/api/api_client.dart`, `lib/repositories/druna_repository.dart`,
 `lib/models/models.dart`.
 
@@ -110,8 +115,11 @@ repository, session), `lib/app/session_controller.dart`,
   контракт или `уточнить`), а в UI честное «не поддерживается».
 - Поведение старых экранов не восстанавливать по памяти — читать
   `docs/legacy/`.
+- Комментарии в коде не писать: смысл — в именах и тестах. Исключение —
+  короткий заголовок секции. Комментарии расходились с кодом и вводили в
+  заблуждение.
 - Не редактировать сгенерированные registrant-файлы. Не коммитить `build/`,
-  `.dart_tool/`, токены, signing и `config/production.json`.
+  `.dart_tool/`, токены и signing.
 
 ## Процесс
 
@@ -134,23 +142,13 @@ git diff --check
 
 ## API и окружения
 
-Адрес сервера не хардкодить — `API_BASE_URL`. Production — только HTTPS.
+Адрес сервера не хардкодить — `API_BASE_URL`, только HTTPS. Сервер один:
+`https://druna.tg4.dev`; локально сервер не поднимаем.
 
-| Цель | Адрес |
-|---|---|
-| iOS Simulator, backend на Mac | `http://localhost:22000` |
-| Android Emulator, backend на Mac | `http://10.0.2.2:22000` |
-| Телефон в той же LAN | `http://<IP Mac>:22000` (`ipconfig getifaddr en0`) |
-| Production | `https://druna.tg4.dev` |
-
-- `config/development.json` — `API_BASE_URL` и демо. Вне production демо
-  включено по умолчанию и переключается в настройках; в production демо нет.
-- `scripts/dev_server.sh` поднимает DrunaServer из `../DrunaServer` в Docker,
-  ждёт `/ping/` и прописывает LAN-адрес Mac в `config/development.json`.
-  Остановить — `scripts/dev_server.sh stop`.
-- `config/offline.json` (`OFFLINE=true`) — без сервера: онбординг на
-  устройстве (код `123456`, аккаунт локально в `OfflineAccounts`), остальное на
-  демо. В production флаг игнорируется.
+- `config/development.json` — `API_BASE_URL` и `DEMO_DATA`: с ним первый
+  запуск открывается в демо-версии, дальше переключатель в настройках.
+- Production-сборки пока нет (решение автора 2026-11-04): приложение в
+  разработке.
 
 ## Запуск
 
@@ -159,6 +157,8 @@ flutter pub get
 flutter run -d <DEVICE_ID> --dart-define-from-file=config/development.json
 ```
 
-Симулятор `Druna iPhone 17 Pro`: `1246EEFE-E718-4DE2-AE96-2DE0DD2EF254`.
+Симулятор — `iPhone 17`: `ED3D0C48-5E2B-42D0-AD63-4B7AD7AF1034`. Новые
+симуляторы не создавать. Если его нет — пропустить проверку на симуляторе и
+сказать автору.
 Не запускайте `flutter run` без `-d`: Flutter может собрать desktop-версию.
 Android-сборка и физический iPhone пока не проверялись.

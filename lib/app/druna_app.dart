@@ -12,6 +12,7 @@ import 'package:druna_app/features/onboarding/welcome_page.dart';
 import 'package:druna_app/features/onboarding/widgets/onboarding_parts.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:druna_app/shared/ui/brand.dart';
+import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -27,15 +28,10 @@ class DrunaApp extends StatefulWidget {
   final DrunaRepository repository;
   final AppConfig config;
 
-  /// Defaults to memory, so tests start from clean settings.
   final SettingsStorage? settingsStorage;
 
-  /// Replaces the onboarding's source (tests); otherwise the demo switch
-  /// picks [DemoAuthFlowSource] or [ServerAuthFlowSource].
   final AuthFlowSource? authFlowSource;
 
-  /// The device's calendars; defaults to none, so tests touch no plugin
-  /// ([platformDeviceCalendar] in `main`).
   final DeviceCalendar? deviceCalendar;
 
   @override
@@ -47,29 +43,46 @@ class _DrunaAppState extends State<DrunaApp> {
   late final AppSettings settings;
   late final CalendarSync calendarSync;
 
-  /// Without a server (`config/offline.json`): accounts on the device.
-  OfflineAccounts? _offline;
+  late final OfflineAccounts _accounts;
+  late bool _demo;
 
   @override
   void initState() {
     super.initState();
-    // Outside production demo friends are on until switched off in settings.
     settings = AppSettings(
       storage: widget.settingsStorage ?? MemorySettingsStorage(),
-      demoByDefault: widget.config.demoData || !widget.config.isProduction,
-      allowDemo: !widget.config.isProduction,
-    )..load();
+      demoByDefault: widget.config.demoData,
+    );
+    _demo = settings.demo;
+    _accounts = OfflineAccounts(settings.storage);
     calendarSync = CalendarSync(
       device: widget.deviceCalendar ?? const NoDeviceCalendar(),
       storage: settings.storage,
     )..load();
-    if (widget.config.offline) _offline = OfflineAccounts(settings.storage);
-    session = SessionController(widget.repository, offline: _offline)
-      ..restore();
+    session = SessionController(widget.repository);
+    _start();
+  }
+
+  Future<void> _start() async {
+    await settings.load();
+    if (!mounted) return;
+    _demo = settings.demo;
+    calendarSync.exportEnabled = !_demo;
+    session.offline = _demo ? _accounts : null;
+    settings.addListener(_onSettings);
+    await session.restore();
+  }
+
+  void _onSettings() {
+    if (settings.demo == _demo) return;
+    _demo = settings.demo;
+    calendarSync.exportEnabled = !_demo;
+    session.switchTo(_demo ? _accounts : null);
   }
 
   @override
   void dispose() {
+    settings.removeListener(_onSettings);
     session.dispose();
     calendarSync.dispose();
     settings.dispose();
@@ -92,55 +105,55 @@ class _DrunaAppState extends State<DrunaApp> {
       ),
       child: child!,
     ),
-    // The onboarding dissolves into the app, and back on sign-out.
     home: AnimatedBuilder(
       animation: session,
-      builder: (context, _) => AnimatedSwitcher(
-        duration: const Duration(milliseconds: 600),
-        child: KeyedSubtree(
-          key: ValueKey(session.state),
-          child: switch (session.state) {
-            SessionState.restoring => const _SplashScreen(),
-            SessionState.signedOut => OnboardingFlow(
-              source: _authFlowSource(),
-              onFinished: session.adopt,
-              knownColorSlot: settings.ownColorSlot,
-              knownFont: ownFontFor(settings),
-              calendarSync: calendarSync,
-              onProfile: (slot, font) {
-                settings
-                  ..ownColorSlot = slot
-                  ..ownFontId = font.id;
-              },
-            ),
-            SessionState.signedIn => HomePager(
-              session: session,
-              settings: settings,
-              config: widget.config,
-              sync: calendarSync,
-            ),
-          },
-        ),
-      ),
+      builder: (context, _) {
+        if (session.state == SessionState.signedOut &&
+            session.takeExpiredSignOut()) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              showToast(context, 'Сессия истекла, войди снова', error: true);
+            }
+          });
+        }
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 600),
+          child: KeyedSubtree(
+            key: ValueKey(session.state),
+            child: switch (session.state) {
+              SessionState.restoring => const _SplashScreen(),
+              SessionState.signedOut => OnboardingFlow(
+                source: _authFlowSource(),
+                onFinished: session.adopt,
+                knownColorSlot: settings.ownColorSlot,
+                knownFont: ownFontFor(settings),
+                calendarSync: calendarSync,
+                onProfile: (slot, font) {
+                  settings
+                    ..ownColorSlot = slot
+                    ..ownFontId = font.id;
+                },
+              ),
+              SessionState.signedIn => HomePager(
+                session: session,
+                settings: settings,
+                config: widget.config,
+                sync: calendarSync,
+              ),
+            },
+          ),
+        );
+      },
     ),
   );
 
   AuthFlowSource _authFlowSource() =>
       widget.authFlowSource ??
-      switch (_offline) {
-        final offline? => OfflineAuthFlowSource(offline),
-        null => null,
-      } ??
-      (settings.demoFriends
-          ? DemoAuthFlowSource(
-              repository: widget.repository,
-              storage: settings.storage,
-            )
+      (settings.demo
+          ? OfflineAuthFlowSource(_accounts)
           : ServerAuthFlowSource(widget.repository));
 }
 
-/// The onboarding's background with the logo where the welcome screen
-/// has it, so the welcome screen grows out of it.
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 

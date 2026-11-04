@@ -9,21 +9,14 @@ import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:druna_app/shared/ui/value_menu.dart';
 import 'package:flutter/cupertino.dart';
 
-/// Measurements of the calendar's menu (design-system §9.12). The motion,
-/// the scrim and the grabber are the event sheet's.
 abstract final class SyncSheetStyle {
-  /// The sheet floats this far from the screen's sides and bottom.
   static const inset = 8.0;
   static const radius = EventPageStyle.radius;
 
-  /// At most this share of the screen; the rest scrolls.
   static const maxHeight = 0.75;
   static const dot = 12.0;
 }
 
-/// The menu of the user's calendar, risen from the bottom over the month:
-/// the device's calendar — whether it is connected, which of its calendars
-/// show, whether Druna's events go there, what a tap on its event opens.
 class CalendarSyncSheet extends StatefulWidget {
   const CalendarSyncSheet({
     required this.sync,
@@ -34,10 +27,8 @@ class CalendarSyncSheet extends StatefulWidget {
 
   final CalendarSync sync;
 
-  /// The sheet starts leaving: the month may take touches again.
   final VoidCallback onClosing;
 
-  /// The sheet has left and can be removed.
   final VoidCallback onGone;
 
   @override
@@ -97,12 +88,9 @@ class _CalendarSyncSheetState extends State<CalendarSyncSheet>
     if (_closing) return;
     _settle.stop();
     final next = _drag.value + (details.primaryDelta ?? 0);
-    // Upward pulls resist; the sheet only leaves downward.
     _drag.value = next < 0 ? next * 0.25 : next;
   }
 
-  /// Let go far or fast enough, the sheet leaves at once and the month
-  /// takes touches; otherwise it settles back.
   void _onDragEnd(DragEndDetails details) {
     if (_closing) return;
     final velocity = details.primaryVelocity ?? 0;
@@ -174,7 +162,6 @@ class _CalendarSyncSheetState extends State<CalendarSyncSheet>
           constraints: BoxConstraints(
             maxHeight: height * SyncSheetStyle.maxHeight,
           ),
-          // Rows scrolled to the edge go under the corners, not past them.
           child: ClipRRect(
             borderRadius: const BorderRadius.all(
               Radius.circular(SyncSheetStyle.radius),
@@ -227,7 +214,6 @@ class _CalendarSyncSheetState extends State<CalendarSyncSheet>
                   ),
                   Flexible(
                     child: SingleChildScrollView(
-                      // The last row clears the home indicator.
                       padding: EdgeInsets.fromLTRB(
                         20,
                         0,
@@ -251,7 +237,6 @@ class _CalendarSyncSheetState extends State<CalendarSyncSheet>
   }
 }
 
-/// What the menu holds, by the state of the device's calendar.
 class CalendarSyncOptions extends StatelessWidget {
   const CalendarSyncOptions({required this.sync, super.key});
 
@@ -392,7 +377,6 @@ class _Caption extends StatelessWidget {
   );
 }
 
-/// The colour of a calendar, as in its own app.
 class _Dot extends StatelessWidget {
   const _Dot(this.color);
 

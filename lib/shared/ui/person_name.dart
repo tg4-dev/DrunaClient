@@ -1,13 +1,8 @@
 import 'package:druna_app/shared/ui/onest.dart';
 import 'package:flutter/widgets.dart';
 
-/// A person's name as the app shows it: in capitals, everywhere
-/// (design-system §3). The server keeps the name as it was typed; only the
-/// display changes, so other clients and old accounts are not affected.
 String shownName(String name) => name.trim().toUpperCase();
 
-/// A person's name is set bold everywhere, as in the registration's name
-/// field (design-system §3): [base] in Onest w800.
 TextStyle nameStyle(TextStyle base) => base.merge(
   onest(
     base.fontSize ?? 17,
@@ -18,8 +13,6 @@ TextStyle nameStyle(TextStyle base) => base.merge(
   ),
 );
 
-/// A phrase with names in it: the names bold ([nameStyle]), the rest
-/// [style]. Give the parts in order; a part in [names] is a name.
 class NameText extends StatelessWidget {
   const NameText({
     required this.parts,
@@ -56,9 +49,6 @@ class NameText extends StatelessWidget {
   );
 }
 
-/// A name field that draws the text in capitals but keeps the value as
-/// typed. A letter whose capital is longer (ß → SS) stays as it is, so the
-/// cursor never drifts from the text.
 class UpperCaseNameController extends TextEditingController {
   UpperCaseNameController({super.text});
 
@@ -86,7 +76,6 @@ class UpperCaseNameController extends TextEditingController {
   );
 }
 
-/// [text] in capitals, letter by letter, keeping its length.
 String upperSameLength(String text) {
   final out = StringBuffer();
   for (final unit in text.runes) {

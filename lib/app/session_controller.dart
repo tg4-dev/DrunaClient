@@ -6,13 +6,29 @@ import 'package:flutter/foundation.dart';
 enum SessionState { restoring, signedOut, signedIn }
 
 class SessionController extends ChangeNotifier {
-  SessionController(this.repository, {this.offline});
+  SessionController(this.repository, {this.offline}) {
+    repository.onSessionExpired = _expired;
+  }
 
   final DrunaRepository repository;
 
-  /// The mode without a server: the session and the profile come from the
-  /// device, not from tokens and `/users/me`.
-  final OfflineAccounts? offline;
+  var _expiredSignOut = false;
+
+  bool takeExpiredSignOut() {
+    final expired = _expiredSignOut;
+    _expiredSignOut = false;
+    return expired;
+  }
+
+  void _expired() {
+    if (offline != null || state != SessionState.signedIn) return;
+    profile = null;
+    state = SessionState.signedOut;
+    _expiredSignOut = true;
+    notifyListeners();
+  }
+
+  OfflineAccounts? offline;
   SessionState state = SessionState.restoring;
   UserProfile? profile;
 
@@ -35,21 +51,13 @@ class SessionController extends ChangeNotifier {
     try {
       profile = await repository.getProfile();
       notifyListeners();
-    } catch (_) {
-      // The home screen owns retry/offline presentation. A failed token refresh
-      // clears the secure store and the next protected request returns auth error.
-    }
+    } catch (_) {}
   }
 
-  /// Takes over the tokens the onboarding has just saved (sign-in or
-  /// sign-up): loads the profile and lets the app in. The onboarding calls
-  /// it when its last screen has played, not when the tokens arrive.
   Future<void> adopt() async {
     try {
       profile = await (offline?.current() ?? repository.getProfile());
-    } catch (_) {
-      // As in [restore]: the home screen copes without a profile.
-    }
+    } catch (_) {}
     state = SessionState.signedIn;
     notifyListeners();
   }
@@ -59,8 +67,6 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// A new display name; the server ignores an empty one, so it is refused
-  /// here. Throws on failure, keeping the old name.
   Future<void> rename(String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError.value(name, 'name', 'пустое');
@@ -68,6 +74,12 @@ class SessionController extends ChangeNotifier {
         await (offline?.rename(trimmed) ??
             repository.updateProfile(name: trimmed));
     notifyListeners();
+  }
+
+  Future<void> switchTo(OfflineAccounts? accounts) async {
+    if (identical(accounts, offline)) return;
+    await logout();
+    offline = accounts;
   }
 
   Future<void> logout() async {

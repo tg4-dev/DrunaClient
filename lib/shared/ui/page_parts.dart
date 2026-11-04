@@ -2,10 +2,7 @@ import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 
-/// Pieces shared by the pages on the home plane (friends, settings): the
-/// page title and the blocks borrowed from the event sheet.
 abstract final class PageStyle {
-  /// Same side margin as the month title.
   static const gutter = 20.0;
 
   static const title = TextStyle(
@@ -15,7 +12,6 @@ abstract final class PageStyle {
     letterSpacing: -0.6,
   );
 
-  /// Buttons, rows and the search field on the page plane.
   static const body = TextStyle(color: Colors.white, fontSize: 17);
 
   static const action = TextStyle(
@@ -25,8 +21,6 @@ abstract final class PageStyle {
   );
 }
 
-/// A block with an icon and a title on top, like the blocks of the event
-/// sheet.
 class BlockSection extends StatelessWidget {
   const BlockSection({
     required this.icon,
@@ -64,8 +58,6 @@ class BlockSection extends StatelessWidget {
   }
 }
 
-/// Empty and error states: a block with a title, a line of text and an
-/// optional action.
 class BlockMessage extends StatelessWidget {
   const BlockMessage({
     required this.title,

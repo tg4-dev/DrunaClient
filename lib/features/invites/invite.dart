@@ -2,7 +2,6 @@ import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/foundation.dart';
 
-/// A guest's answer to an invite: yes, no, or not yet (design-system §9.8).
 enum RsvpStatus { pending, going, notGoing }
 
 String rsvpLabel(RsvpStatus status) => switch (status) {
@@ -11,7 +10,6 @@ String rsvpLabel(RsvpStatus status) => switch (status) {
   RsvpStatus.pending => 'Ждём ответа',
 };
 
-/// Someone invited to an event, with their answer.
 @immutable
 class InviteParticipant {
   const InviteParticipant(this.person, this.status);
@@ -20,8 +18,6 @@ class InviteParticipant {
   final RsvpStatus status;
 }
 
-/// An event with people in it: the organizer and the friends they invited,
-/// each with an answer. The organizer always goes.
 @immutable
 class Invite {
   const Invite({
@@ -43,10 +39,8 @@ class Invite {
   final DateTime end;
   final bool allDay;
 
-  /// The invited, without the organizer.
   final List<InviteParticipant> participants;
 
-  /// Everyone in it, the organizer first.
   List<FriendInfo> get people => [
     organizer,
     for (final participant in participants) participant.person,
@@ -54,7 +48,6 @@ class Invite {
 
   bool isOrganizer(int personId) => organizer.id == personId;
 
-  /// The answer of [personId]; null when they are not in it.
   RsvpStatus? statusOf(int personId) {
     if (organizer.id == personId) return RsvpStatus.going;
     for (final participant in participants) {
@@ -63,7 +56,6 @@ class Invite {
     return null;
   }
 
-  /// The invited with this answer, in the order they were invited.
   List<FriendInfo> withStatus(RsvpStatus status) => [
     for (final participant in participants)
       if (participant.status == status) participant.person,
@@ -87,7 +79,6 @@ class Invite {
     participants: participants ?? this.participants,
   );
 
-  /// [personId]'s answer changed; everyone else's stays.
   Invite answered(int personId, RsvpStatus status) => copyWith(
     participants: [
       for (final participant in participants)
@@ -98,7 +89,6 @@ class Invite {
   );
 }
 
-/// What the organizer fills in: the invite before it exists.
 @immutable
 class InviteDraft {
   const InviteDraft({
@@ -118,14 +108,12 @@ class InviteDraft {
   final List<FriendInfo> invitees;
 }
 
-/// The user as a person in an invite.
 FriendInfo meAsPerson(UserProfile? profile) => FriendInfo(
   id: profile?.id ?? 0,
   name: profile?.name ?? '',
   username: profile?.username ?? 'я',
 );
 
-/// Names for a sentence: "Аня, Миша и ещё 2".
 String peopleLabel(List<FriendInfo> people, {int shown = 2}) {
   String nameOf(FriendInfo person) {
     final name = person.name.trim();

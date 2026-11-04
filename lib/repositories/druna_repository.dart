@@ -11,7 +11,9 @@ class DrunaRepository {
   Future<void> logout() => _api.clearSession();
   void debugExpireAccessToken() => _api.debugExpireAccessToken();
 
-  /// `GET /ping/`: the server and its database answer.
+  set onSessionExpired(void Function()? callback) =>
+      _api.onSessionExpired = callback;
+
   Future<void> ping() => _api.publicRequest<void>('/ping/', decode: (_) {});
 
   Future<void> signIn(String username, String password) async {
@@ -25,8 +27,6 @@ class DrunaRepository {
     await _api.saveTokens(tokens);
   }
 
-  /// `POST /auth/sign-up`, then signs in: the server's sign-up returns no
-  /// tokens.
   Future<void> signUp({
     required String name,
     required String username,
@@ -42,7 +42,6 @@ class DrunaRepository {
     await signIn(username, password);
   }
 
-  /// `POST /auth/sign-up` alone.
   Future<void> createAccount({
     required String name,
     required String username,

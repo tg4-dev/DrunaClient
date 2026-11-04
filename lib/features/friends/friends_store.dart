@@ -2,8 +2,6 @@ import 'package:druna_app/features/friends/friends_source.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:flutter/foundation.dart';
 
-/// The friends list the calendar's friend bar shows. The friends page loads
-/// its own copy and asks this one to reload after every change.
 class FriendsStore extends ChangeNotifier {
   FriendsStore(this._source);
 
@@ -13,7 +11,6 @@ class FriendsStore extends ChangeNotifier {
   var _generation = 0;
   bool _disposed = false;
 
-  /// Null until the first answer.
   List<FriendInfo>? get friends => _friends;
   Object? get error => _error;
 
@@ -21,6 +18,7 @@ class FriendsStore extends ChangeNotifier {
     if (identical(value, _source)) return;
     _source = value;
     _friends = null;
+    _error = null;
     notifyListeners();
     load();
   }

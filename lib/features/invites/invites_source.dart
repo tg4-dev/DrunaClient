@@ -6,29 +6,20 @@ import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:flutter/foundation.dart';
 
-/// Everything the app asks about invites. The server has no invites yet
-/// (docs/backend-changes.md, «Приглашения на события»), so the app runs on
-/// [DemoInvitesSource] or tells the truth with [ServerInvitesSource].
 abstract interface class InvitesSource {
-  /// Fires when invites change by themselves (someone answered).
   Listenable? get changes;
 
-  /// Every invite the user organizes or is invited to.
   Future<List<Invite>> list();
   Future<Invite> create(InviteDraft draft);
   Future<Invite> update(String id, InviteDraft draft);
 
-  /// The user's own answer.
   Future<void> respond(String id, RsvpStatus status);
 
-  /// The organizer calls the event off.
   Future<void> cancel(String id);
 
   void dispose();
 }
 
-/// The server has no endpoint for invites: every call says so, nothing
-/// pretends to work.
 class InvitesUnavailable extends ApiException {
   const InvitesUnavailable()
     : super('Приглашения пока не поддерживаются сервером.');
@@ -57,10 +48,6 @@ class ServerInvitesSource implements InvitesSource {
   void dispose() {}
 }
 
-/// Invites in memory, with the demo friends: one waiting for the user's
-/// answer, one they go to, one of their own where some have answered, and
-/// one in the past. After the user invites people, they answer one by one
-/// a few seconds later, so the invite page comes alive.
 class DemoInvitesSource implements InvitesSource {
   DemoInvitesSource({
     required FriendInfo Function() me,
@@ -74,10 +61,8 @@ class DemoInvitesSource implements InvitesSource {
   final FriendInfo Function() _me;
   final Duration delay;
 
-  /// How long a demo friend takes to answer; null: they never do.
   final Duration? replyDelay;
 
-  /// Every request fails as if there were no network: for the error states.
   bool offline = false;
 
   final _changes = _Changes();
@@ -86,8 +71,6 @@ class DemoInvitesSource implements InvitesSource {
   final _random = math.Random(7);
   var _next = 0;
 
-  /// The user inside the stored invites: who they are is only known when
-  /// asked, since the profile may load later.
   static const _meId = -1;
   static const _meMark = FriendInfo(id: _meId, name: '', username: '');
 
@@ -184,7 +167,6 @@ class DemoInvitesSource implements InvitesSource {
 
   FriendInfo _person(FriendInfo person) => person.id == _meId ? _me() : person;
 
-  /// A stored invite as the app sees it: the user is themselves.
   Invite _out(Invite invite) => Invite(
     id: invite.id,
     organizer: _person(invite.organizer),
@@ -256,7 +238,6 @@ class DemoInvitesSource implements InvitesSource {
     _invites.removeAt(_indexOf(id));
   });
 
-  /// Each invitee answers on their own, a little later than the last.
   void _scheduleReplies(Invite invite) {
     final wait = replyDelay;
     if (wait == null) return;

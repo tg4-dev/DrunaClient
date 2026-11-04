@@ -3,8 +3,6 @@ import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/painting.dart';
 
-/// Everyone's colour in [invite], the organizer first; the user is in their
-/// own colour [own], as on their events.
 List<Color> inviteColors(
   Invite invite, {
   required int meId,
@@ -16,7 +14,6 @@ List<Color> inviteColors(
         : avatarColorFor(id: person.id, username: person.username),
 ];
 
-/// [invite] as an event on the user's calendar.
 CalendarEvent inviteEvent(
   Invite invite, {
   required int meId,
@@ -36,7 +33,6 @@ CalendarEvent inviteEvent(
   ),
 );
 
-/// The invites the calendar shows: all but those the user said no to.
 List<CalendarEvent> inviteEvents(
   List<Invite>? invites, {
   required int meId,

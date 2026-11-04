@@ -45,8 +45,6 @@ app.*.map.json
 /android/app/release
 .opencode
 
-# Local release configuration (copy from production.example.json)
-/config/production.json
 
 # Cursor agent workspace and other local editor files
 .cursor/

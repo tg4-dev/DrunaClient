@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/chip_motion.dart';
+import 'package:druna_app/features/calendar/day_events.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
 import 'package:druna_app/features/calendar/month_events.dart';
@@ -14,7 +15,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  // A Monday-to-Sunday week, all of it in view.
   final monday = DateTime(2026, 11, 2);
   final week = weekIndexOf(monday);
   final days = daysOfWeek(week);
@@ -222,10 +222,7 @@ void main() {
       (widget) =>
           widget is DecoratedBox &&
           widget.decoration is BoxDecoration &&
-          isToneOf(
-            (widget.decoration as BoxDecoration).color,
-            calendarEventColor,
-          ),
+          isToneOf((widget.decoration as BoxDecoration).color, defaultOwnColor),
     );
     expect(chips, findsWidgets);
     for (final chip in chips.evaluate()) {
@@ -342,7 +339,6 @@ void main() {
     for (final levels in [monthRowLevels, monthRowLevels.reversed]) {
       for (final h in levels) {
         height.value = h;
-        // The glide starts on this frame; then mid-glide, then settled.
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 40));
         expect(tester.takeException(), isNull, reason: '$h');
@@ -382,10 +378,7 @@ void main() {
     bool isFill(Widget widget) =>
         widget is DecoratedBox &&
         widget.decoration is BoxDecoration &&
-        isToneOf(
-          (widget.decoration as BoxDecoration).color,
-          calendarEventColor,
-        );
+        isToneOf((widget.decoration as BoxDecoration).color, defaultOwnColor);
     bool isFade(Widget widget) =>
         widget is DecoratedBox &&
         widget.decoration is BoxDecoration &&
@@ -403,7 +396,6 @@ void main() {
       final (inkL, ia, ib) = oklab(tone.ink);
       expect(fillL, closeTo(gridFillLightness, 0.01));
       expect(inkL, inInclusiveRange(gridInkLightnessMin - 0.01, 0.86));
-      // Same hue: the angle in the a-b plane barely moves.
       double angle(double x, double y) => math.atan2(y, x);
       double gap(double p, double q) {
         final d = (p - q).abs() % (2 * math.pi);
@@ -431,7 +423,6 @@ void main() {
     final index = stripIndexOfDay(today);
     double rowOf() => month.rectForStrip(index)!.height;
 
-    // Pinch the rows taller, then let go: the rows settle on a level.
     final centre = tester.getCenter(find.byType(MonthCalendar));
     final a = await tester.startGesture(centre - const Offset(0, 40));
     final b = await tester.startGesture(centre + const Offset(0, 40));
@@ -442,7 +433,6 @@ void main() {
     await b.up();
     await tester.pump(const Duration(milliseconds: 30));
 
-    // A tap opens the day mid-settle: it ends at once and is saved in rows.
     month.finishRowSnap();
     await tester.pump();
     final settled = rowOf();
@@ -461,8 +451,6 @@ void main() {
         )
         .data!;
 
-    // The rows change again while the day is open (another level);
-    // restored in rows, the month shows the same week where it was.
     final c = await tester.startGesture(centre - const Offset(0, 80));
     final d = await tester.startGesture(centre + const Offset(0, 80));
     await tester.pump();
@@ -557,7 +545,7 @@ void main() {
                       widget is DecoratedBox &&
                       isToneOf(
                         (widget.decoration as BoxDecoration?)?.color,
-                        calendarEventColor,
+                        defaultOwnColor,
                       ),
                 )
                 .first,
@@ -565,14 +553,11 @@ void main() {
           .height;
     }
 
-    // A short title fits one line: the title-and-time chip, not the tall.
     expect(await chipHeight('Сон'), detailDensity.itemHeight);
-    // A long one needs the second line: the tall chip.
     expect(
       await chipHeight('Очень длинное название встречи'),
       fullDensity.itemHeight,
     );
-    // All day, no time to show: the title chip.
     expect(await chipHeight('Отпуск', allDay: true), titleDensity.itemHeight);
   });
 
@@ -650,7 +635,6 @@ void main() {
     final faces = find.byType(FaceStack).first;
     expect(faces, findsOneWidget);
 
-    // "+" stands halfway between the day number and the faces.
     final plus = tester.getRect(
       find.byKey(const ValueKey('shared-plus')).first,
     );
@@ -661,8 +645,41 @@ void main() {
     final facesTop = tester.getRect(faces).top;
     expect(plus.center.dy, closeTo((numberBottom + facesTop) / 2, 0.5));
   });
+
+  testWidgets('a one-day all-day cell in the open day shows its faces', (
+    tester,
+  ) async {
+    final day = DateTime(2026, 11, 4);
+    final event = CalendarEvent(
+      id: 'trip',
+      title: 'Поездка',
+      start: day,
+      end: day,
+      allDay: true,
+      invite: const EventInvite(
+        id: 'trip',
+        colors: [Color(0xFF34C759)],
+        people: [FriendInfo(id: 1, name: 'Катя', username: 'katya')],
+      ),
+    );
+    const pixelsPerHour = 10.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 240,
+          height: 200,
+          child: DaySharedFaces(
+            events: [event],
+            scrollOffset: timelineX(day, pixelsPerHour),
+            pixelsPerHour: pixelsPerHour,
+            viewportWidth: 240,
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(FaceStack), findsOneWidget);
+  });
 }
 
-/// A chip's fill or ink is one of [base]'s grid tones ([gridTone]).
 bool isToneOf(Color? color, Color base) =>
     color == gridTone(base).fill || color == gridTone(base).ink;

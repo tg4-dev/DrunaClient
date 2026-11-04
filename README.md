@@ -15,13 +15,9 @@ flutter pub get
 flutter run -d <DEVICE_ID> --dart-define-from-file=config/development.json
 ```
 
-- Сервер на Mac: `scripts/dev_server.sh` поднимает DrunaServer в Docker на
-  порту 22000 и прописывает адрес в `config/development.json`.
-- Без сервера: `--dart-define-from-file=config/offline.json` (код из письма —
-  `123456`).
-- Android Emulator: `--dart-define=API_BASE_URL=http://10.0.2.2:22000`.
-- Production (`https://druna.tg4.dev`): скопируйте
-  `config/production.example.json` в игнорируемый `config/production.json`.
+- Сервер: `https://druna.tg4.dev` (локально сервер не поднимаем).
+- Демо-версия без сервера — переключатель в настройках «Для разработчика»
+  (`DEMO_DATA` в `config/development.json` включает её при первом запуске).
 
 Указывайте `-d`: без него Flutter может собрать desktop-версию.
 

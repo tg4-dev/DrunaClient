@@ -3,23 +3,16 @@ const monthRowMin = 115.0;
 const monthRowMax = 364.0;
 const weekdayHeaderHeight = 28.0;
 
-/// Height of the open day's title row under the safe area.
 const monthTitleHeight = 58.0;
 
-/// The glass row on top of the month: buttons and the title pill.
 const monthHeaderBar = 44.0;
 
-/// From the glass row down to the weekdays.
 const monthHeaderGap = 18.0;
 
-/// Everything pinned over the month below the safe area; the weeks scroll
-/// on under it, blurred.
 const monthChrome = monthHeaderBar + monthHeaderGap + weekdayHeaderHeight;
 
-/// The blurred top runs this far past the weekdays, fading out.
 const chromeFade = 24.0;
 
-/// Extra height of a month-start row, as a fraction of the regular row.
 const monthBandRatio = 0.34;
 
 const monthNames = [
@@ -54,9 +47,10 @@ const monthShortNames = [
 
 const weekdayLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-/// Monday of the first addressable week.
 final weekEpoch = DateTime(1970, 1, 5);
 const weekCount = 52 * 120;
+
+const calendarDayCount = 4 + weekCount * 7;
 
 String monthTitle(DateTime month) =>
     '${monthNames[month.month - 1]} ${month.year}';
@@ -68,8 +62,6 @@ String weekdayShort(DateTime day) => weekdayLabels[day.weekday - 1];
 DateTime dateOnly(DateTime value) =>
     DateTime(value.year, value.month, value.day);
 
-/// Whole calendar days between two dates. UTC arithmetic keeps a week at
-/// seven dates when local time shifts for daylight saving.
 int calendarDaysBetween(DateTime from, DateTime to) {
   final start = DateTime.utc(from.year, from.month, from.day);
   final end = DateTime.utc(to.year, to.month, to.day);
@@ -103,7 +95,6 @@ List<DateTime> daysOfWeek(int index) {
   ];
 }
 
-/// Month label for a week: the month that begins inside it, otherwise Monday.
 DateTime monthOfWeek(int index) {
   for (final day in daysOfWeek(index)) {
     if (day.day == 1) return DateTime(day.year, day.month);
@@ -124,10 +115,8 @@ class MonthStrip {
   final MonthStripKind kind;
 }
 
-/// Extra rows before each week: one per month that does not start on Monday.
 final List<int> cutsBeforeWeek = _buildCutsBeforeWeek();
 
-/// Month starts before each week, including months that begin on Monday.
 final List<int> monthStartsBeforeWeek = _buildMonthStartsBeforeWeek();
 
 double unitsOfWeek(int weekIndex) {
@@ -178,10 +167,6 @@ bool weekIsCut(int weekIndex) {
   return cutsBeforeWeek[index + 1] > cutsBeforeWeek[index];
 }
 
-/// Largest strip whose start is strictly before [units].
-///
-/// Matches the varied-extent sliver, which treats an exact boundary as the end
-/// of the previous row.
 int stripIndexForScrollUnits(double units) {
   if (units <= 0) return 0;
   if (units >= unitsOfWeek(weekCount)) return stripCount - 1;

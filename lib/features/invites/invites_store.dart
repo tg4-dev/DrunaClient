@@ -2,9 +2,6 @@ import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/features/invites/invites_source.dart';
 import 'package:flutter/foundation.dart';
 
-/// The user's invites for the calendar, the profile and the invite page.
-/// Changes go to the source and the list is read back: nothing shows as
-/// done before the source says so.
 class InvitesStore extends ChangeNotifier {
   InvitesStore(this._source) {
     _source.changes?.addListener(load);
@@ -16,7 +13,6 @@ class InvitesStore extends ChangeNotifier {
   var _generation = 0;
   bool _disposed = false;
 
-  /// Null until the first answer.
   List<Invite>? get invites => _invites;
   Object? get error => _error;
 
@@ -27,7 +23,6 @@ class InvitesStore extends ChangeNotifier {
     return null;
   }
 
-  /// A new source starts from scratch; the old one is disposed.
   set source(InvitesSource value) {
     if (identical(value, _source)) return;
     _source.changes?.removeListener(load);
@@ -55,7 +50,6 @@ class InvitesStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Each of these throws on failure, for the caller to say so.
   Future<Invite> create(InviteDraft draft) async {
     final invite = await _source.create(draft);
     await load();

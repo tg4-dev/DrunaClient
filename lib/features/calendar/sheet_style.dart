@@ -1,8 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-/// Colours, type and motion of the event sheet, measured from the Figma
-/// reference and tuned for contrast.
 abstract final class SheetStyle {
   static const block = Color(0xFF141414);
   static const blockRadius = Radius.circular(32);
@@ -15,11 +13,9 @@ abstract final class SheetStyle {
   static const divider = Color(0x1FFFFFFF);
   static const pickerHeight = 180.0;
 
-  /// Anything that appears or disappears fades for at least this long.
   static const fade = Duration(milliseconds: 180);
   static const motion = Duration(milliseconds: 260);
 
-  /// Block titles: "Весь день", "Повтор".
   static const title = TextStyle(
     color: Colors.white,
     fontSize: 17,
@@ -27,21 +23,18 @@ abstract final class SheetStyle {
     letterSpacing: -0.2,
   );
 
-  /// Rows inside a block: options, "Окончание повтора".
   static const row = TextStyle(
     color: secondary,
     fontSize: 16,
     fontWeight: FontWeight.w400,
   );
 
-  /// Values at the end of a row.
   static const value = TextStyle(
     color: muted,
     fontSize: 16,
     fontWeight: FontWeight.w500,
   );
 
-  /// Small labels above values: "Начало", "Конец".
   static const caption = TextStyle(
     color: muted,
     fontSize: 13,
@@ -63,8 +56,6 @@ abstract final class SheetStyle {
   );
 }
 
-/// Shows [child] when [open], growing and fading in; collapses and fades out
-/// otherwise. The sheet's rule: nothing pops in or out.
 class Reveal extends StatelessWidget {
   const Reveal({
     required this.open,
@@ -76,7 +67,6 @@ class Reveal extends StatelessWidget {
   final bool open;
   final Widget child;
 
-  /// Changing it cross-fades to the new [child] instead of swapping it.
   final Object? contentKey;
 
   @override

@@ -9,20 +9,8 @@ import 'package:druna_app/features/calendar_sync/device_calendar.dart';
 import 'package:druna_app/shared/ui/brand.dart';
 import 'package:flutter/widgets.dart';
 
-/// What a tap on an event of the device's calendar opens.
-enum ExternalTap {
-  /// The system's own event screen, as in Apple Calendar.
-  device,
+enum ExternalTap { device, druna }
 
-  /// Druna's event page, read-only.
-  druna,
-}
-
-/// The device's calendar next to Druna's (design-system §9.12): its events
-/// come in to be shown, Druna's own go out to a calendar «Druna» there.
-/// That calendar is the app's, not the user's: it is never offered to be
-/// switched off, and every write first makes sure it is there, single, in
-/// the user's colour and holding exactly what Druna wrote.
 class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
   CalendarSync({
     required this.device,
@@ -36,7 +24,6 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
   final SettingsStorage _storage;
   final DateTime Function() _now;
 
-  /// Edits come in bursts (a drag, a save): the mirror waits for a pause.
   final Duration exportDelay;
 
   static const _enabledKey = 'calendar_sync.enabled';
@@ -46,35 +33,28 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
   static const _drunaKey = 'calendar_sync.druna_calendar';
   static const _exportedKey = 'calendar_sync.exported';
 
-  /// The calendar Druna writes its own events to.
   static const drunaCalendarName = 'Druna';
 
   var _access = CalendarAccess.unknown;
   CalendarAccess get access => _access;
 
-  /// False on a platform without calendars: nothing about them is shown.
   bool get supported => _access != CalendarAccess.unsupported;
 
   var _enabled = false;
 
-  /// The user turned the import on; it works once [access] is granted.
   bool get enabled => _enabled;
   bool get connected => _enabled && _access == CalendarAccess.granted;
 
   var _calendars = <DeviceCalendarInfo>[];
 
-  /// The device's calendars but Druna's own.
   List<DeviceCalendarInfo> get calendars => _calendars;
 
-  /// Calendars the user switched off; read-only ones (holidays, birthdays)
-  /// start off.
   var _off = <String>{};
   var _known = <String>{};
   bool isOn(String calendarId) => !_off.contains(calendarId);
 
   var _drunaColor = Brand.accent;
 
-  /// The user's colour: the calendar «Druna» on the device takes it.
   Color get drunaColor => _drunaColor;
 
   set drunaColor(Color value) {
@@ -94,20 +74,15 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
 
   String? _error;
 
-  /// The last read failed; the events shown are the ones before it.
   String? get error => _error;
 
-  /// The device's events, in their calendars' colours.
   final events = ValueNotifier<List<CalendarEvent>>(const []);
 
   String? _drunaCalendar;
 
-  /// Druna's event id → what was written for it on the device.
   var _exported = <String, _Exported>{};
   List<CalendarEvent> _pendingExport = const [];
 
-  /// Nothing is written before the calendar has said what the user's
-  /// events are: an empty list would otherwise wipe the calendar «Druna».
   var _mirrored = false;
   Timer? _exportTimer;
   Future<void> _exportQueue = Future.value();
@@ -138,14 +113,36 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     if (connected) await refresh();
   }
 
-  /// Back from the background: the calendar may have changed there, and so
-  /// may the access in the system settings.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _enabled) refresh();
+    if (state != AppLifecycleState.resumed) return;
+    if (_enabled) {
+      refresh();
+    } else if (_backFromSettings) {
+      _backFromSettings = false;
+      _recheckAccess();
+    }
   }
 
-  /// Asks for access and, once given, turns the import on.
+  var _backFromSettings = false;
+
+  Future<void> _recheckAccess() async {
+    try {
+      _access = await device.access();
+    } catch (_) {
+      return;
+    }
+    if (_disposed) return;
+    if (_access == CalendarAccess.granted) {
+      _enabled = true;
+      _storage.setBool(_enabledKey, true);
+      _notify();
+      await refresh();
+      return;
+    }
+    _notify();
+  }
+
   Future<CalendarAccess> connect() async {
     _access = await device.requestAccess();
     if (_access == CalendarAccess.granted) {
@@ -157,8 +154,6 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     return _access;
   }
 
-  /// Stops the import; [removeDrunaCalendar] also takes the calendar
-  /// «Druna» off the device.
   Future<void> disconnect({bool removeDrunaCalendar = false}) async {
     _enabled = false;
     _storage.setBool(_enabledKey, false);
@@ -170,11 +165,11 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     if (removeDrunaCalendar) await _removeDrunaCalendar();
   }
 
-  Future<void> openSettings() => device.openSettings();
+  Future<void> openSettings() {
+    if (!_enabled) _backFromSettings = true;
+    return device.openSettings();
+  }
 
-  /// Reads the calendars and their events again. Asked while a read is
-  /// under way, it reads once more after it: the calendar may have changed
-  /// in between (an event deleted on the system's screen).
   Future<void> refresh() {
     if (!_enabled) return Future.value();
     final reading = _reading;
@@ -226,7 +221,6 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
       final read = await device.events(from, to, [
         for (final calendar in on) calendar.id,
       ]);
-      // Disconnected meanwhile: what was read is no longer wanted.
       if (!_enabled || _disposed) return;
       final byId = {for (final calendar in on) calendar.id: calendar};
       events.value = [
@@ -236,7 +230,6 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
       ];
       _lastSync = _now();
       _error = null;
-      // The calendar «Druna» may have been changed meanwhile, too.
       _scheduleExport();
     } catch (error) {
       _error = 'Не получилось прочитать календарь';
@@ -258,9 +251,6 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     _notify();
   }
 
-  /// The system's screen for an event of the device's calendar. The event
-  /// may be edited or deleted there: once it closes, the calendar is read
-  /// again.
   Future<void> show(CalendarEvent event) async {
     final external = event.external;
     if (external == null) return;
@@ -271,15 +261,15 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// The user's own events as they are now: the calendar «Druna» on the
-  /// device is brought to match them, after a pause.
+  var exportEnabled = true;
+
   void mirror(List<CalendarEvent> own) {
+    if (!exportEnabled) return;
     _pendingExport = own;
     _mirrored = true;
     _scheduleExport();
   }
 
-  /// Waits for the queued writes; tests use it.
   @visibleForTesting
   Future<void> flushExport() async {
     if (_exportTimer?.isActive ?? false) {
@@ -325,16 +315,11 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
     } catch (_) {
-      // Next change tries again; the calendar «Druna» is a mirror.
     } finally {
       _saveExported();
     }
   }
 
-  /// The calendar «Druna», single, named and coloured as it should be. It
-  /// is made again if it is gone (deleted by the user, an earlier install's
-  /// left behind under another id): then everything goes in again. Other
-  /// calendars named «Druna» are leftovers of earlier installs and go.
   Future<String> _keepDrunaCalendar() async {
     final all = await device.calendars();
     final known = _drunaCalendar;
@@ -346,9 +331,7 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
       if (calendar.id == kept?.id || !isDrunaCalendar(calendar)) continue;
       try {
         await device.deleteCalendar(calendar.id);
-      } catch (_) {
-        // Not ours to delete after all: it stays, out of the list.
-      }
+      } catch (_) {}
     }
     if (kept == null) {
       final id = await device.createCalendar(drunaCalendarName, _drunaColor);
@@ -368,9 +351,6 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     return kept.id;
   }
 
-  /// What is in the calendar «Druna» against what Druna wrote: an event
-  /// deleted there is written again, one Druna does not know (added by
-  /// hand, or written by a run that did not get to note it) goes.
   Future<void> _checkWritten(
     String calendar,
     Map<String, CalendarEvent> wanted,
@@ -393,7 +373,6 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
-  /// From a month back to a year ahead: what is read and checked.
   (DateTime, DateTime) _window() {
     final today = dateOnly(_now());
     return (
@@ -412,12 +391,9 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
     if (id == null) return;
     try {
       await device.deleteCalendar(id);
-    } catch (_) {
-      // Already gone, or no access any more: nothing left to remove.
-    }
+    } catch (_) {}
   }
 
-  /// New calendars start on, but subscriptions and system ones start off.
   void _learn(List<DeviceCalendarInfo> calendars) {
     var changed = false;
     for (final calendar in calendars) {
@@ -452,16 +428,11 @@ class CalendarSync extends ChangeNotifier with WidgetsBindingObserver {
   }
 }
 
-/// A calendar named «Druna» that can be written: Druna's own, or one an
-/// earlier install left.
 bool isDrunaCalendar(DeviceCalendarInfo calendar) =>
     calendar.name == CalendarSync.drunaCalendarName && !calendar.readOnly;
 
-/// The series an occurrence belongs to: its id up to the occurrence's
-/// timestamp.
 String _eventId(DeviceEvent event) => event.instanceId.split('@').first;
 
-/// Whether some of [event] falls in `[from, to)`, where it can be checked.
 bool _inWindow(CalendarEvent event, DateTime from, DateTime to) {
   if (!event.start.isBefore(to)) return false;
   final repeat = event.repeat;
@@ -475,8 +446,6 @@ bool _inWindow(CalendarEvent event, DateTime from, DateTime to) {
   return until == null || !until.isBefore(from);
 }
 
-/// Only what the user made goes out: not the demo's events, invites,
-/// friends' time or what came from the device.
 bool exportable(CalendarEvent event) =>
     event.external == null &&
     event.invite == null &&
@@ -484,8 +453,6 @@ bool exportable(CalendarEvent event) =>
     event.seriesId == null &&
     !event.id.startsWith('demo-');
 
-/// An occurrence of the device's calendar as Druna's event. All-day events
-/// end on their last day in Druna, at the next midnight on the device.
 CalendarEvent importedEvent(DeviceEvent event, DeviceCalendarInfo calendar) {
   final external = ExternalEvent(
     instanceId: event.instanceId,
@@ -516,7 +483,6 @@ CalendarEvent importedEvent(DeviceEvent event, DeviceCalendarInfo calendar) {
   );
 }
 
-/// Druna's event as it goes to the calendar «Druna».
 DeviceEventDraft exportDraft(CalendarEvent event) {
   final title = event.title.trim();
   final repeat = event.repeat;
@@ -529,8 +495,6 @@ DeviceEventDraft exportDraft(CalendarEvent event) {
   );
 }
 
-/// [rule] in RFC 5545. A series that runs until a day ends after the last
-/// occurrence that may start on it.
 String rruleOf(RepeatRule rule, CalendarEvent event) {
   final parts = <String>[
     'FREQ=${switch (rule.unit) {
@@ -568,7 +532,6 @@ String _two(int value) => value.toString().padLeft(2, '0');
 String _date(DateTime day) =>
     '${day.year.toString().padLeft(4, '0')}${_two(day.month)}${_two(day.day)}';
 
-/// What decides whether a written event is still right.
 String _print(CalendarEvent event) {
   final draft = exportDraft(event);
   return [

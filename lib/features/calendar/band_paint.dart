@@ -3,28 +3,20 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 
-/// The shader behind [paintFadingBand] (`shaders/week_band.frag`).
 abstract final class BandShader {
-  /// Off in widget tests (`test/flutter_test_config.dart`): there the
-  /// shader is not compiled, and the slices stand in.
   static bool enabled = true;
 
-  /// The most colours one band can carry through the shader.
   static const maxColors = 8;
 
   static ui.FragmentProgram? _program;
   static ui.FragmentShader? _shader;
 
-  /// Loads the shader before the month is first drawn.
   static Future<void> precache() async {
     try {
       _program ??= await ui.FragmentProgram.fromAsset('shaders/week_band.frag');
-    } catch (_) {
-      // No shader (an old renderer): the slices stand in.
-    }
+    } catch (_) {}
   }
 
-  /// One shader for every band: its uniforms are copied at each draw.
   static ui.FragmentShader? get _ready {
     if (!enabled) return null;
     final program = _program;
@@ -33,15 +25,6 @@ abstract final class BandShader {
   }
 }
 
-/// A busy band in [rect]: [colors] at [stops] run along it in plain RGB,
-/// and it fades from its line — the top edge if [fromTop], else the bottom
-/// — to nothing [fade] away (100% → 55% → 20% → 0 at 0 / ⅓ / ⅔ / 1).
-/// With [middle] (distance from the line, alpha) the fade runs instead
-/// straight from 100% to that alpha there, then eases to nothing at
-/// [fade]. With [radial] — a centre in [rect]'s own coordinates, a radius
-/// and the share of it that is clear and from which it is full — that
-/// mask is multiplied in, for an arc instead of a straight fade. Cut clean
-/// at the line. One draw, no `saveLayer`.
 void paintFadingBand(
   Canvas canvas,
   Rect rect, {
@@ -64,7 +47,25 @@ void paintFadingBand(
 
   final shader = BandShader._ready;
   if (shader == null || colors.length > BandShader.maxColors) {
+    final mask = radial;
+    if (mask == null || mask.radius <= 0) {
+      _paintSlices(canvas, rect, colors, stops, fromTop, alphaAt, opacity);
+      return;
+    }
+    canvas.saveLayer(rect, Paint());
     _paintSlices(canvas, rect, colors, stops, fromTop, alphaAt, opacity);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..blendMode = BlendMode.dstIn
+        ..shader = ui.Gradient.radial(
+          rect.topLeft + mask.centre,
+          mask.radius,
+          const [Color(0x00000000), Color(0xFF000000)],
+          [mask.clear.clamp(0.0, 1.0), mask.full.clamp(0.0, 1.0)],
+        ),
+    );
+    canvas.restore();
     return;
   }
   var i = 0;
@@ -94,14 +95,28 @@ void paintFadingBand(
   canvas.drawRect(rect, Paint()..shader = shader);
 }
 
-/// 100% at the line, about 55% at a third, 20% at two thirds, 0 at the end.
+const bandFadeAt = [0.0, 0.35, 0.7, 1.0];
+const bandFadeLevels = [1.0, 0.55, 0.2, 0.0];
+
+const _bandFadeSlopes = [-9 / 7, -8 / 7, -5 / 6, 0.0];
+
 double bandFade(double x) {
-  final k = 1 - x.clamp(0.0, 1.0);
-  return k * k * (0.45 + 0.55 * k);
+  final clamped = x.clamp(0.0, 1.0);
+  final i = clamped < bandFadeAt[1]
+      ? 0
+      : clamped < bandFadeAt[2]
+      ? 1
+      : 2;
+  final h = bandFadeAt[i + 1] - bandFadeAt[i];
+  final t = (clamped - bandFadeAt[i]) / h;
+  final t2 = t * t;
+  final t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * bandFadeLevels[i] +
+      (t3 - 2 * t2 + t) * h * _bandFadeSlopes[i] +
+      (-2 * t3 + 3 * t2) * bandFadeLevels[i + 1] +
+      (t3 - t2) * h * _bandFadeSlopes[i + 1];
 }
 
-/// Without the shader: thin slices of falling opacity, each the colours'
-/// gradient scaled by a modulate filter. Shows as fine steps.
 void _paintSlices(
   Canvas canvas,
   Rect rect,

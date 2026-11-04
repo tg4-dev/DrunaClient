@@ -7,13 +7,13 @@ import 'package:druna_app/features/calendar/timeline_scale.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 
 void main() {
   final day = DateTime(2026, 10, 14);
   DateTime at(int hour, [int minute = 0]) =>
       DateTime(day.year, day.month, day.day, hour, minute);
 
-  /// Viewport x of [time] when the timeline opened on [openHour].
   double xOf(DateTime time, int openHour) {
     final offset =
         timelineX(at(openHour), defaultPixelsPerHour) - dayMidnightInset;
@@ -143,7 +143,6 @@ void main() {
       },
     );
 
-    // Opens an hour before the first event, at 09:00.
     final grab = Offset(
       xOf(at(10, 30), 9),
       timelineLaneTop(0) + timelineEventHeight / 2,
@@ -201,7 +200,6 @@ void main() {
       Offset(xOf(at(9), timelineMorningHour), y),
     );
     await tester.pump(const Duration(milliseconds: 600));
-    // 55 minutes to the right lands on 10:00, not 09:45 or 10:00 + 15.
     await gesture.moveBy(Offset(defaultPixelsPerHour * 55 / 60, 0));
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('09:00-10:00'), findsOneWidget);
@@ -242,7 +240,6 @@ void main() {
     final offset = timelineX(at(timelineMorningHour), 18) - dayMidnightInset;
     double x(DateTime time) => timelineX(time, 18) - offset;
 
-    // From 09:20 across 2 h 10 min: whole hours only, never a half.
     await holdAndDrag(tester, Offset(x(at(9, 20)), y), 18 * 130 / 60);
 
     expect(start!.minute, 0);
@@ -281,7 +278,7 @@ void main() {
         ),
       ],
     );
-    final tone = gridTone(calendarEventColor);
+    final tone = gridTone(defaultOwnColor);
     expect(
       find.byWidgetPredicate(
         (widget) =>

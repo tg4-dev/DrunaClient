@@ -8,7 +8,6 @@ import 'package:druna_app/app/session_controller.dart';
 import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
-import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/event_page/event_page.dart';
 import 'package:druna_app/features/settings/settings_page.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
@@ -18,8 +17,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  /// A server that knows only the profile: enough for the header and a
-  /// rename; everything else runs on the demo data.
   late _ProfileServer server;
 
   Future<SessionController> pumpPager(
@@ -52,10 +49,7 @@ void main() {
             storage: MemorySettingsStorage(),
             demoByDefault: true,
           ),
-          config: const AppConfig(
-            apiBaseUrl: 'https://example.test',
-            environment: 'test',
-          ),
+          config: const AppConfig(apiBaseUrl: 'https://example.test'),
           demoDelay: Duration.zero,
         ),
       ),
@@ -109,8 +103,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(EventPage), findsNothing);
 
-    // On the month a cell of its day, answered (the user organizes it),
-    // with the faces and no title; a tap on it opens its page.
     final chip = find.byWidgetPredicate(
       (widget) => widget is SharedCellBack && widget.event.title == 'Каток',
     );
@@ -122,16 +114,13 @@ void main() {
     expect(find.text('Организатор'), findsOneWidget);
     expect(find.byKey(const ValueKey('event-edit')), findsOneWidget);
     expect(find.text('Вместе с'), findsOneWidget);
-    expect(find.text('Ждём'), findsNothing);
+    expect(find.text('Ждём ответа'), findsNothing);
 
-    // The organizer always goes: "Нет" only shakes…
     final no = find.byKey(const ValueKey('rsvp-not-going'));
     await tester.tap(no);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Отменить событие?'), findsNothing);
 
-    // …and a second tap soon after calls it off: the page goes, and so
-    // does the chip.
     await tester.tap(no);
     await tester.pumpAndSettle();
     expect(find.text('Отменить событие?'), findsOneWidget);
@@ -156,8 +145,6 @@ void main() {
 
     final gesture = await tester.startGesture(const Offset(300, 420));
     await tester.pump(const Duration(milliseconds: 600));
-    // Drawn as a dashed outline with everyone's faces while the finger is
-    // down, the unanswered cell it will become.
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('timeline-ghost')),
@@ -175,8 +162,6 @@ void main() {
   ) async {
     await pumpPager(tester);
     await holdToday(tester);
-    // The event page says it is the user's own (the bar's caption under it
-    // says so too).
     expect(
       find.descendant(
         of: find.byType(EventPage),
@@ -211,7 +196,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Готовлю пасту, с вас десерт.'), findsOneWidget);
-    // Not answered: the user's avatar waits by the title, not in a row.
     expect(find.byKey(const ValueKey('rsvp-me')), findsOneWidget);
     expect(find.byKey(const ValueKey('face-1')), findsNothing);
     expect(find.byKey(const ValueKey('event-edit')), findsNothing);
@@ -221,14 +205,12 @@ void main() {
     expect(find.byKey(const ValueKey('face-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('rsvp-reset')), findsOneWidget);
 
-    // ✕ takes the answer back, then "Да" again.
     await tester.tap(find.byKey(const ValueKey('rsvp-reset')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('face-1')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('rsvp-going')));
     await tester.pumpAndSettle();
 
-    // A pull on the top closes the page.
     await tester.fling(
       find.byKey(const ValueKey('event-grabber')),
       const Offset(0, 400),
@@ -252,16 +234,11 @@ void main() {
     String shown() => editable().controller
         .buildTextSpan(context: tester.element(field), withComposing: false)
         .toPlainText();
-    // A field in the app's style, not a dialog; the name in capitals, kept
-    // as typed (design-system §3).
     expect(editable().controller.text, 'Глеб');
     expect(shown(), 'ГЛЕБ');
     expect(find.text('@gleb'), findsOneWidget);
-    // One save for the name and the avatar: nothing to save yet.
-    expect(find.byKey(const ValueKey('profile-name-save')), findsNothing);
     expect(find.byKey(const ValueKey('profile-save')), findsNothing);
 
-    // A tap outside ends the editing.
     await tester.tap(field);
     await tester.pump();
     expect(editable().focusNode.hasFocus, isTrue);
@@ -269,7 +246,6 @@ void main() {
     await tester.pump();
     expect(editable().focusNode.hasFocus, isFalse);
 
-    // «Отменить» puts the saved name back.
     await tester.enterText(field, 'Кто-то');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-cancel')));
@@ -280,7 +256,6 @@ void main() {
 
     await tester.enterText(field, 'Глеб Я.');
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('profile-name-save')), findsNothing);
     await tester.ensureVisible(find.byKey(const ValueKey('profile-save')));
     await tester.tap(find.byKey(const ValueKey('profile-save')));
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
@@ -291,23 +266,6 @@ void main() {
     expect(shown(), 'ГЛЕБ Я.');
     expect(find.text('Профиль сохранён'), findsOneWidget);
     expect(find.byKey(const ValueKey('profile-save')), findsNothing);
-  });
-
-  test('an unanswered invite is see-through on the calendar', () {
-    final event = CalendarEvent(
-      id: 'x',
-      title: '',
-      start: DateTime(2026, 11, 2, 18),
-      end: DateTime(2026, 11, 2, 19),
-      invite: EventInvite(
-        id: 'x',
-        colors: [Color(0xFF0000FF), Color(0xFFFF0000)],
-        pending: true,
-      ),
-    );
-    final fill = eventFill(event, const Color(0xFF00FF00));
-    final colors = (fill.gradient! as LinearGradient).colors;
-    expect(colors.every((c) => c.a == pendingInviteAlpha), isTrue);
   });
 
   testWidgets('the user\'s face on shared cells is theirs, also when the '

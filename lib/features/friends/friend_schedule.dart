@@ -8,13 +8,10 @@ import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/foundation.dart';
 
-/// A friend's busy time. Only spans, no titles: the calendar shows when a
-/// friend is busy, not what they do.
 abstract interface class FriendScheduleSource {
   Future<List<CalendarEvent>> eventsOf(FriendInfo friend);
 }
 
-/// The server has no endpoint for this yet (docs/backend-changes.md).
 class NoFriendSchedule implements FriendScheduleSource {
   const NoFriendSchedule();
 
@@ -22,9 +19,6 @@ class NoFriendSchedule implements FriendScheduleSource {
   Future<List<CalendarEvent>> eventsOf(FriendInfo friend) async => const [];
 }
 
-/// Generated busy time, the same for a friend on every launch: two to four
-/// spans a week for eight weeks either side of [today], now and then a
-/// trip of two or three days.
 class DemoFriendSchedule implements FriendScheduleSource {
   DemoFriendSchedule({DateTime? today, this.weeks = 8})
     : today = dateOnly(today ?? DateTime.now());
@@ -71,9 +65,6 @@ class DemoFriendSchedule implements FriendScheduleSource {
   }
 }
 
-/// The busy time of the selected friends, each span in its friend's colour.
-/// Reloads when the selection, the friends list or the source changes;
-/// a friend's schedule is fetched once per source.
 class FriendSchedules extends ValueNotifier<List<CalendarEvent>> {
   FriendSchedules({
     required this.selection,
@@ -82,7 +73,18 @@ class FriendSchedules extends ValueNotifier<List<CalendarEvent>> {
   }) : _source = source,
        super(const []) {
     selection.addListener(_refresh);
-    friends.addListener(_refresh);
+    friends.addListener(_friendsChanged);
+    _loadedFor = friends.friends;
+    _refresh();
+  }
+
+  List<FriendInfo>? _loadedFor;
+
+  void _friendsChanged() {
+    if (!identical(friends.friends, _loadedFor)) {
+      _loadedFor = friends.friends;
+      _cache.clear();
+    }
     _refresh();
   }
 
@@ -128,7 +130,6 @@ class FriendSchedules extends ValueNotifier<List<CalendarEvent>> {
     value = [for (final friend in chosen) ...?_cache[friend.id]];
   }
 
-  /// A failed friend shows nothing rather than breaking the rest.
   Future<List<CalendarEvent>> _load(
     FriendScheduleSource source,
     FriendInfo friend,
@@ -149,7 +150,7 @@ class FriendSchedules extends ValueNotifier<List<CalendarEvent>> {
   void dispose() {
     _disposed = true;
     selection.removeListener(_refresh);
-    friends.removeListener(_refresh);
+    friends.removeListener(_friendsChanged);
     super.dispose();
   }
 }

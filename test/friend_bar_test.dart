@@ -84,7 +84,6 @@ void main() {
 
     expect(find.text('+1'), findsOneWidget);
     expect(leftOf(tester, 'АЛИНА'), greaterThan(600));
-    // Not picked: slid off past the right edge.
     final dina = find.bySemanticsLabel('ДИНА');
     expect(dina.evaluate().isEmpty || tester.getRect(dina).left > 800, isTrue);
 
@@ -114,7 +113,6 @@ void main() {
     expect(find.text('Добавить друзей'), findsOneWidget);
     final button = find.byKey(const ValueKey('add-friends'));
     final open = tester.getRect(button).left;
-    // In my mode it has slid past the right edge, after the finger.
     mode.value = 0.5;
     await tester.pump();
     final width = tester.getSize(find.byType(FriendBar)).width;
@@ -129,8 +127,6 @@ void main() {
   ) async {
     await pumpBar(tester);
     final step = leftOf(tester, 'БОРИС') - leftOf(tester, 'АЛИНА');
-    // Partway in: each is further from its place than the one on its left,
-    // so the gaps are wider and close as they arrive.
     mode.value = 0.6;
     await tester.pump();
     final gap1 = leftOf(tester, 'БОРИС') - leftOf(tester, 'АЛИНА');
@@ -146,7 +142,6 @@ void main() {
       'friends\' calendar while nobody is picked', (tester) async {
     mode.value = 0;
     await pumpBar(tester);
-    // How far in from its place a thing is: they fly in from the left.
     double shiftOf(Finder finder) => tester
         .widget<Transform>(
           find.ancestor(of: finder, matching: find.byType(Transform)).first,
@@ -162,13 +157,11 @@ void main() {
     await tester.tap(arrow);
     expect(shownFriends, 1);
 
-    // In friends' calendar both are past the left edge.
     mode.value = 1;
     await tester.pumpAndSettle();
     final width = tester.getSize(find.byType(FriendBar)).width;
     expect(shiftOf(find.byKey(const ValueKey('me'))), lessThan(-width));
 
-    // With friends picked the stack stands there instead of the arrow.
     selection.toggle(1);
     mode.value = 0;
     await tester.pumpAndSettle();

@@ -5,14 +5,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// A month to pick a day from, in the page's type over a see-through dark
-/// panel: the picked day in a white circle, today in red (design-system
-/// §9.1). Arrows move between months.
 class DateGrid extends StatefulWidget {
   const DateGrid({
     required this.selected,
     required this.onPicked,
-    this.today,
     this.firstDay,
     super.key,
   });
@@ -20,11 +16,7 @@ class DateGrid extends StatefulWidget {
   final DateTime selected;
   final ValueChanged<DateTime> onPicked;
 
-  /// Days before it are faint and cannot be picked.
   final DateTime? firstDay;
-
-  /// For tests; the clock otherwise.
-  final DateTime? today;
 
   @override
   State<DateGrid> createState() => _DateGridState();
@@ -43,11 +35,10 @@ class _DateGridState extends State<DateGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final today = dateOnly(widget.today ?? DateTime.now());
+    final today = dateOnly(DateTime.now());
     final lead = _month.weekday - 1;
     final days = DateTime(_month.year, _month.month + 1, 0).day;
     final rows = ((lead + days) / 7).ceil();
-    // Taps on empty cells stay in the grid instead of closing it.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {},

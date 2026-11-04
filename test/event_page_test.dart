@@ -35,7 +35,6 @@ void main() {
       expect(after(const Duration(hours: 5)), '5 часов');
       expect(after(const Duration(days: 1)), '1 день');
       expect(after(const Duration(days: 1, hours: 2)), '1 день 2 ч');
-      // Minutes are dropped next to days.
       expect(
         after(const Duration(days: 2, hours: 2, minutes: 30)),
         '2 дня 2 ч',
@@ -121,7 +120,6 @@ void main() {
   });
 
   group('title fit', () {
-    // The test font draws every glyph one em wide: "ABCDE" at 10 is 50.
     const style = TextStyle(fontSize: 10, height: 1);
 
     double widthOf(TitleFit fit, String line) {
@@ -225,7 +223,6 @@ void main() {
 
       expect(find.text('Мои события'), findsOneWidget);
       expect(find.bySemanticsLabel('Встреча'), findsOneWidget);
-      // One day: its date in full above the times, how long between them.
       expect(find.text('7 октября'), findsOneWidget);
       expect(find.text('7 окт.'), findsNothing);
       expect(find.text('16:00'), findsOneWidget);
@@ -276,7 +273,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('event-save')));
       await tester.pumpAndSettle();
       expect(saved?.end, DateTime(2026, 10, 9, 20));
-      // Saved, the page shows the event again.
       expect(find.byKey(const ValueKey('event-edit')), findsOneWidget);
       expect(find.text('9 окт.'), findsOneWidget);
     });
@@ -292,14 +288,12 @@ void main() {
       await tester.pumpAndSettle();
       final field = find.byKey(const ValueKey('event-title-field'));
       expect(tester.getRect(field).size, title.size);
-      // "Весь день" opens above the dates: they move down, not sideways.
       final editing = tester.getRect(
         find.byKey(const ValueKey('when-startTime')),
       );
       expect(editing.left, date.left);
       expect(editing.width, date.width);
 
-      // A longer event keeps the times and the pill's middle in place.
       final duration = tester.getRect(
         find.byKey(const ValueKey('when-duration')),
       );
@@ -327,12 +321,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(DateGrid), findsOneWidget);
 
-      // Inside the month taps stay there: the arrows turn the page.
       await tester.tap(find.byKey(const ValueKey('grid-next')));
       await tester.pumpAndSettle();
       expect(find.byType(DateGrid), findsOneWidget);
 
-      // The page's margin beside the dates is empty space.
       final row = tester.getRect(find.byKey(const ValueKey('when-duration')));
       await tester.tapAt(Offset(4, row.center.dy));
       await tester.pumpAndSettle();

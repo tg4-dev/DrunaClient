@@ -25,9 +25,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The page right of the month: the user's profile on top (name, the
-/// invites, their colour), then the server the build talks to and switches
-/// that make testing easier (design-system §9.3).
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     required this.session,
@@ -42,28 +39,36 @@ class SettingsPage extends StatelessWidget {
     super.key,
   });
 
-  /// For the calendar step of the onboarding rehearsal.
   final CalendarSync? calendarSync;
 
-  /// The user's invites for the «События» block; none without it.
   final InvitesStore? invites;
   final ValueChanged<String>? onOpenInvite;
 
-  /// Puts the demo invites back as they were at launch.
   final VoidCallback? onResetInvites;
 
   final SessionController session;
   final AppSettings settings;
   final AppConfig config;
 
-  /// Puts the demo friends back as they were at launch.
   final VoidCallback onResetDemo;
 
-  /// Forgets which friends are picked in the friend bar and how often.
   final VoidCallback onResetFriends;
 
   @override
   Widget build(BuildContext context) => _page();
+
+  Future<void> _switchDemo(BuildContext context, bool demo) async {
+    final ok = await confirmAction(
+      context,
+      title: demo ? 'Перейти в демо-версию?' : 'Выйти из демо-версии?',
+      message: demo
+          ? 'Аккаунт и данные будут только на этом устройстве, сервер не '
+                'используется. Ты выйдешь из аккаунта.'
+          : 'Приложение подключится к серверу. Ты выйдешь из демо-аккаунта.',
+      confirmLabel: demo ? 'Перейти' : 'Выйти',
+    );
+    if (ok) settings.demo = demo;
+  }
 
   Widget _page() {
     return Scaffold(
@@ -73,12 +78,10 @@ class SettingsPage extends StatelessWidget {
         child: ListenableBuilder(
           listenable: Listenable.merge([session, settings]),
           builder: (context, _) {
-            final own = ownColorFor(settings, session.profile);
+            final own = ownColorFor(settings);
             final invites = this.invites;
             return ListView(
               physics: const BouncingScrollPhysics(),
-              // No side margins: the invite shelves run to the screen edges;
-              // everything else is inset by [PageStyle.gutter].
               padding: const EdgeInsets.only(top: 8, bottom: 40),
               children: [
                 _inset(
@@ -105,107 +108,94 @@ class SettingsPage extends StatelessWidget {
                       _DeveloperSection(
                         children: [
                           _ServerSection(session: session, config: config),
-                          if (settings.allowDemo) ...[
-                            const SizedBox(height: 12),
-                            BlockSection(
-                              icon: CupertinoIcons.lab_flask_solid,
-                              title: 'Демо-данные',
-                              children: [
-                                SettingRow(
-                                  title: 'Пройти онбординг',
-                                  subtitle:
-                                      'Регистрация без сервера, аккаунт не '
-                                      'создаётся; demo@druna.app — вход',
-                                  onTap: () => showOnboardingRehearsal(
-                                    context,
-                                    colorSlot: settings.ownColorSlot,
-                                    font: ownFontFor(settings),
-                                    calendarSync: calendarSync,
-                                  ),
+                          const SizedBox(height: 12),
+                          BlockSection(
+                            icon: CupertinoIcons.lab_flask_solid,
+                            title: 'Демо-данные',
+                            children: [
+                              SettingSwitchRow(
+                                title: 'Демо-версия',
+                                subtitle:
+                                    'Всё на устройстве, без сервера и '
+                                    'без календаря iOS',
+                                value: settings.demo,
+                                onChanged: (value) =>
+                                    _switchDemo(context, value),
+                              ),
+                              SettingRow(
+                                title: 'Пройти онбординг',
+                                subtitle:
+                                    'Регистрация без сервера, аккаунт не '
+                                    'создаётся; ник demo — вход',
+                                onTap: () => showOnboardingRehearsal(
+                                  context,
+                                  colorSlot: settings.ownColorSlot,
+                                  font: ownFontFor(settings),
+                                  calendarSync: calendarSync,
                                 ),
-                                SettingRow(
-                                  title: 'Пройти вход',
-                                  subtitle:
-                                      'Любая почта ведёт ко входу; пароль '
-                                      'wrongpass — ошибка',
-                                  onTap: () => showOnboardingRehearsal(
-                                    context,
-                                    signIn: true,
-                                    colorSlot: settings.ownColorSlot,
-                                    font: ownFontFor(settings),
-                                  ),
+                              ),
+                              SettingRow(
+                                title: 'Пройти вход',
+                                subtitle:
+                                    'Любой ник ведёт ко входу; пароль '
+                                    'wrongpass — ошибка',
+                                onTap: () => showOnboardingRehearsal(
+                                  context,
+                                  signIn: true,
+                                  colorSlot: settings.ownColorSlot,
+                                  font: ownFontFor(settings),
                                 ),
-                                SettingRow(
-                                  title: 'Подгонка аватаров',
-                                  subtitle:
-                                      'Для разработчика: шрифты буквы, '
-                                      'docs/avatar.md',
-                                  onTap: () => showAvatarTuning(context),
-                                ),
-                                SettingSwitchRow(
-                                  title: 'Демо-друзья',
-                                  subtitle: '12 друзей и заявка, без сервера',
-                                  value: settings.demoFriends,
-                                  onChanged: (value) =>
-                                      settings.demoFriends = value,
-                                ),
-                                SettingSwitchRow(
-                                  title: 'Нет сети',
-                                  subtitle:
-                                      'Демо отвечает ошибкой: проверить экраны ошибок',
-                                  value: settings.demoOffline,
-                                  onChanged: settings.demoFriends
-                                      ? (value) => settings.demoOffline = value
-                                      : null,
-                                ),
-                                SettingSwitchRow(
-                                  title: 'Демо-расписания друзей',
-                                  subtitle:
-                                      'Занятость выбранных друзей в календаре',
-                                  value: settings.demoSchedules,
-                                  onChanged: (value) =>
-                                      settings.demoSchedules = value,
-                                ),
-                                SettingRow(
-                                  title: 'Сбросить выбор друзей',
-                                  subtitle:
-                                      'Кто выбран в нижней панели и как часто',
-                                  onTap: () {
-                                    onResetFriends();
-                                    _toast(context, 'Выбор друзей сброшен');
-                                  },
-                                ),
-                                SettingRow(
-                                  title: 'Сбросить демо-друзей',
-                                  onTap: settings.demoFriends
-                                      ? () {
-                                          onResetDemo();
-                                          _toast(
-                                            context,
-                                            'Демо-друзья сброшены',
-                                          );
-                                        }
-                                      : null,
-                                ),
-                                SettingRow(
-                                  title: 'Сбросить демо-приглашения',
-                                  subtitle:
-                                      'Приглашения работают с демо-друзьями',
-                                  onTap:
-                                      settings.demoFriends &&
-                                          onResetInvites != null
-                                      ? () {
-                                          onResetInvites!();
-                                          _toast(
-                                            context,
-                                            'Демо-приглашения сброшены',
-                                          );
-                                        }
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ],
+                              ),
+                              SettingRow(
+                                title: 'Подгонка аватаров',
+                                subtitle:
+                                    'Для разработчика: шрифты буквы, '
+                                    'docs/avatar.md',
+                                onTap: () => showAvatarTuning(context),
+                              ),
+                              SettingSwitchRow(
+                                title: 'Нет сети',
+                                subtitle:
+                                    'Демо отвечает ошибкой: проверить экраны ошибок',
+                                value: settings.demoOffline,
+                                onChanged: settings.demo
+                                    ? (value) => settings.demoOffline = value
+                                    : null,
+                              ),
+                              SettingRow(
+                                title: 'Сбросить выбор друзей',
+                                subtitle:
+                                    'Кто выбран в нижней панели и как часто',
+                                onTap: () {
+                                  onResetFriends();
+                                  _toast(context, 'Выбор друзей сброшен');
+                                },
+                              ),
+                              SettingRow(
+                                title: 'Сбросить демо-друзей',
+                                onTap: settings.demo
+                                    ? () {
+                                        onResetDemo();
+                                        _toast(context, 'Демо-друзья сброшены');
+                                      }
+                                    : null,
+                              ),
+                              SettingRow(
+                                title: 'Сбросить демо-приглашения',
+                                subtitle:
+                                    'Приглашения работают с демо-друзьями',
+                                onTap: settings.demo && onResetInvites != null
+                                    ? () {
+                                        onResetInvites!();
+                                        _toast(
+                                          context,
+                                          'Демо-приглашения сброшены',
+                                        );
+                                      }
+                                    : null,
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 12),
                           BlockSection(
                             icon: CupertinoIcons.wand_stars,
@@ -250,14 +240,6 @@ void _toast(BuildContext context, String message) {
 String _errorText(Object error) =>
     error is ApiException ? error.message : 'Не получилось';
 
-/// The user on top of the page (design-system §9.3, §9.11): the avatar as
-/// it is, the name in a field of the app's own style, the username and the
-/// email, then the same pickers of font and colour as in the onboarding.
-///
-/// The name, the font and the colour are a draft until «Сохранить
-/// профиль», one button for all of them: the avatar shows the draft at
-/// once, the rest of the app (the events, the calendar «Druna» on the
-/// device) only after. «Отменить» drops it.
 class _ProfileHeader extends StatefulWidget {
   const _ProfileHeader({
     required this.session,
@@ -278,11 +260,9 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
   static const _ring = 3.0;
   static const _ringGap = 4.0;
 
-  /// Picked but not saved; null — as saved.
   int? _slot;
   AvatarFont? _font;
 
-  /// The name as typed; saved with the rest.
   final _name = UpperCaseNameController();
   final _nameFocus = FocusNode();
   String? _savedName;
@@ -314,8 +294,6 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
 
   void _onName() => setState(() {});
 
-  /// Renamed elsewhere (a refresh, a first load): shows it unless the user
-  /// has a draft of their own.
   void _syncName() {
     final saved = session.profile?.name;
     if (saved == null || saved == _savedName) return;
@@ -325,9 +303,7 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
     if (!drafted) _name.text = saved;
   }
 
-  int get _savedSlot =>
-      settings.ownColorSlot ??
-      avatarPalette.indexOf(widget.own).clamp(0, avatarPalette.length - 1);
+  int get _savedSlot => settings.ownColorSlot ?? defaultOwnColorSlot;
 
   bool get _nameChanged =>
       _savedName != null && _name.text.trim() != _savedName!.trim();
@@ -338,9 +314,6 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
 
   bool get _changed => _nameChanged || _avatarChanged;
 
-  /// One save for all: the name through the server (`PATCH /users/me`) or,
-  /// without one, on the device; the font and the colour on the device. A
-  /// name the server refused keeps the whole draft.
   Future<void> _save() async {
     if (_busy) return;
     if (_nameChanged) {
@@ -581,10 +554,7 @@ class _ServerSectionState extends State<_ServerSection> {
             _toast(context, 'Адрес скопирован');
           },
         ),
-        SettingRow(
-          title: 'Сборка',
-          value: '${widget.config.environment} · ${_buildMode()}',
-        ),
+        SettingRow(title: 'Сборка', value: _buildMode()),
         SettingRow(
           title: 'Проверить соединение',
           subtitle: 'GET /ping/',
@@ -615,8 +585,6 @@ String _buildMode() => kReleaseMode
     ? 'profile'
     : 'debug';
 
-/// The server, the demo and the slow motion: closed until asked for, so the
-/// page is the user's profile first.
 class _DeveloperSection extends StatefulWidget {
   const _DeveloperSection({required this.children});
 

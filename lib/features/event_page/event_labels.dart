@@ -1,7 +1,5 @@
 import 'package:druna_app/features/calendar/repeat_rule.dart';
 
-/// Months as the event page writes them: three letters and a dot, May in
-/// full since it is three letters already.
 const _months = [
   'янв.',
   'фев.',
@@ -17,7 +15,6 @@ const _months = [
   'дек.',
 ];
 
-/// "31 окт.", "2 ноя.", "5 мая".
 String shortDateLabel(DateTime day) => '${day.day} ${_months[day.month - 1]}';
 
 const _monthsOf = [
@@ -35,12 +32,8 @@ const _monthsOf = [
   'декабря',
 ];
 
-/// "31 октября": one day, written out above its times.
 String fullDateLabel(DateTime day) => '${day.day} ${_monthsOf[day.month - 1]}';
 
-/// How long, in the pill between the times: the first unit in full, the
-/// second short — "45 минут", "2 часа", "2 часа 30 м", "1 день",
-/// "1 день 2 ч". Minutes are dropped next to days.
 String durationPillLabel(DateTime start, DateTime end) {
   var minutes = end.difference(start).inMinutes;
   if (minutes < 0) minutes = 0;
@@ -58,7 +51,6 @@ String durationPillLabel(DateTime start, DateTime end) {
   return '$rest ${russianPlural(rest, 'минута', 'минуты', 'минут')}';
 }
 
-/// What the repeat block says after "Повтор:".
 String repeatSummaryLabel(RepeatRule rule) => switch (rule.preset) {
   RepeatPreset.daily => 'Каждый день',
   RepeatPreset.weekly => 'По неделям',

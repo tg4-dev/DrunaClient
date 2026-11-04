@@ -9,8 +9,10 @@ import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/day_detail.dart';
 import 'package:druna_app/features/calendar/day_events.dart';
 import 'package:druna_app/features/calendar/day_friends.dart';
+import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friend_column.dart';
+import 'package:druna_app/features/friends/friend_schedule.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,7 +101,6 @@ void main() {
           last = now;
         }
       }
-      // Early on all move together, by the same amount per step.
       final step = top(0, 0.2) - top(0, 0.1);
       expect(top(2, 0.2) - top(2, 0.1), closeTo(step, 0.5));
       expect(step, greaterThan(0));
@@ -116,7 +117,36 @@ void main() {
   });
 
   group('open day with friends', () {
-    Future<void> openDay(WidgetTester tester, {double height = 2622}) async {
+    Future<DateTime> busiestDayThisWeek(WidgetTester tester) async {
+      final friends = [
+        for (var i = 0; i < 3; i++)
+          tester.widget<RingedAvatar>(find.byType(RingedAvatar).at(i)).friend,
+      ];
+      final schedule = DemoFriendSchedule();
+      final events = <CalendarEvent>[
+        for (final friend in friends)
+          ...await tester.runAsync(() => schedule.eventsOf(friend)) ??
+              const <CalendarEvent>[],
+      ];
+      final monday = mondayOfWeek(weekIndexOf(DateTime.now()));
+      var best = dateOnly(DateTime.now());
+      var most = 0;
+      for (var i = 0; i < 7; i++) {
+        final day = addCalendarDays(monday, i);
+        final count = busySpansOnDay(events, day).length;
+        if (count > most) {
+          most = count;
+          best = day;
+        }
+      }
+      return best;
+    }
+
+    Future<void> openDay(
+      WidgetTester tester, {
+      double height = 2622,
+      bool busy = false,
+    }) async {
       tester.view.physicalSize = Size(1206, height);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
@@ -136,10 +166,7 @@ void main() {
               storage: MemorySettingsStorage(),
               demoByDefault: true,
             ),
-            config: const AppConfig(
-              apiBaseUrl: 'https://example.test',
-              environment: 'test',
-            ),
+            config: const AppConfig(apiBaseUrl: 'https://example.test'),
             demoDelay: Duration.zero,
           ),
         ),
@@ -149,9 +176,9 @@ void main() {
         await tester.tap(find.byType(RingedAvatar).at(i));
         await tester.pumpAndSettle();
       }
-      final now = DateTime.now();
+      final day = busy ? await busiestDayThisWeek(tester) : DateTime.now();
       await tester.tap(
-        find.byKey(ValueKey('day-${now.year}-${now.month}-${now.day}')),
+        find.byKey(ValueKey('day-${day.year}-${day.month}-${day.day}')),
       );
       await tester.pumpAndSettle();
     }
@@ -181,8 +208,6 @@ void main() {
         for (final element in columnAvatars().evaluate())
           tester.getRect(find.byWidget(element.widget)).top - timeline.top,
       ]..sort();
-      // Every avatar sits on a row of the timeline, the first right under
-      // the divider.
       for (var i = 0; i < tops.length; i++) {
         expect(
           tops[i],
@@ -198,7 +223,6 @@ void main() {
 
     testWidgets('rows and the column scroll together, then a pull past the '
         'top switches to my calendar', (tester) async {
-      // Short enough that friends' rows do not all fit.
       await openDay(tester, height: 2000);
       final before = tester.getRect(columnAvatars().last).top;
 
@@ -207,7 +231,6 @@ void main() {
       expect(after, lessThan(before));
       expect(folded, findsNothing);
 
-      // Back to the top and on: the rest of the pull switches.
       await pull(tester, before - after + 200);
       expect(folded, findsOneWidget);
     });
@@ -224,7 +247,7 @@ void main() {
     testWidgets('mid-switch, each friend\'s bar keeps level with them', (
       tester,
     ) async {
-      await openDay(tester);
+      await openDay(tester, busy: true);
       final bars = find.byWidgetPredicate((widget) {
         final key = widget.key;
         return key is ValueKey<String> &&
@@ -240,8 +263,6 @@ void main() {
           tester.getRect(barOf(element)).top,
       ];
 
-      // A quarter of the way (70 of 280 pt): friends are halfway into the
-      // stack.
       final gesture = await tester.startGesture(const Offset(250, 500));
       for (var i = 0; i < 7; i++) {
         await gesture.moveBy(const Offset(0, 10));
@@ -265,7 +286,6 @@ void main() {
           ),
         );
       }
-      // And they did move.
       final moved = [
         for (final element in bars.evaluate())
           tester.getRect(barOf(element)).top,
@@ -275,7 +295,6 @@ void main() {
       }
       await gesture.up();
       await tester.pumpAndSettle();
-      // A row's bar is as tall as the avatar beside it.
       for (final element in bars.evaluate()) {
         expect(
           tester.getRect(barOf(element)).height,
@@ -323,7 +342,6 @@ void main() {
     );
     const pixelsPerHour = 40.0;
     const inset = DayFriendsGeometry.columnWidth;
-    // Scrolled so that the event starts two hours left of the screen.
     final offset = timelineX(DateTime(2026, 10, 31, 10), pixelsPerHour);
     await tester.pumpWidget(
       MaterialApp(

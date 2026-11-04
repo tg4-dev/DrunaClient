@@ -1,3 +1,4 @@
+import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/expand_geometry.dart';
 
 const dayTitleGap = 10.0;
@@ -48,7 +49,7 @@ DayTitleLayout dayTitleLayout({
   required double offset,
   required double pixelsPerHour,
   required double bigWidth,
-  int maxIndex = 365 * 130 - 1,
+  int maxIndex = calendarDayCount - 1,
 }) {
   final width = dayWidthOf(pixelsPerHour);
   final raw = width == 0 ? 0.0 : (offset + dayMidnightInset) / width;

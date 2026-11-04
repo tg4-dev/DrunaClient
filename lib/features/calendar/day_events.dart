@@ -5,15 +5,11 @@ import 'package:flutter/material.dart';
 
 const timelineEventTop = 36.0;
 
-/// As tall as an avatar of the friends' column (48): the user's bars and
-/// friends' rows read as one scale.
 const timelineEventHeight = 48.0;
 const timelineEventGap = 8.0;
 const timelineTitlePadding = 12.0;
 const timelineEventRadius = Radius.circular(16);
 
-/// `bodyStrong` (design-system §3): smaller than the 20 pt of the taller
-/// bars.
 const timelineTitleStyle = TextStyle(
   color: Colors.white,
   fontSize: 17,
@@ -24,8 +20,6 @@ const timelineTitleStyle = TextStyle(
 double timelineLaneTop(int lane) =>
     timelineEventTop + lane * (timelineEventHeight + timelineEventGap);
 
-/// One day's event bars. Titles are drawn by [DayTitleOverlay] above all days,
-/// so a bar crossing midnight reads as one event.
 class DayEventLayer extends StatelessWidget {
   const DayEventLayer({
     required this.day,
@@ -48,16 +42,13 @@ class DayEventLayer extends StatelessWidget {
   final Map<String, int> lanes;
   final String? hiddenEventId;
 
-  /// The event being moved stays in place, faded, until it is dropped.
   final String? dimmedEventId;
   final void Function(CalendarEvent event, Rect rect)? onEventTap;
 
-  /// A long press on a bar picks the event up to move it.
   final void Function(CalendarEvent event, Offset global)? onHoldStart;
   final ValueChanged<Offset>? onHoldMove;
   final VoidCallback? onHoldEnd;
 
-  /// Moves a bar in [lane] with the calendar's mode (see [ChipMotion]).
   final LaneMotion? motion;
 
   @override
@@ -106,24 +97,12 @@ class DayEventLayer extends StatelessWidget {
             AnimatedOpacity(
               opacity: event.id == dimmedEventId ? 0.35 : 1,
               duration: const Duration(milliseconds: 160),
-              child: _rimmed(
-                event,
-                OwnEventColor.of(context),
-                DecoratedBox(
-                  // Apple Calendar's dark look, as in the month: a deep
-                  // fill, the title in the light tone ([DayTitleOverlay]).
-                  decoration: event.invite == null
-                      ? BoxDecoration(
-                          color: gridTone(
-                            eventColor(event, OwnEventColor.of(context)),
-                          ).fill,
-                          borderRadius: radius,
-                        )
-                      : eventFill(
-                          event,
-                          OwnEventColor.of(context),
-                          radius: radius,
-                        ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: gridTone(
+                    eventColor(event, OwnEventColor.of(context)),
+                  ).fill,
+                  borderRadius: radius,
                 ),
               ),
             ),
@@ -137,24 +116,10 @@ class DayEventLayer extends StatelessWidget {
     final motion = this.motion;
     return motion == null ? child : motion(lane, child);
   }
-
-  /// An invite the user has not answered gets a dashed edge.
-  Widget _rimmed(CalendarEvent event, Color own, Widget child) {
-    final invite = event.invite;
-    if (invite == null || !invite.pending) return child;
-    return PendingInviteRim(
-      color: eventColor(event, own),
-      radius: timelineEventRadius.x,
-      child: child,
-    );
-  }
 }
 
-/// Wraps a bar or a title in [lane] in its motion.
 typedef LaneMotion = Widget Function(int lane, Widget child);
 
-/// Sticky titles for the events in view, in the list's scroll coordinates
-/// shifted by [scrollOffset].
 class DayTitleOverlay extends StatelessWidget {
   const DayTitleOverlay({
     required this.events,
@@ -177,11 +142,8 @@ class DayTitleOverlay extends StatelessWidget {
   final String? hiddenEventId;
   final String? dimmedEventId;
 
-  /// Moves a title together with its bar ([DayEventLayer.motion]).
   final LaneMotion? motion;
 
-  /// The friends column covers this much of the left edge: titles stick
-  /// to its edge instead of going under it.
   final double leftInset;
 
   @override
@@ -225,12 +187,7 @@ class DayTitleOverlay extends StatelessWidget {
               child: _FadingTitle(
                 title: title,
                 dates: dates,
-                tone: event.invite == null
-                    ? gridTone(eventColor(event, own))
-                    : GridTone(
-                        fill: eventColor(event, own),
-                        ink: eventInkFor(event, own),
-                      ),
+                tone: gridTone(eventColor(event, own)),
               ),
             ),
           ),
@@ -246,9 +203,6 @@ class DayTitleOverlay extends StatelessWidget {
   }
 }
 
-/// A bar's title in the light tone of its colour, the dates after it a
-/// little dimmer; cut and faded into the bar's fill at its end, as in the
-/// month, instead of an ellipsis.
 class _FadingTitle extends StatelessWidget {
   const _FadingTitle({
     required this.title,
@@ -306,17 +260,14 @@ class _FadingTitle extends StatelessWidget {
   );
 }
 
-/// X of [time] on the timeline, in list coordinates.
 double timelineX(DateTime time, double pixelsPerHour) {
   final dayIndex = calendarDaysBetween(dayTimelineOrigin, time);
   final hours = time.hour + time.minute / 60.0 + time.second / 3600.0;
   return (dayIndex * 24 + hours) * pixelsPerHour;
 }
 
-/// Day zero of the timeline list.
 final dayTimelineOrigin = DateTime(1970, 1, 1);
 
-/// Dates after a multi-day event's title; [_FadingTitle] colours them.
 const timelineDatesStyle = TextStyle(
   color: Color(0x99000000),
   fontSize: 13,
@@ -325,7 +276,6 @@ const timelineDatesStyle = TextStyle(
   fontFeatures: [FontFeature.tabularFigures()],
 );
 
-/// An en space, as in the rich title.
 const _datesGap = 10.0;
 
 final _titleWidths = <(String, TextStyle), double>{};

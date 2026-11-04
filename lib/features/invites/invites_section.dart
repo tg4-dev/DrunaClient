@@ -16,9 +16,7 @@ import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-/// Measurements of the invite cards in the profile (design-system §9.8).
 abstract final class InviteCardStyle {
-  /// A card takes this share of the page width, so the next one peeks in.
   static const share = 0.8;
   static const maxWidth = 320.0;
   static const height = 196.0;
@@ -26,7 +24,6 @@ abstract final class InviteCardStyle {
   static const radius = 28.0;
   static const padding = 18.0;
 
-  /// Past cards are smaller and darker.
   static const pastShare = 0.6;
   static const pastHeight = 124.0;
   static const pastDim = 0.45;
@@ -36,17 +33,12 @@ abstract final class InviteCardStyle {
   static const avatarsShown = 4;
 }
 
-/// The user's invites in the profile: a shelf of large cards, those waiting
-/// for an answer first, then what is coming; under it a shelf of the past.
-/// Both scroll sideways and stop at a card. Full width of the screen: the
-/// page gives it no side margins (design-system §9.3, §9.8).
 class InvitesSection extends StatelessWidget {
   const InvitesSection({
     required this.store,
     required this.me,
     required this.own,
     required this.onOpen,
-    this.now,
     super.key,
   });
 
@@ -54,9 +46,6 @@ class InvitesSection extends StatelessWidget {
   final FriendInfo me;
   final Color own;
   final ValueChanged<String> onOpen;
-
-  /// For tests; the clock otherwise.
-  final DateTime? now;
 
   @override
   Widget build(BuildContext context) {
@@ -92,14 +81,13 @@ class InvitesSection extends StatelessWidget {
             text: error is ApiException
                 ? error.message
                 : 'Не удалось загрузить события',
-            // Nothing to retry while the server has no invites at all.
             action: error is InvitesUnavailable ? null : 'Повторить',
             onAction: store.load,
           ),
         ),
       ];
     }
-    final now = this.now ?? DateTime.now();
+    final now = DateTime.now();
     final waiting = <Invite>[];
     final coming = <Invite>[];
     final past = <Invite>[];
@@ -189,8 +177,6 @@ class InvitesSection extends StatelessWidget {
   }
 }
 
-/// "События" with its icon, like the title of a block; on the right how
-/// many invites wait for an answer.
 class _Header extends StatelessWidget {
   const _Header({this.waiting = 0});
 
@@ -225,8 +211,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// A row of cards that scrolls sideways and stops with a card at the left
-/// margin; the next one peeks in from the right.
 class _Shelf extends StatelessWidget {
   const _Shelf({
     required this.itemWidth,
@@ -259,8 +243,6 @@ class _Shelf extends StatelessWidget {
   }
 }
 
-/// Settles on a multiple of [step], like [PageScrollPhysics] but for items
-/// narrower than the view; the end of the list still stops at its edge.
 class _SnapPhysics extends ScrollPhysics {
   const _SnapPhysics({required this.step, super.parent});
 
@@ -327,8 +309,6 @@ class _Note extends StatelessWidget {
   }
 }
 
-/// One invite: a card in the gradient of the people's colours with the
-/// day, the user's answer, the title, when and with whom.
 class _InviteCard extends StatelessWidget {
   const _InviteCard({
     required this.colors,
@@ -349,12 +329,10 @@ class _InviteCard extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  /// Who else goes, after [subtitle]: set bold, like every name.
   final String? names;
   final List<FriendInfo> people;
   final String status;
 
-  /// No answer yet: the status reads "Ответить" and stands out.
   final bool waiting;
   final bool past;
   final VoidCallback onTap;
@@ -439,7 +417,6 @@ class _InviteCard extends StatelessWidget {
   }
 }
 
-/// "СБ" over "8".
 class _Date extends StatelessWidget {
   const _Date({
     required this.day,
@@ -481,7 +458,6 @@ class _Date extends StatelessWidget {
   }
 }
 
-/// The user's answer in a capsule; white with dark text while waiting.
 class _Status extends StatelessWidget {
   const _Status({required this.text, required this.waiting, required this.ink});
 
@@ -511,7 +487,6 @@ class _Status extends StatelessWidget {
   }
 }
 
-/// The others in the invite, overlapping, each ringed in the card's colour.
 class _Faces extends StatelessWidget {
   const _Faces({required this.people, required this.ring});
 

@@ -10,34 +10,26 @@ import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// The screens of the onboarding, in order (design-system §9.9).
 enum OnboardingStep {
   welcome,
+  login,
   email,
 
-  /// The email has an account: its password.
   signIn,
 
-  /// A new email: the code sent to it.
   code,
   password,
   username,
   name,
 
-  /// The device's calendar: access and which of its calendars show. Only
-  /// where the device has one.
   calendar,
 
-  /// Profile setup: avatar font and colour.
   profile,
   done,
 }
 
-/// The username's availability, shown at the right of its field.
 enum UsernameCheck { idle, checking, available }
 
-/// Everything the onboarding has typed and where it is. Fields keep their
-/// text when the user steps back and forth.
 class OnboardingController extends ChangeNotifier {
   OnboardingController({
     required this.source,
@@ -48,6 +40,7 @@ class OnboardingController extends ChangeNotifier {
     this.calendarSync,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now {
+    _onText(login, _loginChanged);
     _onText(email, _emailChanged);
     _onText(code, _codeChanged);
     for (final field in [password, repeat, name]) {
@@ -57,8 +50,6 @@ class OnboardingController extends ChangeNotifier {
     _onText(username, _usernameChanged);
   }
 
-  /// Calls [changed] when the text of [field] changes — not its selection,
-  /// which also notifies.
   static void _onText(TextEditingController field, VoidCallback changed) {
     var last = field.text;
     field.addListener(() {
@@ -70,44 +61,32 @@ class OnboardingController extends ChangeNotifier {
 
   final AuthFlowSource source;
 
-  /// The tokens are saved and the last screen has played: let the app in.
   final Future<void> Function() onFinished;
 
-  /// The account is made: keep the colour and the font picked on the
-  /// profile step ([AppSettings]). Null — nowhere (the rehearsal).
   final void Function(int colorSlot, AvatarFont font)? onProfile;
 
-  /// The colour and the font this device keeps for its user: a sign-in
-  /// shows them on «Всё готово». Null — the defaults.
   final int? knownColorSlot;
   final AvatarFont? knownFont;
 
-  /// The device's calendar for the calendar step; without it, or on a
-  /// device without one, the step is skipped.
   final CalendarSync? calendarSync;
 
   bool get hasCalendarStep => calendarSync?.supported ?? false;
 
-  /// The clock; tests pass their own.
   final DateTime Function() now;
 
-  /// A confirmed email stays confirmed this long: back on the email and on
-  /// again within it, no new code is asked.
+  static const verifyEmail = false;
+
   static const verifiedFor = Duration(minutes: 5);
 
-  /// A code may be sent again after this.
   static const resendAfter = 60;
 
-  /// The username is checked this long after the last keystroke.
   static const usernamePause = Duration(milliseconds: 200);
 
-  /// A password that came whole (autofill, paste) signs in after this: the
-  /// dots show in the field first.
   static const autoSignInPause = Duration(milliseconds: 400);
 
-  /// How long «Всё готово» stays before the app opens.
   static const doneHold = Duration(milliseconds: 3400);
 
+  final login = TextEditingController();
   final email = TextEditingController();
   final code = TextEditingController();
   final signInPassword = TextEditingController();
@@ -116,9 +95,7 @@ class OnboardingController extends ChangeNotifier {
   final username = TextEditingController();
   final name = UpperCaseNameController();
 
-  /// One per field. The flow moves focus to the new step's field itself:
-  /// `autofocus` does nothing while the old field still has it, and the
-  /// keyboard would drop between steps.
+  final loginFocus = FocusNode();
   final emailFocus = FocusNode();
   final codeFocus = FocusNode();
   final signInFocus = FocusNode();
@@ -127,21 +104,23 @@ class OnboardingController extends ChangeNotifier {
   final usernameFocus = FocusNode();
   final nameFocus = FocusNode();
 
-  var _colorSlot = 0;
+  var _colorSlot = defaultOwnColorSlot;
 
-  /// The user's colour, a slot of [avatarPalette].
+  var _account = AccountStatus.unknown;
+
+  var _canRegister = false;
+
+  bool get canRegister => _canRegister;
+
   int get colorSlot => _colorSlot;
   Color get profileColor => avatarPalette[_colorSlot];
 
   var _font = defaultAvatarFont;
   AvatarFont get profileFont => _font;
 
-  /// Counts the colour changes: the background speeds up on each.
   var _colorTurns = 0;
   int get colorTurns => _colorTurns;
 
-  /// The background's colour: the brand's until the profile step, from
-  /// there on the user's.
   Color get backgroundColor =>
       _step.index >= OnboardingStep.profile.index ? profileColor : Brand.accent;
 
@@ -158,56 +137,46 @@ class OnboardingController extends ChangeNotifier {
     _notify();
   }
 
-  /// Every field of [step]: while one of them has the keyboard, the flow
-  /// leaves the focus where the user put it.
   List<FocusNode> get stepFocus => switch (_step) {
     OnboardingStep.password => [passwordFocus, repeatFocus],
     _ => [?focus],
   };
 
-  /// The field that takes the keyboard when [step] opens; null — none.
   FocusNode? get focus => switch (_step) {
     OnboardingStep.welcome || OnboardingStep.done => null,
+    OnboardingStep.login => loginFocus,
     OnboardingStep.email => emailFocus,
     OnboardingStep.signIn => signInFocus,
     OnboardingStep.code => codeFocus,
     OnboardingStep.password => passwordFocus,
     OnboardingStep.username => usernameFocus,
     OnboardingStep.name => nameFocus,
-    // No keyboard over the pickers.
     OnboardingStep.calendar || OnboardingStep.profile => null,
   };
 
   var _step = OnboardingStep.welcome;
   OnboardingStep get step => _step;
 
-  /// The last move was back: the screens slide the other way.
   var _back = false;
   bool get back => _back;
 
-  /// Counts the moves; the background speeds up on each.
   var _moves = 0;
   int get moves => _moves;
 
   String? _error;
 
-  /// The red line above the field.
   String? get error => _error;
 
-  /// Grows with each new error, so the same text shakes again.
   var _errorCount = 0;
   int get errorCount => _errorCount;
 
-  /// A fixed email for a mistyped domain: "может, …@gmail.com?".
   String? _suggestion;
   String? get suggestion => _suggestion;
 
   var _busy = false;
 
-  /// A request is out: the arrow spins.
   bool get busy => _busy;
 
-  /// The email the code went to, and when the code was entered right.
   String? _codeSentTo;
   DateTime? _verifiedAt;
 
@@ -216,7 +185,6 @@ class OnboardingController extends ChangeNotifier {
 
   var _resendLeft = 0;
 
-  /// Seconds until «отправить еще раз».
   int get resendLeft => _resendLeft;
   Timer? _resendTimer;
 
@@ -224,7 +192,6 @@ class OnboardingController extends ChangeNotifier {
   UsernameCheck get usernameCheck => _usernameCheck;
   Timer? _usernameTimer;
 
-  /// Which check is current: an answer to an older one is dropped.
   var _usernameRequest = 0;
 
   Timer? _doneTimer;
@@ -237,9 +204,9 @@ class OnboardingController extends ChangeNotifier {
     _ => !_busy,
   };
 
-  /// The forward arrow is lit.
   bool get canSubmit => switch (_step) {
     OnboardingStep.welcome || OnboardingStep.done => false,
+    OnboardingStep.login => usernameError(login.text) == null,
     OnboardingStep.email => looksLikeEmail(email.text),
     OnboardingStep.signIn => signInPassword.text.isNotEmpty,
     OnboardingStep.code => code.text.length == 6,
@@ -247,24 +214,32 @@ class OnboardingController extends ChangeNotifier {
       password.text.length >= minPassword && repeat.text.length >= minPassword,
     OnboardingStep.username => _usernameCheck == UsernameCheck.available,
     OnboardingStep.name => name.text.trim().isNotEmpty,
-    // Optional: forward goes on with or without the calendar.
     OnboardingStep.calendar || OnboardingStep.profile => true,
   };
 
-  /// «Вход по Email» on the welcome screen.
-  void start() => _go(OnboardingStep.email);
+  void start() => _go(OnboardingStep.login);
+
+  void startRegistration() {
+    if (_busy) return;
+    _canRegister = false;
+    _error = null;
+    _go(OnboardingStep.email);
+  }
 
   void goBack() {
     if (!canGoBack) return;
     _error = null;
     _suggestion = null;
     _go(switch (_step) {
-      OnboardingStep.email => OnboardingStep.welcome,
-      OnboardingStep.signIn || OnboardingStep.code => OnboardingStep.email,
-      // A confirmed code is done with: back goes to the email.
+      OnboardingStep.login => OnboardingStep.welcome,
+      OnboardingStep.signIn => OnboardingStep.login,
+      OnboardingStep.email =>
+        verifyEmail ? OnboardingStep.welcome : OnboardingStep.login,
+      OnboardingStep.code => OnboardingStep.email,
       OnboardingStep.password => OnboardingStep.email,
       OnboardingStep.username => OnboardingStep.password,
-      OnboardingStep.name => OnboardingStep.username,
+      OnboardingStep.name =>
+        verifyEmail ? OnboardingStep.username : OnboardingStep.password,
       OnboardingStep.calendar => OnboardingStep.name,
       OnboardingStep.profile =>
         hasCalendarStep ? OnboardingStep.calendar : OnboardingStep.name,
@@ -272,14 +247,19 @@ class OnboardingController extends ChangeNotifier {
     }, back: true);
   }
 
-  /// The forward arrow, or the keyboard's return.
   Future<void> submit() async {
     if (_busy) return;
     switch (_step) {
       case OnboardingStep.welcome || OnboardingStep.done:
         return;
+      case OnboardingStep.login:
+        await _submitLogin();
       case OnboardingStep.email:
-        await _submitEmail();
+        if (verifyEmail) {
+          await _submitEmail();
+        } else {
+          _submitRegistrationEmail();
+        }
       case OnboardingStep.signIn:
         await _submitSignIn();
       case OnboardingStep.code:
@@ -287,10 +267,12 @@ class OnboardingController extends ChangeNotifier {
       case OnboardingStep.password:
         final problem = passwordError(password.text, repeat.text);
         if (problem != null) return _fail(problem);
-        // The email and the new password: the system may offer to save.
         TextInput.finishAutofillContext();
+        if (!verifyEmail) {
+          _go(OnboardingStep.name);
+          return;
+        }
         _go(OnboardingStep.username);
-        // Coming back with a username already typed: check it at once.
         if (_usernameCheck == UsernameCheck.idle && username.text.isNotEmpty) {
           _scheduleUsernameCheck(Duration.zero);
         }
@@ -312,7 +294,6 @@ class OnboardingController extends ChangeNotifier {
     }
   }
 
-  /// Takes the "может, …?" suggestion.
   void acceptSuggestion() {
     final fixed = _suggestion;
     if (fixed == null) return;
@@ -322,13 +303,11 @@ class OnboardingController extends ChangeNotifier {
     _notify();
   }
 
-  /// «забыл пароль?» under the sign-in password.
   Future<void> forgotPassword() async {
     if (_busy) return;
     await _request(() => source.resetPassword(normalizeEmail(email.text)));
   }
 
-  /// «отправить еще раз».
   Future<void> resend() async {
     final to = _codeSentTo;
     if (_resendLeft > 0 || _busy || to == null) return;
@@ -340,6 +319,29 @@ class OnboardingController extends ChangeNotifier {
     });
   }
 
+  Future<void> _submitLogin() async {
+    final problem = usernameError(login.text);
+    if (problem != null) return _fail(problem);
+    _canRegister = false;
+    await _request(() async {
+      _account = await source.startUsername(normalizeUsername(login.text));
+      _go(
+        _account == AccountStatus.fresh
+            ? OnboardingStep.email
+            : OnboardingStep.signIn,
+      );
+    });
+  }
+
+  void _submitRegistrationEmail() {
+    final problem = emailError(email.text);
+    if (problem != null) {
+      _suggestion = emailSuggestion(email.text);
+      return _fail(problem);
+    }
+    _go(OnboardingStep.password);
+  }
+
   Future<void> _submitEmail() async {
     final problem = emailError(email.text);
     if (problem != null) {
@@ -348,11 +350,8 @@ class OnboardingController extends ChangeNotifier {
     }
     final address = normalizeEmail(email.text);
     if (address == _codeSentTo) {
-      // Confirmed less than [verifiedFor] ago: straight to the password.
       if (_verified) return _go(OnboardingStep.password);
-      // Sent but not entered yet: the same code, no second letter.
       if (_verifiedAt == null) return _go(OnboardingStep.code);
-      // Confirmed too long ago: a new code below.
     }
     await _request(() async {
       final status = await source.startEmail(address);
@@ -374,21 +373,21 @@ class OnboardingController extends ChangeNotifier {
       final String? known;
       try {
         known = await source.signIn(
-          email: normalizeEmail(email.text),
+          username: normalizeUsername(login.text),
           password: signInPassword.text,
         );
-      } catch (_) {
-        // The next input replaces the password, as with a wrong code.
+      } catch (error) {
         signInPassword.selection = TextSelection(
           baseOffset: 0,
           extentOffset: signInPassword.text.length,
         );
+        if (_account == AccountStatus.unknown && isWrongCredentials(error)) {
+          _canRegister = true;
+          throw wrongLogin;
+        }
         rethrow;
       }
-      // The system may now offer to save the email and password.
       TextInput.finishAutofillContext();
-      // «Всё готово» as after a registration, with the account's name and
-      // the avatar this device knows.
       if (known != null && known.trim().isNotEmpty) name.text = known;
       final slot = knownColorSlot;
       if (slot != null && slot >= 0 && slot < avatarPalette.length) {
@@ -423,19 +422,20 @@ class OnboardingController extends ChangeNotifier {
         await source.register(
           email: _codeSentTo ?? normalizeEmail(email.text),
           password: password.text,
-          username: normalizeUsername(username.text),
+          username: normalizeUsername(verifyEmail ? username.text : login.text),
           name: name.text.trim(),
         );
       } on AuthTakenException catch (taken) {
-        // Back to the step with the taken value, the red line on it.
         _busy = false;
         if (taken.field == TakenField.email) {
           _codeSentTo = null;
           _verifiedAt = null;
           _go(OnboardingStep.email, back: true);
-        } else {
+        } else if (verifyEmail) {
           _usernameCheck = UsernameCheck.idle;
           _go(OnboardingStep.username, back: true);
+        } else {
+          _go(OnboardingStep.login, back: true);
         }
         _fail(taken.message);
         return;
@@ -446,7 +446,6 @@ class OnboardingController extends ChangeNotifier {
     });
   }
 
-  /// «Всё готово», then the app.
   void _finish() {
     _go(OnboardingStep.done);
     _doneTimer = Timer(doneHold, () {
@@ -454,7 +453,6 @@ class OnboardingController extends ChangeNotifier {
     });
   }
 
-  /// Runs [action] with the arrow spinning; a failure becomes the red line.
   Future<void> _request(Future<void> Function() action) async {
     _busy = true;
     _error = null;
@@ -489,21 +487,17 @@ class OnboardingController extends ChangeNotifier {
     _notify();
   }
 
-  /// Typing clears the red line; the arrow may light up.
   void _clearError() {
     _error = null;
     _notify();
   }
 
-  /// A password that appears whole at once — the system filled it or it
-  /// was pasted — signs in by itself; typing letter by letter does not.
   void _signInPasswordChanged() {
     final before = _lastSignInPassword;
     _lastSignInPassword = signInPassword.text;
     _autoSignInTimer?.cancel();
     _clearError();
     if (_step != OnboardingStep.signIn || _busy) return;
-    // Pasted or filled over the old text too, after a wrong password.
     final text = signInPassword.text;
     final added = text.startsWith(before)
         ? text.length - before.length
@@ -514,6 +508,11 @@ class OnboardingController extends ChangeNotifier {
     });
   }
 
+  void _loginChanged() {
+    _canRegister = false;
+    _clearError();
+  }
+
   void _emailChanged() {
     _suggestion = null;
     _clearError();
@@ -521,7 +520,6 @@ class OnboardingController extends ChangeNotifier {
 
   void _codeChanged() {
     _clearError();
-    // The sixth digit sends the code by itself.
     if (_step == OnboardingStep.code && code.text.length == 6) submit();
   }
 
@@ -539,8 +537,6 @@ class OnboardingController extends ChangeNotifier {
     _usernameTimer = Timer(after, _checkUsername);
   }
 
-  /// A username still too short is not an error while it is being typed:
-  /// it waits, unchecked, and says so only on «готово».
   Future<void> _checkUsername() async {
     if (normalizeUsername(username.text).length < minUsername) return;
     final problem = usernameError(username.text);
@@ -592,6 +588,7 @@ class OnboardingController extends ChangeNotifier {
     _doneTimer?.cancel();
     _autoSignInTimer?.cancel();
     for (final field in [
+      login,
       email,
       code,
       signInPassword,
@@ -603,6 +600,7 @@ class OnboardingController extends ChangeNotifier {
       field.dispose();
     }
     for (final node in [
+      loginFocus,
       emailFocus,
       codeFocus,
       signInFocus,

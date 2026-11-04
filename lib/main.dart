@@ -12,11 +12,7 @@ import 'package:progressive_blur/progressive_blur.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Loaded before the first frame: until then the blurred widgets show
-  // their child bare, and switching later would rebuild their subtrees.
   await ProgressiveBlurWidget.precache();
-  // The event page's background and the month's bands, so neither starts
-  // plain.
   await EventGradient.precache();
   await BandShader.precache();
 

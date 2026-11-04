@@ -20,15 +20,6 @@ import 'package:druna_app/features/settings/settings_page.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:flutter/material.dart';
 
-/// The signed-in app: one horizontal plane with four stops.
-///
-/// ```text
-/// [ Friends ] [ My calendar | Friends' calendar ] [ Settings ]
-///      0            1                2                 3
-/// ```
-///
-/// Stops 1 and 2 are the same calendar, which stays in place: between them
-/// the swipe only changes which events are shown ([CalendarScreen.mode]).
 class HomePager extends StatefulWidget {
   const HomePager({
     required this.session,
@@ -43,10 +34,8 @@ class HomePager extends StatefulWidget {
   final AppSettings settings;
   final AppConfig config;
 
-  /// The device's calendar; none in tests.
   final CalendarSync? sync;
 
-  /// How long demo friends take to answer; zero in tests.
   final Duration demoDelay;
 
   static const friendsStop = 0;
@@ -54,10 +43,8 @@ class HomePager extends StatefulWidget {
   static const friendsCalendarStop = 2;
   static const settingsStop = 3;
 
-  /// The app opens on friends' calendar.
   static const homeStop = friendsCalendarStop;
 
-  /// Taps that move along the plane (gear, stack, glow, back) take this long.
   static const slide = Duration(milliseconds: 280);
 
   @override
@@ -70,7 +57,6 @@ class _HomePagerState extends State<HomePager> {
   var _stop = HomePager.homeStop;
   var _calendarBusy = false;
 
-  /// 0 — my calendar, 1 — friends' calendar; follows the finger.
   final _mode = ValueNotifier<double>(1);
 
   late var _demo = DemoFriendsSource(delay: widget.demoDelay);
@@ -86,36 +72,29 @@ class _HomePagerState extends State<HomePager> {
     source: _scheduleSource,
   );
 
-  /// Invites run on demo data only with demo friends: the server has none
-  /// (docs/backend-changes.md, «Приглашения на события»).
   DemoInvitesSource? _demoInvites;
   late final InvitesStore _invites = InvitesStore(_newInvitesSource())
     ..addListener(_syncInvites)
     ..load();
 
-  /// The invites as events, in everyone's colours, for the calendar.
   final _inviteEvents = ValueNotifier<List<CalendarEvent>>(const []);
 
-  /// The invite whose page is open over the plane.
   String? _openInvite;
 
-  /// [_openInvite] for the calendar: its cells wait for the page to close.
   final _openInviteNow = ValueNotifier<String?>(null);
 
-  FriendsSource get _friendsSource =>
-      widget.settings.demoFriends ? _demo : _server;
+  FriendsSource get _friendsSource => widget.settings.demo ? _demo : _server;
 
   FriendInfo get _me => meAsPerson(widget.session.profile);
 
   InvitesSource _newInvitesSource() {
-    if (!widget.settings.demoFriends) {
+    if (!widget.settings.demo) {
       _demoInvites = null;
       return const ServerInvitesSource();
     }
     return _demoInvites = DemoInvitesSource(
       me: () => _me,
       delay: widget.demoDelay,
-      // Friends answer by themselves, but not in tests (no delay there).
       replyDelay: widget.demoDelay == Duration.zero
           ? null
           : const Duration(seconds: 4),
@@ -123,7 +102,6 @@ class _HomePagerState extends State<HomePager> {
   }
 
   void _syncInvites() {
-    // The calendar «Druna» on the device wears the user's colour too.
     widget.sync?.drunaColor = _ownColor;
     _inviteEvents.value = inviteEvents(
       _invites.invites,
@@ -141,11 +119,10 @@ class _HomePagerState extends State<HomePager> {
     _openInviteNow.value = id;
   }
 
-  /// Sends a new invite to the store; throws for the sheet to say so.
   Future<void> _sendInvite(InviteDraft draft) => _invites.create(draft);
 
   FriendScheduleSource get _scheduleSource =>
-      widget.settings.demoSchedules ? _demoSchedule : const NoFriendSchedule();
+      widget.settings.demo ? _demoSchedule : const NoFriendSchedule();
 
   @override
   void initState() {
@@ -158,13 +135,8 @@ class _HomePagerState extends State<HomePager> {
     widget.sync?.drunaColor = _ownColor;
   }
 
-  /// Who the user was when the invites were last loaded.
   int? _invitesMeId;
 
-  /// The profile arrives after sign-in; it sets the colour of my events.
-  /// Invites loaded before it hold a nameless "me" (the demo puts in
-  /// whoever the user is at loading time): they load again, or the user's
-  /// face on them would be a stranger's colour and letter.
   void _onSession() {
     final meId = widget.session.profile?.id;
     if (meId != null && meId != _invitesMeId) {
@@ -175,7 +147,7 @@ class _HomePagerState extends State<HomePager> {
     setState(() {});
   }
 
-  Color get _ownColor => ownColorFor(widget.settings, widget.session.profile);
+  Color get _ownColor => ownColorFor(widget.settings);
 
   @override
   void dispose() {
@@ -198,12 +170,11 @@ class _HomePagerState extends State<HomePager> {
     _store.source = _friendsSource;
     _schedules.source = _scheduleSource;
     final demoInvites = _demoInvites;
-    if ((demoInvites != null) != widget.settings.demoFriends) {
+    if ((demoInvites != null) != widget.settings.demo) {
       _resetInvites();
     } else {
       demoInvites?.offline = widget.settings.demoOffline;
     }
-    // The user's colour may have changed: their part of every gradient.
     _syncInvites();
     setState(() {});
   }
@@ -228,7 +199,6 @@ class _HomePagerState extends State<HomePager> {
     }
     if (width != _width) {
       _width = width;
-      // A new width (rotation, split view): stay on the same stop.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (existing.hasClients) existing.jumpTo(_stop * width);
       });
@@ -260,8 +230,6 @@ class _HomePagerState extends State<HomePager> {
             stop == HomePager.friendsCalendarStop);
     final position = plane.position;
     if (modeOnly && !reduce && position is ScrollPositionWithSingleContext) {
-      // `animateTo` would make the calendar ignore taps until the chips
-      // have unfolded; this slide lets them through.
       position.beginActivity(
         _TapThroughSlide(
           position,
@@ -281,15 +249,12 @@ class _HomePagerState extends State<HomePager> {
     );
   }
 
-  /// The open day pulls the mode: the plane follows between the two
-  /// calendar stops, where the calendar stands still.
   void _dragMode(double t) {
     final plane = _plane;
     if (plane == null || !plane.hasClients) return;
     plane.jumpTo((HomePager.myCalendarStop + t.clamp(0.0, 1.0)) * _width);
   }
 
-  /// A quick flick picks its direction; a slow release, the nearer mode.
   void _settleMode(double velocity) {
     final int stop;
     if (velocity.abs() > _modeFlick) {
@@ -304,7 +269,6 @@ class _HomePagerState extends State<HomePager> {
     _goTo(stop);
   }
 
-  /// Modes per second.
   static const _modeFlick = 1.5;
 
   @override
@@ -314,7 +278,6 @@ class _HomePagerState extends State<HomePager> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _goTo(HomePager.homeStop);
       },
-      // The user's colour and font for every avatar of them in the plane.
       child: OwnAvatar(
         id: widget.session.profile?.id ?? 0,
         color: _ownColor,
@@ -336,7 +299,7 @@ class _HomePagerState extends State<HomePager> {
                   store: _store,
                   selection: _selection,
                   events: _schedules,
-                  schedulesAvailable: widget.settings.demoSchedules,
+                  schedulesAvailable: widget.settings.demo,
                   onShowFriends: () => _goTo(HomePager.friendsCalendarStop),
                   onShowMine: () => _goTo(HomePager.myCalendarStop),
                   onAddFriends: () => _goTo(HomePager.friendsStop),
@@ -363,7 +326,6 @@ class _HomePagerState extends State<HomePager> {
                       SizedBox(
                         width: width,
                         child: FriendsPage(
-                          // A new source is a new page: it loads from scratch.
                           key: ObjectKey(_friendsSource),
                           source: _friendsSource,
                           onChanged: _store.load,
@@ -401,8 +363,6 @@ class _HomePagerState extends State<HomePager> {
               return Stack(
                 children: [
                   pages,
-                  // An invite opens over every page, from the calendar or
-                  // from the profile.
                   if (_openInvite case final id?)
                     Positioned.fill(
                       child: OwnEventColor(
@@ -426,8 +386,6 @@ class _HomePagerState extends State<HomePager> {
   }
 }
 
-/// Holds the calendar still on screen while the plane moves between the
-/// two calendar stops; outside them it moves with the plane.
 class _StillCalendar extends StatelessWidget {
   const _StillCalendar({
     required this.plane,
@@ -460,9 +418,6 @@ class _StillCalendar extends StatelessWidget {
   }
 }
 
-/// Snapping from stop to stop with a stiffer spring than the default, so a
-/// released swipe settles in about half the time. Stops are a viewport
-/// width apart, which is exactly what page physics snaps to.
 class _SnappyPagePhysics extends PageScrollPhysics {
   const _SnappyPagePhysics({super.parent});
 
@@ -475,9 +430,6 @@ class _SnappyPagePhysics extends PageScrollPhysics {
       SpringDescription.withDampingRatio(mass: 0.5, stiffness: 400, ratio: 1);
 }
 
-/// A scroll animation that, unlike [DrivenScrollActivity], keeps taps on
-/// the content: settling the mode must not freeze the calendar. A drag
-/// still takes over, as with any scroll activity.
 class _TapThroughSlide extends DrivenScrollActivity {
   _TapThroughSlide(
     super.delegate, {

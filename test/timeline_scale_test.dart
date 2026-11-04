@@ -12,16 +12,13 @@ void main() {
   });
 
   test('each level shows its own division of hours', () {
-    // 6 h: midnight, 6, 12, 18.
     expect(hourLineOpacity(6, 12), 1);
     expect(hourLineOpacity(18, 12), 1);
     expect(hourLineOpacity(4, 12), 0);
-    // 4 h: 6 and 18 fade out, 4 and 8 come in.
     expect(hourLineOpacity(4, 18), 1);
     expect(hourLineOpacity(6, 18), 0);
     expect(hourLineOpacity(6, 15), closeTo(0.5, 0.01));
     expect(hourLineOpacity(0, 15), 1);
-    // 2 h, then every hour.
     expect(hourLineOpacity(6, 28), 1);
     expect(hourLineOpacity(2, 18), 0);
     expect(hourLineOpacity(1, 28), 0);
@@ -54,17 +51,12 @@ void main() {
     });
 
     test('pulls to a whole hour within 30% of a step', () {
-      // 09:51 would round to 10:00 anyway; 09:52 too. 09:44 rounds to
-      // 09:30, but 09:52 is within 9 minutes of 10:00.
       expect(snap(9 * 60 + 52), 10 * 60);
-      // 10:08 rounds to 10:00 and stays there.
       expect(snap(10 * 60 + 8), 10 * 60);
-      // Just outside the pull, the half hour wins.
       expect(snap(10 * 60 + 20), 10 * 60 + 30);
     });
 
     test('holds the current value near a boundary', () {
-      // 09:47 would round to 10:00, but 10:00 holds until 09:42.
       expect(snap(9 * 60 + 47, current: 10 * 60), 10 * 60);
       expect(snap(9 * 60 + 41, current: 10 * 60), 9 * 60 + 30);
     });

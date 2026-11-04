@@ -1,42 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The one button of the app (design-system §9.5): a capsule with a
-/// translucent fill and a rim lighter at the top. With an icon, a text or
-/// both.
 abstract final class PillStyle {
   static const size = 44.0;
   static const compact = 36.0;
 
-  /// A capsule for a short action: ✓ / ✕ (`ActionPill`), «Да» / «Нет».
   static const wide = 80.0;
   static const icon = 22.0;
   static const padding = 20.0;
   static const gap = 6.0;
 
-  /// A round [PillButton.leading] (an avatar) stands this far from the
-  /// capsule's edge, concentric with its end, and this far from the text.
   static const leadingInset = 6.0;
   static const leadingGap = 10.0;
 
-  /// White over whatever is under the button: over black it is a grey,
-  /// over a coloured event a lighter shade of that colour. No blur.
   static const fill = Color(0x24FFFFFF);
 
-  /// The rim, lighter at the top than at the bottom.
   static const rimTop = Color(0x47FFFFFF);
   static const rimBottom = Color(0x0FFFFFFF);
   static const rimWidth = 1.0;
 
-  /// Pressed, the button swells a little, as on iOS 26.
   static const pressedScale = 1.06;
   static const press = Duration(milliseconds: 120);
 
-  /// Pressed, a soft light glows from the centre while the finger stays,
-  /// and dies away after it lifts.
   static const glow = Color(0x52FFFFFF);
 
-  /// On a light fill white would not show: there the glow is a shade.
   static const glowOnLight = Color(0x1A000000);
   static const glowIn = Duration(milliseconds: 140);
   static const glowOut = Duration(milliseconds: 450);
@@ -52,8 +39,6 @@ abstract final class PillStyle {
   );
 }
 
-/// The fill and the rim, painted in one pass: no layer, no filter, no
-/// shadow, so a list full of buttons costs as much as plain shapes.
 class PillSurface extends StatelessWidget {
   const PillSurface({
     required this.child,
@@ -65,11 +50,8 @@ class PillSurface extends StatelessWidget {
 
   final Color fill;
 
-  /// Corners; null — a capsule (half the height). A block of several rows
-  /// (the colour picker) takes its own.
   final double? radius;
 
-  /// 0..1: how strongly the press glows (see [PillStyle.glow]).
   final double glow;
   final Widget child;
 
@@ -102,8 +84,6 @@ class _PillPainter extends CustomPainter {
     if (glow > 0) {
       final light = fill.a > 0.5 && fill.computeLuminance() > 0.5;
       final color = light ? PillStyle.glowOnLight : PillStyle.glow;
-      // A radial gradient from the centre, clear at the edge; it fills
-      // the capsule, so it needs no clip.
       canvas.drawRRect(
         RRect.fromRectAndRadius(rect, radius),
         Paint()
@@ -132,10 +112,6 @@ class _PillPainter extends CustomPainter {
       oldDelegate.corner != corner;
 }
 
-/// A [PillSurface] that presses. Give it an [icon], a [text] or both; a
-/// [child] replaces them (the month title animates between texts). With an
-/// icon alone and no [width] it is a circle. [leading] — a round picture
-/// (an avatar) before the text, as tall as the capsule allows.
 class PillButton extends StatefulWidget {
   const PillButton({
     required this.onPressed,
@@ -159,19 +135,15 @@ class PillButton extends StatefulWidget {
   final Widget? child;
   final Widget? leading;
 
-  /// Read by VoiceOver; required in practice when there is no [text].
   final String? label;
   final double? width;
   final double height;
   final double iconSize;
 
-  /// Of the icon and the text.
   final Color color;
 
-  /// The fill; a picked answer takes the user's colour. Changes cross-fade.
   final Color fill;
 
-  /// Replaces [PillStyle.title] for the text; its colour is still [color].
   final TextStyle? textStyle;
 
   @override
@@ -187,7 +159,6 @@ class _PillButtonState extends State<PillButton>
     reverseDuration: PillStyle.glowOut,
   );
 
-  /// Lights up quickly; on release drops fast, then a long soft tail.
   late final _glowCurve = CurvedAnimation(
     parent: _glow,
     curve: Curves.easeOut,
@@ -208,7 +179,6 @@ class _PillButtonState extends State<PillButton>
     if (pressed) {
       _glow.forward();
     } else if (_glow.isForwardOrCompleted && _glow.value < 1) {
-      // A quick tap: the glow still reaches full, so it is seen.
       _glow.forward().then((_) {
         if (mounted && !_pressed) _glow.reverse();
       });
@@ -253,7 +223,6 @@ class _PillButtonState extends State<PillButton>
               child: TweenAnimationBuilder<Color?>(
                 tween: ColorTween(end: widget.fill),
                 duration: reduce ? Duration.zero : PillStyle.fade,
-                // The ink crossfades with the fill (a title lighting up).
                 child: TweenAnimationBuilder<Color?>(
                   tween: ColorTween(end: widget.color),
                   duration: reduce ? Duration.zero : PillStyle.fade,
@@ -326,7 +295,6 @@ class _PillButtonState extends State<PillButton>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[icon, const SizedBox(width: PillStyle.gap)],
-              // A fixed width never lets the text spill out of the capsule.
               Flexible(child: text),
             ],
           ),

@@ -156,6 +156,23 @@ void main() {
       sync.dispose();
     });
 
+    test('access granted in the system settings connects on return', () async {
+      final device = FakeDeviceCalendar(calendars: [_work], grant: false);
+      final sync = _sync(device);
+      await sync.load();
+      expect(await sync.connect(), CalendarAccess.denied);
+      expect(sync.connected, isFalse);
+
+      await sync.openSettings();
+      device.status = CalendarAccess.granted;
+      sync.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+
+      expect(sync.access, CalendarAccess.granted);
+      expect(sync.connected, isTrue);
+      sync.dispose();
+    });
+
     test(
       'an event deleted on the system screen is gone once it closes',
       () async {
@@ -175,7 +192,6 @@ void main() {
         await sync.load();
         await sync.connect();
         final event = sync.events.value.single;
-        // A read under way when the screen closes is followed by another.
         final reading = sync.refresh();
         device.deviceEvents.clear();
         await Future.wait([reading, sync.show(event)]);
@@ -211,6 +227,24 @@ void main() {
       second.dispose();
     });
 
+    test('in the demo version nothing goes to the device', () async {
+      final device = FakeDeviceCalendar(calendars: [_work]);
+      final sync = _sync(device)..exportEnabled = false;
+      await sync.load();
+      await sync.connect();
+      sync.mirror([
+        CalendarEvent(
+          id: 'local-1',
+          title: 'Бег',
+          start: DateTime(2026, 11, 3, 8),
+          end: DateTime(2026, 11, 3, 9),
+        ),
+      ]);
+      await sync.flushExport();
+      expect(device.written, isEmpty);
+      sync.dispose();
+    });
+
     test('the calendar «Druna» mirrors only what the user made', () async {
       final device = FakeDeviceCalendar(calendars: [_work]);
       final sync = _sync(device);
@@ -219,8 +253,8 @@ void main() {
       final mine = CalendarEvent(
         id: 'local-1',
         title: 'Бег',
-        start: DateTime(2026, 11, 5, 8),
-        end: DateTime(2026, 11, 5, 9),
+        start: DateTime(2026, 11, 3, 8),
+        end: DateTime(2026, 11, 3, 9),
         repeat: RepeatRule.fromPreset(RepeatPreset.weekly, _today),
       );
       final demo = CalendarEvent(
@@ -233,11 +267,9 @@ void main() {
       await sync.flushExport();
       expect(device.written.values.map((w) => w.$2.title), ['Бег']);
       expect(device.written.values.single.$2.rrule, 'FREQ=WEEKLY;BYDAY=TU');
-      // The new calendar is not read back as the user's own.
       await sync.refresh();
       expect(sync.calendars.map((c) => c.id), ['work']);
 
-      // A change replaces the written event; removing deletes it.
       sync.mirror([mine.copyWith(title: 'Бег в парке'), demo]);
       await sync.flushExport();
       expect(device.written.values.single.$2.title, 'Бег в парке');

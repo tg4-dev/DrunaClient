@@ -35,10 +35,7 @@ void main() {
         home: HomePager(
           session: SessionController(repository),
           settings: settings,
-          config: const AppConfig(
-            apiBaseUrl: 'https://example.test',
-            environment: 'test',
-          ),
+          config: const AppConfig(apiBaseUrl: 'https://example.test'),
           demoDelay: Duration.zero,
         ),
       ),
@@ -74,9 +71,7 @@ void main() {
     await pumpPager(tester);
 
     await swipe(tester, 300);
-    // Same calendar in place; the bar folded away to the right.
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
-    // Not picked: slid off past the right edge.
     final inBar = find.descendant(
       of: find.byType(FriendBar),
       matching: alinaFinder(),
@@ -144,8 +139,6 @@ void main() {
     await swipe(tester, 300);
 
     await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
-    // The slide has not ended: the tap goes through instead of being
-    // ignored.
     await tester.pump(const Duration(milliseconds: 120));
     final now = DateTime.now();
     await tester.tap(
@@ -166,7 +159,6 @@ void main() {
 
     await tester.fling(find.text('Друзья'), const Offset(0, 400), 1500);
     await tester.pumpAndSettle();
-    // The page already had friends, so it keeps them and says why.
     expect(find.text('Демо: нет соединения с сервером.'), findsOneWidget);
     expect(find.text('МАРК ЛИ'), findsWidgets);
   });
@@ -187,7 +179,6 @@ void main() {
     await second.up();
     await tester.pumpAndSettle();
 
-    // Still friends' calendar: neither my calendar nor the friends page.
     expect(tester.getRect(alinaFinder()).left, lessThan(200));
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
   });
@@ -203,7 +194,6 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('color-6')));
     await tester.tap(find.byKey(const ValueKey('color-6')));
     await tester.pumpAndSettle();
-    // A draft until confirmed: ✕ drops it.
     expect(settings.ownColorSlot, before);
     await tester.ensureVisible(find.byKey(const ValueKey('profile-cancel')));
     await tester.tap(find.byKey(const ValueKey('profile-cancel')));

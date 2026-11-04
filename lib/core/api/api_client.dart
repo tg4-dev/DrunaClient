@@ -25,6 +25,8 @@ class ApiClient {
   TokenPair? _tokens;
   Future<bool>? _refreshInFlight;
 
+  void Function()? onSessionExpired;
+
   Future<bool> restoreSession() async {
     _tokens = await _tokenStore.read();
     return _tokens != null;
@@ -35,8 +37,6 @@ class ApiClient {
     await _tokenStore.write(tokens);
   }
 
-  /// For the settings page: the next request goes out with a dead access
-  /// token, so the 401 → refresh → retry path runs. The stored pair is kept.
   void debugExpireAccessToken() {
     final tokens = _tokens;
     if (tokens == null) return;
@@ -179,8 +179,10 @@ class ApiClient {
       final raw = _unwrap(response) as Map<String, dynamic>;
       await saveTokens(TokenPair.fromJson(raw));
       return true;
-    } catch (_) {
+    } on ApiException catch (error) {
+      if (error.isNetwork) rethrow;
       await clearSession();
+      onSessionExpired?.call();
       return false;
     }
   }

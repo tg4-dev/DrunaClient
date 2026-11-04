@@ -7,13 +7,11 @@ const _pink = Color(0xFFE040C8);
 const _green = Color(0xFF34C759);
 const _yellow = Color(0xFFFFB800);
 
-/// A chip over days [first]..[last] of the week, with the usual insets.
 BandChip _chip(int first, int last, Color color) =>
     BandChip(left: first * _w + 2, right: (last + 1) * _w - 2, color: color);
 
 void main() {
   test('days in a row make one band; an empty day splits it', () {
-    // As in the reference: busy Mon–Tue, free Wed, busy Thu–Sun.
     final bands = buildWeekBands([
       _chip(0, 0, _pink),
       _chip(1, 1, _green),
@@ -43,9 +41,7 @@ void main() {
     for (var i = 1; i < band.stops.length; i++) {
       expect(band.stops[i], greaterThanOrEqualTo(band.stops[i - 1]));
     }
-    // Plain RGB in between: no invented middle colours.
     expect(band.colors, [_pink, _pink, _green, _green]);
-    // Pink centre at a quarter of the band, green at three quarters.
     expect(band.stops[1], closeTo(0.25, 0.02));
     expect(band.stops[band.stops.length - 2], closeTo(0.75, 0.02));
   });

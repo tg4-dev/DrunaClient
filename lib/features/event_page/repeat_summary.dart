@@ -4,19 +4,15 @@ import 'package:druna_app/features/event_page/event_labels.dart';
 import 'package:druna_app/features/event_page/event_style.dart';
 import 'package:flutter/material.dart';
 
-/// How the event repeats, read-only: "Повтор:" and the rule, then the
-/// weekdays for a weekly rule, the picked ones in white.
 class RepeatSummary extends StatelessWidget {
   const RepeatSummary({required this.rule, required this.day, super.key});
 
   final RepeatRule rule;
 
-  /// The event's first day: a weekly rule without days repeats on it.
   final DateTime day;
 
   static const _dot = 32.0;
 
-  /// As wide as the row of days, under the dates (the reference).
   static const _width = 300.0;
 
   @override

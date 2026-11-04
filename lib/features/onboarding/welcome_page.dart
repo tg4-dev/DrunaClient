@@ -7,13 +7,8 @@ import 'package:druna_app/shared/ui/top_toast.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// Where the logo's centre stands on the welcome screen and the splash, as
-/// a share of the screen's height.
 const logoCentre = 0.29;
 
-/// The first screen (screen 1): the logo, three ways in, the policy. The
-/// logo is already there — the splash shows it at the same place — and the
-/// rest rises in one after another.
 class WelcomePage extends StatefulWidget {
   const WelcomePage({required this.onEmail, super.key});
 
@@ -46,7 +41,6 @@ class _WelcomePageState extends State<WelcomePage>
     super.dispose();
   }
 
-  /// [child] fades in and rises 16 pt during [begin]..[end] of the entrance.
   Widget _rise(double begin, double end, Widget child) {
     final t = CurvedAnimation(
       parent: _enter,
@@ -123,7 +117,7 @@ class _WelcomePageState extends State<WelcomePage>
                     0.74,
                     PillButton(
                       key: const ValueKey('email-sign-in'),
-                      text: 'Вход по Email',
+                      text: 'Вход по нику',
                       width: OnboardingStyle.fieldWidth,
                       height: OnboardingStyle.height,
                       textStyle: OnboardingStyle.social,
@@ -146,7 +140,6 @@ class _WelcomePageState extends State<WelcomePage>
   }
 }
 
-/// «регистрируясь в Druna, вы соглашаетесь с нашей политикой».
 class _Policy extends StatefulWidget {
   const _Policy();
 

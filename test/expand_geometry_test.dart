@@ -150,7 +150,6 @@ void main() {
     await close.up();
     await tester.pump();
 
-    // One frame after the finger lifts: the month is no longer blocked.
     final month = find.ancestor(
       of: find.byType(MonthCalendar),
       matching: find.byType(IgnorePointer),

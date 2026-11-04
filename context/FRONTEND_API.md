@@ -69,9 +69,9 @@ Native apps cannot reach `localhost` on the developer machine directly. Use the 
 
 | Target | API base URL |
 |--------|--------------|
-| iOS Simulator | `http://localhost:8000` (simulator shares the host network) |
-| Android Emulator | `http://10.0.2.2:8000` (special alias to host `localhost`) |
-| Physical device (same LAN) | `http://<your-machine-LAN-IP>:8000` (e.g. `http://192.168.1.20:8000`) |
+| iOS Simulator | `http://localhost:22000` (simulator shares the host network) |
+| Android Emulator | `http://10.0.2.2:22000` (special alias to host `localhost`) |
+| Physical device (same LAN) | `http://<your-machine-LAN-IP>:22000` (e.g. `http://192.168.1.20:22000`) |
 | Docker API | `http://<host>:22000` |
 | Staging / Production | `https://api.yourdomain.com` |
 
@@ -669,7 +669,7 @@ go run cmd/main.go
 
 ```bash
 make smoke
-# or: BASE_URL=http://localhost:8000 make smoke
+# or: BASE_URL=http://localhost:22000 make smoke
 ```
 
 ### Manual test from a device/emulator
@@ -684,12 +684,12 @@ make smoke
 
 ```bash
 # sign in
-curl -s -X POST http://localhost:8000/auth/sign-in \
+curl -s -X POST http://localhost:22000/auth/sign-in \
   -H 'Content-Type: application/json' \
   -d '{"username":"alice","password":"secret123"}'
 
 # authenticated call
-curl -s http://localhost:8000/api/v1/events/ \
+curl -s http://localhost:22000/api/v1/events/ \
   -H 'Authorization: Bearer <accessToken>'
 ```
 

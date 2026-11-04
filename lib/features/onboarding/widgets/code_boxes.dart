@@ -3,10 +3,6 @@ import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Six cells for the emailed code. Underneath is one ordinary text field,
-/// so the system can fill the code in (`oneTimeCode`: from Messages and
-/// Mail on iOS, the autofill service on Android) and a paste works; the
-/// cells only draw its text.
 class CodeBoxes extends StatefulWidget {
   const CodeBoxes({
     required this.controller,
@@ -21,7 +17,6 @@ class CodeBoxes extends StatefulWidget {
 
   static const length = 6;
 
-  /// Off in widget tests: a blinking caret never lets frames settle.
   static bool blink = true;
 
   @override
@@ -64,7 +59,6 @@ class _CodeBoxesState extends State<CodeBoxes>
     super.dispose();
   }
 
-  /// The caret blinks in the next empty cell while the field has focus.
   void _blink() {
     final on =
         CodeBoxes.blink &&
@@ -87,7 +81,6 @@ class _CodeBoxesState extends State<CodeBoxes>
         (CodeBoxes.length - 1) * OnboardingStyle.codeGap;
     final text = widget.controller.text;
     final selection = widget.controller.selection;
-    // After a wrong code all of it is selected: the next digit replaces it.
     final allSelected =
         selection.isValid && !selection.isCollapsed && text.isNotEmpty;
     return Semantics(
@@ -97,8 +90,6 @@ class _CodeBoxesState extends State<CodeBoxes>
         height: box.height,
         child: Stack(
           children: [
-            // The real field, invisible, under the cells: a tap anywhere
-            // on them lands in it.
             Positioned.fill(
               child: TextField(
                 key: const ValueKey('code-field'),
@@ -205,14 +196,12 @@ class _Cell extends StatelessWidget {
     );
   }
 
-  /// On for the first half of the second, off for the second.
   static final _caretCurve = TweenSequence<double>([
     TweenSequenceItem(tween: ConstantTween(1), weight: 1),
     TweenSequenceItem(tween: ConstantTween(0), weight: 1),
   ]);
 }
 
-/// The cell: the button's fill and rim, in the code's rounded square.
 class _CellPainter extends CustomPainter {
   const _CellPainter({required this.selected});
 

@@ -14,8 +14,6 @@ enum _Open { interval, until }
 const _never = 'never';
 const _onDate = 'date';
 
-/// "Повтор" with an iOS pull-down menu. Weekly rules add the weekday row,
-/// "Дополнительно" adds "Каждые N …", and a set rule can end on a date.
 class EventRepeatBlock extends StatefulWidget {
   const EventRepeatBlock({
     required this.rule,
@@ -28,20 +26,15 @@ class EventRepeatBlock extends StatefulWidget {
     super.key,
   });
 
-  /// Closes the open wheel or month when the page is tapped elsewhere.
   final PickerScope? pickers;
 
-  /// The block's background; the event sheet's grey by default. On the
-  /// event page's gradient it is see-through.
   final BoxDecoration? decoration;
 
-  /// The picked weekdays and the text on them.
   final Color picked;
   final Color pickedInk;
 
   final RepeatRule? rule;
 
-  /// First day of the event; seeds the weekday and bounds the end date.
   final DateTime day;
   final ValueChanged<RepeatRule?> onChanged;
 
@@ -85,8 +78,6 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
     FocusScope.of(context).unfocus();
     final rule = widget.rule;
     if (section == _Open.interval && _open != section && rule != null) {
-      // Fresh wheels start on the rule's values; the old pair is released
-      // once its pickers have left the tree.
       final stale = [_count, _unit];
       _count = FixedExtentScrollController(initialItem: rule.interval - 1);
       _unit = FixedExtentScrollController(initialItem: rule.unit.index);
@@ -353,15 +344,12 @@ class _EventRepeatBlockState extends State<EventRepeatBlock> {
     );
   }
 
-  /// Taps inside an open picker stay there instead of closing it.
   Widget _keep(Widget picker) => GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: () {},
     child: picker,
   );
 
-  /// The event page's month (design-system §9.1); not before the first
-  /// day of the event.
   Widget _untilPicker(RepeatRule rule) {
     final first = dateOnly(widget.day);
     final until = rule.until ?? first;

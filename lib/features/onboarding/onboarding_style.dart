@@ -2,14 +2,10 @@ import 'package:druna_app/features/event_page/event_style.dart';
 import 'package:druna_app/shared/ui/pill_field.dart';
 import 'package:flutter/material.dart';
 
-/// Measurements of the onboarding (design-system §9.9), taken from the
-/// Figma screenshots at 393 pt wide 🟡.
 abstract final class OnboardingStyle {
-  /// Fields, the welcome screen's buttons, the arrows.
   static const height = PillFieldStyle.height;
   static const fieldWidth = PillFieldStyle.fieldWidth;
 
-  /// The email field: wider, and its text smaller, so an address fits.
   static const emailWidth = 300.0;
 
   static const arrowWidth = 72.0;
@@ -20,26 +16,19 @@ abstract final class OnboardingStyle {
   static const codeGap = 6.0;
   static const codeRadius = 14.0;
 
-  /// The title's top below the safe area, and its block's height.
   static const titleTop = 88.0;
   static const titleBlock = 104.0;
 
-  /// The profile: from the title's top to the avatar's — two lines of the
-  /// title and a gap (Figma).
   static const profileTitle = 2 * 28 * 1.25 + 20;
 
-  /// Above the field: the red line. Below it: the timer or a hint.
   static const errorSlot = 34.0;
   static const hintSlot = 44.0;
   static const navGap = 30.0;
 
-  /// The arrows stay at least this far above the keyboard…
   static const keyboardClearance = 24.0;
 
-  /// …and without it never sink below this share of the screen.
   static const lowest = 0.68;
 
-  /// Black under the brand colour.
   static const black = Color(0xFF000000);
   static const ink = Color(0xFF262626);
   static const danger = Color(0xFFFF3B30);
@@ -68,7 +57,6 @@ abstract final class OnboardingStyle {
     height: 1.2,
   );
 
-  /// The name field: bolder, it is the name friends will see (in capitals).
   static final nameField = PillFieldStyle.name;
   static final nameHint = PillFieldStyle.nameHint;
   static final digit = onest(26, weight: FontWeight.w600, height: 1);
@@ -83,7 +71,6 @@ abstract final class OnboardingStyle {
     decorationColor: Colors.white,
   );
 
-  /// A calendar on the calendar step: its name, and its account under it.
   static final calendarName = onest(17, weight: FontWeight.w600, height: 1.2);
   static final calendarAccount = onest(
     13,

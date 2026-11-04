@@ -11,7 +11,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows two demo friends and an incoming request', (tester) async {
+  testWidgets('shows twelve demo friends and an incoming request', (
+    tester,
+  ) async {
     await pumpPage(tester, DemoFriendsSource(delay: Duration.zero));
 
     expect(find.text('АЛИНА СМИРНОВА'), findsOneWidget);

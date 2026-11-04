@@ -7,11 +7,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// A tool for developers (settings → demo data, never in production):
-/// fits each avatar font to the circle by eye. Pick a font, look at a set
-/// of letters with the centre lines and the ink's frame, move the sliders,
-/// copy the [AvatarFont] it prints into [avatarFonts]. docs/avatar.md has
-/// the details. Nothing here is saved.
 Future<void> showAvatarTuning(BuildContext context) => Navigator.of(
   context,
 ).push(MaterialPageRoute<void>(builder: (_) => const AvatarTuningPage()));
@@ -19,8 +14,6 @@ Future<void> showAvatarTuning(BuildContext context) => Navigator.of(
 class AvatarTuningPage extends StatefulWidget {
   const AvatarTuningPage({super.key});
 
-  /// Capitals and small letters with ascenders and descenders, Cyrillic
-  /// and Latin.
   static const letters = [
     'А',
     'Б',
@@ -42,7 +35,6 @@ class AvatarTuningPage extends StatefulWidget {
 class _AvatarTuningPageState extends State<AvatarTuningPage> {
   var _index = 0;
 
-  /// The tuned copies, by font; untouched ones are as in the code.
   final _tuned = <String, AvatarFont>{};
   var _letter = 'А';
   var _guides = true;

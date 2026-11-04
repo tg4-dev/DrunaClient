@@ -4,25 +4,19 @@ import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The profile's look, chosen in the onboarding and in the settings
-/// (design-system §9.11): the avatar as it will be, a picker of fonts and
-/// one of colours.
 abstract final class ProfilePickerStyle {
   static const width = 258.0;
 
-  /// The font picker: a capsule with the letters in a row.
   static const fontHeight = 64.0;
   static const fontItem = 64.0;
   static const fontInset = 6.0;
 
-  /// The colour picker: a block of 4 × 2.
   static const colorCell = 58.0;
   static const colorDot = 42.0;
   static const colorRing = 56.0;
   static const colorRadius = 36.0;
   static const colorInset = 8.0;
 
-  /// Under the picked item.
   static const picked = Color(0x2EFFFFFF);
 
   static const move = Duration(milliseconds: 260);
@@ -30,8 +24,6 @@ abstract final class ProfilePickerStyle {
   static const swap = Duration(milliseconds: 220);
 }
 
-/// The avatar with [color] and [font]; a new colour flows in, a new font's
-/// letter grows in over the old one.
 class AvatarPreview extends StatelessWidget {
   const AvatarPreview({
     required this.color,
@@ -44,7 +36,6 @@ class AvatarPreview extends StatelessWidget {
   final Color color;
   final AvatarFont font;
 
-  /// Its first letter is drawn.
   final String name;
   final double size;
 
@@ -96,8 +87,6 @@ class AvatarPreview extends StatelessWidget {
   }
 }
 
-/// The fonts, each writing the first letter of the name in its own case;
-/// the row scrolls. A tap picks, the light slides under it.
 class FontPicker extends StatefulWidget {
   const FontPicker({
     required this.name,
@@ -133,7 +122,6 @@ class _FontPickerState extends State<FontPicker> {
     if (font.id == widget.selected.id) return;
     HapticFeedback.selectionClick();
     widget.onPick(font);
-    // The picked one comes into view, towards the middle.
     if (!_scroll.hasClients) return;
     const item = ProfilePickerStyle.fontItem;
     final target = (index * item - (widget.width - item) / 2).clamp(
@@ -219,12 +207,9 @@ class _FontPickerState extends State<FontPicker> {
   }
 }
 
-/// The colours in a block of 4 × 2; a ring sits under the picked one and
-/// moves to the next.
 class ColorPicker extends StatelessWidget {
   const ColorPicker({required this.selected, required this.onPick, super.key});
 
-  /// A slot of [avatarPalette].
   final int selected;
   final ValueChanged<int> onPick;
 

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Onest at [weight]: the font is variable, and its `wght` axis follows
-/// only an explicit variation, not [FontWeight] alone.
 TextStyle onest(
   double size, {
   FontWeight weight = FontWeight.w500,

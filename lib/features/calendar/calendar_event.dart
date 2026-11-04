@@ -4,14 +4,11 @@ import 'package:druna_app/features/calendar/month_layout.dart';
 import 'package:druna_app/features/calendar/repeat_rule.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/oklab.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:flutter/material.dart';
 
-/// The user's events before their profile (and so their colour) is known.
-const calendarEventColor = Color(0xFF9A3040);
 const calendarMinuteStep = 15;
 
-/// The colour of the user's own events: the colour of their avatar, so they
-/// look the same to themselves as to their friends.
 class OwnEventColor extends InheritedWidget {
   const OwnEventColor({required this.color, required super.child, super.key});
 
@@ -19,49 +16,23 @@ class OwnEventColor extends InheritedWidget {
 
   static Color of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<OwnEventColor>()?.color ??
-      calendarEventColor;
+      defaultOwnColor;
 
   @override
   bool updateShouldNotify(OwnEventColor oldWidget) => oldWidget.color != color;
 }
 
-/// A friend's event keeps the friend's colour; the user's take [own]. An
-/// invite's single colour is the middle of its gradient.
-Color eventColor(CalendarEvent event, Color own) {
-  final invite = event.invite;
-  if (invite != null) return mixedColor(invite.colors);
-  return event.color ?? own;
-}
+Color eventColor(CalendarEvent event, Color own) => event.color ?? own;
 
-/// Text on an event: white on dark colours, black on light ones.
 Color eventInk(Color background) =>
     background.computeLuminance() > 0.5 ? Colors.black : Colors.white;
 
-/// Text on [event] as it is drawn: an unanswered invite is see-through
-/// over black, so its text is judged against the darker colour.
-Color eventInkFor(CalendarEvent event, Color own) {
-  final color = eventColor(event, own);
-  final invite = event.invite;
-  return eventInk(
-    invite != null && invite.pending
-        ? Color.lerp(Colors.black, color, pendingInviteAlpha)!
-        : color,
-  );
-}
-
-/// How a colour reads on the month's grid, as in Apple Calendar's dark
-/// look: a deep fill and light text, both of the colour's own hue (in
-/// OKLCH, so neither drifts towards grey or another hue). Only the grid
-/// uses it; avatars, bands and the event page keep the colour itself.
 @immutable
 class GridTone {
   const GridTone({required this.fill, required this.ink});
 
-  /// The chip behind a title: dark, half the colour's chroma.
   final Color fill;
 
-  /// The title on it — and a chip with no title, which would barely show
-  /// as a dark fill: light, as much of the colour's chroma as sRGB holds.
   final Color ink;
 }
 
@@ -77,7 +48,6 @@ GridTone gridTone(Color color) => _gridTones.putIfAbsent(color, () {
   final chroma = math.sqrt(a * a + b * b);
   final hue = math.atan2(b, a);
   Color at(double lightness, double c) {
-    // Less chroma until it fits in sRGB: the hue and lightness stay.
     var fit = c;
     for (var i = 0; i < 24; i++) {
       final lab = (lightness, fit * math.cos(hue), fit * math.sin(hue));
@@ -93,9 +63,8 @@ GridTone gridTone(Color color) => _gridTones.putIfAbsent(color, () {
   );
 });
 
-/// The average of [colors], for text and bands over a gradient.
 Color mixedColor(List<Color> colors) {
-  if (colors.isEmpty) return calendarEventColor;
+  if (colors.isEmpty) return defaultOwnColor;
   var r = 0.0, g = 0.0, b = 0.0;
   for (final color in colors) {
     r += color.r;
@@ -106,42 +75,9 @@ Color mixedColor(List<Color> colors) {
   return Color.from(alpha: 1, red: r / n, green: g / n, blue: b / n);
 }
 
-/// How much of the colour an invite without the user's answer keeps.
-const pendingInviteAlpha = 0.4;
-
-/// The fill of an event: its colour, or for an invite the colours of the
-/// people in it, left to right (design-system §9.8). An invite the user has
-/// not answered is see-through; [PendingInviteRim] goes around it.
-BoxDecoration eventFill(
-  CalendarEvent event,
-  Color own, {
-  BorderRadius? radius,
-}) {
-  final invite = event.invite;
-  if (invite == null || invite.colors.length < 2) {
-    final color = eventColor(event, own);
-    return BoxDecoration(
-      color: invite != null && invite.pending
-          ? color.withValues(alpha: pendingInviteAlpha)
-          : color,
-      borderRadius: radius,
-    );
-  }
-  final alpha = invite.pending ? pendingInviteAlpha : 1.0;
-  return BoxDecoration(
-    borderRadius: radius,
-    gradient: LinearGradient(
-      colors: [for (final c in invite.colors) c.withValues(alpha: alpha)],
-    ),
-  );
-}
-
-/// An event picked up or being drawn: a soft glow in its own colour and an
-/// edge a shade lighter, instead of a foreign outline. With [colors], an
-/// invite being drawn: the gradient of the people in it.
 BoxDecoration liftedEventDecoration(
   BorderRadius radius, {
-  Color color = calendarEventColor,
+  Color color = defaultOwnColor,
   List<Color>? colors,
 }) {
   final gradient = colors != null && colors.length > 1 ? colors : null;
@@ -164,7 +100,6 @@ BoxDecoration liftedEventDecoration(
   );
 }
 
-/// What makes an event an invite on the calendar (lib/features/invites).
 @immutable
 class EventInvite {
   const EventInvite({
@@ -177,47 +112,15 @@ class EventInvite {
 
   final String id;
 
-  /// The people in it, organizer first: the event's gradient.
   final List<Color> colors;
 
-  /// The same people, for their faces on the month's cell.
   final List<FriendInfo> people;
 
-  /// The user has not answered yet.
   final bool pending;
 
-  /// The user organizes it.
   final bool mine;
 }
 
-/// A dashed edge around an invite the user has not answered, in the colour
-/// of its middle.
-class PendingInviteRim extends StatelessWidget {
-  const PendingInviteRim({
-    required this.color,
-    required this.radius,
-    required this.child,
-    super.key,
-  });
-
-  final Color color;
-  final double radius;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-    foregroundPainter: _DashedRim(color: color, radius: radius),
-    child: child,
-  );
-}
-
-class _DashedRim extends DashedRimPainter {
-  _DashedRim({required Color color, required super.radius})
-    : super(color: Color.lerp(color, Colors.white, 0.35)!);
-}
-
-/// A dashed rounded edge just inside its box: the pending invite's rim, the
-/// month's unanswered cell and the chip that places a new invite.
 class DashedRimPainter extends CustomPainter {
   const DashedRimPainter({
     required this.color,
@@ -234,8 +137,6 @@ class DashedRimPainter extends CustomPainter {
   final double gap;
   final double width;
 
-  /// Where the middle of the line runs, in from the box's edges; by default
-  /// half the line, so it stays inside. Zero puts it on the edge.
   final EdgeInsets? inset;
 
   @override
@@ -257,7 +158,6 @@ class DashedRimPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeWidth = width;
     for (final metric in path.computeMetrics()) {
-      // Whole dashes all the way round: the gap stretches a little.
       final count = (metric.length / (dash + gap)).floor().clamp(1, 1 << 20);
       final step = metric.length / count;
       for (var i = 0; i < count; i++) {
@@ -277,7 +177,6 @@ class DashedRimPainter extends CustomPainter {
       old.inset != inset;
 }
 
-/// Shortest timed event; a shorter or inverted span grows to this.
 const minimumEventLength = Duration(minutes: calendarMinuteStep);
 
 class CalendarEvent {
@@ -299,26 +198,18 @@ class CalendarEvent {
   final String title;
   final DateTime start;
 
-  /// Exclusive for timed events. For all-day events this is the last day,
-  /// inclusive, so a one-day event has `start == end`.
   final DateTime end;
   final bool allDay;
   final RepeatRule? repeat;
 
-  /// Set on generated occurrences: the id of the event that holds the rule.
   final String? seriesId;
 
-  /// A friend's colour; the user's own events leave it null.
   final Color? color;
 
-  /// The friend this event belongs to; null for the user's own events.
   final int? ownerId;
 
-  /// Set when the event is an invite with other people in it.
   final EventInvite? invite;
 
-  /// Set on events read from the device's calendar: Druna shows them in
-  /// their calendar's colour and does not change them.
   final ExternalEvent? external;
 
   String get sourceId => seriesId ?? id;
@@ -354,7 +245,6 @@ class CalendarEvent {
   }
 }
 
-/// Where an event of the device's calendar lives there.
 @immutable
 class ExternalEvent {
   const ExternalEvent({
@@ -363,16 +253,12 @@ class ExternalEvent {
     required this.calendarName,
   });
 
-  /// The occurrence, for the system's event screen.
   final String instanceId;
   final String calendarId;
 
-  /// «Работа», «Дом»: shown on the event's page.
   final String calendarName;
 }
 
-/// Repairs spans no screen can draw: a timed end at or before its start, and
-/// an all-day end before its first day.
 CalendarEvent normalizeEvent(CalendarEvent event) {
   if (event.allDay) {
     final first = dateOnly(event.start);
@@ -389,21 +275,12 @@ CalendarEvent normalizeEvent(CalendarEvent event) {
   return event.copyWith(end: event.start.add(minimumEventLength));
 }
 
-/// Friends' busy time for the month: one friend's events that share a
-/// day become one chip — their sum, not a stack. Within one day it runs
-/// from the first start to the last end; over several days it is one bar
-/// from the first day to the last. Invites stay as they are.
 List<CalendarEvent> mergeBusyByDay(List<CalendarEvent> events) {
   final byOwner = <int?, List<CalendarEvent>>{};
-  final rest = <CalendarEvent>[];
   for (final event in events) {
-    if (event.invite != null) {
-      rest.add(event);
-    } else {
-      byOwner.putIfAbsent(event.ownerId, () => []).add(event);
-    }
+    byOwner.putIfAbsent(event.ownerId, () => []).add(event);
   }
-  final merged = <CalendarEvent>[...rest];
+  final merged = <CalendarEvent>[];
   for (final own in byOwner.values) {
     own.sort((a, b) => eventFirstDay(a).compareTo(eventFirstDay(b)));
     var group = <CalendarEvent>[];
@@ -472,11 +349,9 @@ bool eventOccursOn(CalendarEvent event, DateTime day) {
       !date.isAfter(eventLastDay(event));
 }
 
-/// The event covers more than one day.
 bool eventSpansDays(CalendarEvent event) =>
     !sameDay(eventFirstDay(event), eventLastDay(event));
 
-/// "24.10-25.10": first and last day of the event.
 String eventDatesLabel(CalendarEvent event) {
   String date(DateTime day) =>
       '${day.day.toString().padLeft(2, '0')}.${day.month.toString().padLeft(2, '0')}';
@@ -499,7 +374,6 @@ String clockLabel(DateTime time) =>
 String clockRangeLabel(DateTime start, DateTime end) =>
     '${clockLabel(start)}-${clockLabel(end)}';
 
-/// [time] rounded to the nearest quarter hour, kept on its own day.
 DateTime nearestQuarter(DateTime time) {
   final total = time.hour * 60 + time.minute;
   final remainder = total % calendarMinuteStep;
@@ -509,12 +383,9 @@ DateTime nearestQuarter(DateTime time) {
   return atClock(time, rounded ~/ 60, rounded % 60);
 }
 
-/// [day]'s date at [hour]:[minute] local time.
 DateTime atClock(DateTime day, int hour, int minute) =>
     DateTime(day.year, day.month, day.day, hour, minute);
 
-/// One hour from the nearest quarter of [now], or 22:00–23:00 when that runs
-/// past the day.
 ({DateTime start, DateTime end}) defaultEventSpan(DateTime day, DateTime now) {
   final quarter = nearestQuarter(now);
   final minutes = quarter.hour * 60 + quarter.minute;
@@ -534,8 +405,6 @@ CalendarEvent createEventOnDay({
   return CalendarEvent(id: id, title: '', start: span.start, end: span.end);
 }
 
-/// Shifts the event by whole days. A repeat's end date is a date the user
-/// picked, so it stays where it is.
 CalendarEvent shiftEventDays(CalendarEvent event, int days) {
   if (days == 0) return event;
   return event.copyWith(
@@ -544,8 +413,6 @@ CalendarEvent shiftEventDays(CalendarEvent event, int days) {
   );
 }
 
-/// Moves a timed event by [shift], keeping its length. All-day events move by
-/// whole days, the days [shift] crosses.
 CalendarEvent shiftEventBy(CalendarEvent event, Duration shift) {
   if (shift == Duration.zero) return event;
   if (event.allDay) {
@@ -560,8 +427,6 @@ CalendarEvent shiftEventBy(CalendarEvent event, Duration shift) {
   );
 }
 
-/// Events by week and day, with repeating series unrolled and every span
-/// normalised. Build one per change of the event list; lookups are cached.
 class CalendarEventIndex {
   CalendarEventIndex(List<CalendarEvent> events)
     : events = [for (final event in events) normalizeEvent(event)] {
@@ -579,10 +444,8 @@ class CalendarEventIndex {
   final _dayLanes = <DateTime, Map<String, int>>{};
   final _lanes = <String, int>{};
 
-  /// Per-index memo for derived layouts; dropped with the index.
   final memo = <Object, Object>{};
 
-  /// The stored event behind [id], for an occurrence too.
   CalendarEvent? source(String id) {
     final direct = _byId[id];
     if (direct != null) return direct;
@@ -597,7 +460,6 @@ class CalendarEventIndex {
     });
   }
 
-  /// Every event or occurrence touching [first]…[last], inclusive.
   List<CalendarEvent> between(DateTime first, DateTime last) {
     final from = dateOnly(first);
     final to = dateOnly(last);
@@ -629,8 +491,6 @@ class CalendarEventIndex {
     return _days.putIfAbsent(date, () => between(date, date));
   }
 
-  /// Timeline row for each event touching [day]. Rows come from whole chains of
-  /// overlapping events, so an overnight event keeps its row past midnight.
   Map<String, int> lanesAround(DateTime day) {
     final date = dateOnly(day);
     return _dayLanes.putIfAbsent(date, () => _lanesAround(date));
@@ -682,7 +542,6 @@ class CalendarEventIndex {
   }
 }
 
-/// Days searched each way for the end of an overlap chain.
 const _laneReachLimit = 32;
 
 class _Cluster {
@@ -698,7 +557,6 @@ class _Cluster {
   }
 }
 
-/// Instants the event covers on the timeline; all-day events fill their days.
 ({DateTime start, DateTime end}) timelineSpan(CalendarEvent event) {
   if (!event.allDay) return (start: event.start, end: event.end);
   return (

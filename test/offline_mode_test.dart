@@ -23,13 +23,13 @@ void main() {
   );
 
   test(
-    'registration, restart, rename, sign-out and sign-in by email',
+    'demo: registration, restart, rename, sign-out, sign-in by username',
     () async {
       final storage = MemorySettingsStorage();
       final accounts = OfflineAccounts(storage);
       final source = OfflineAuthFlowSource(accounts, latency: Duration.zero);
 
-      expect(await source.startEmail('a@b.ru'), EmailStatus.fresh);
+      expect(await source.startUsername('alice'), AccountStatus.fresh);
       expect(await source.usernameAvailable('alice'), isTrue);
       await source.register(
         email: 'a@b.ru',
@@ -44,7 +44,6 @@ void main() {
       expect(session.state, SessionState.signedIn);
       expect(session.profile?.username, 'alice');
 
-      // A new launch finds the session on the device.
       final again = SessionController(repository(), offline: accounts);
       await again.restore();
       expect(again.state, SessionState.signedIn);
@@ -59,29 +58,36 @@ void main() {
       await later.restore();
       expect(later.state, SessionState.signedOut);
 
-      expect(await source.startEmail('a@b.ru'), EmailStatus.registered);
-      await source.signIn(email: 'a@b.ru', password: 'anything');
+      expect(await source.startUsername('alice'), AccountStatus.registered);
+      await expectLater(
+        source.signIn(username: 'bob', password: 'anything'),
+        throwsA(wrongLogin),
+      );
+      await source.signIn(username: 'alice', password: 'anything');
       await later.adopt();
       expect(later.profile?.name, 'Анна');
     },
   );
 
-  test('production never runs without the server', () {
-    const config = AppConfig(
-      apiBaseUrl: 'https://druna.app',
-      environment: 'production',
-      offline: true,
-    );
-    expect(config.offline, isFalse);
+  test('switching the version signs out and swaps the accounts', () async {
+    final accounts = OfflineAccounts(MemorySettingsStorage());
+    await accounts.create(email: 'a@b.ru', username: 'alice', name: 'Аня');
+    final session = SessionController(repository(), offline: accounts);
+    await session.restore();
+    expect(session.state, SessionState.signedIn);
+
+    await session.switchTo(null);
+    expect(session.state, SessionState.signedOut);
+    expect(session.offline, isNull);
+    expect(await accounts.current(), isNull);
   });
 
-  testWidgets('offline, the app opens on the onboarding, then on the saved '
-      'session', (tester) async {
+  testWidgets('in the demo version the app opens on the onboarding, then on '
+      'the saved session', (tester) async {
     final storage = MemorySettingsStorage();
     const config = AppConfig(
       apiBaseUrl: 'https://example.test',
-      environment: 'test',
-      offline: true,
+      demoData: true,
     );
     DrunaApp app() => DrunaApp(
       repository: repository(),

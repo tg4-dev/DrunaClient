@@ -3,7 +3,6 @@ import 'package:druna_app/features/calendar/repeat_rule.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  // Wednesday.
   final first = DateTime(2026, 10, 7);
 
   List<DateTime> days(RepeatRule rule, DateTime from, DateTime to) =>

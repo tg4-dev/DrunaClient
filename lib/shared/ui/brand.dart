@@ -1,21 +1,16 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// The brand: its colour, the logo and the onboarding's arrow
-/// (design-system §2, §9.9).
 abstract final class Brand {
-  /// The app's own colour 🟡: the onboarding's gradient.
   static const accent = Color(0xFF970AB6);
 
   static const logoAsset = 'assets/branding/druna_logo.svg';
   static const arrowAsset = 'assets/branding/arrow_right.svg';
   static const chevronAsset = 'assets/branding/Chevron_Left.svg';
 
-  /// Width to height of the logo's artwork.
   static const logoAspect = 527.13 / 90.29;
 }
 
-/// «DRUNA» in one colour, [width] wide.
 class DrunaLogo extends StatelessWidget {
   const DrunaLogo({
     this.width = 217,
@@ -40,7 +35,6 @@ class DrunaLogo extends StatelessWidget {
   );
 }
 
-/// The thick arrow of the onboarding's buttons; [back] points left.
 class ArrowIcon extends StatelessWidget {
   const ArrowIcon({
     required this.color,
@@ -52,7 +46,6 @@ class ArrowIcon extends StatelessWidget {
   final Color color;
   final bool back;
 
-  /// The width; the artwork is 30 × 24.
   final double size;
 
   @override
@@ -68,8 +61,6 @@ class ArrowIcon extends StatelessWidget {
   }
 }
 
-/// The hint chevron (`Chevron_Left.svg`): left by default, turned by
-/// [quarterTurns] clockwise (1 points up).
 class ChevronIcon extends StatelessWidget {
   const ChevronIcon({
     required this.color,

@@ -9,6 +9,7 @@ import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:druna_app/shared/ui/person_avatar.dart';
 
 void main() {
   test('June 2025 day 1 sits on Sunday of the week of May 26', () {
@@ -176,9 +177,6 @@ void main() {
     testWidgets('weeks run on under the top instead of being cut', (
       tester,
     ) async {
-      // A fixed focus: the result depended on today's date. Around a
-      // month's first week (2026-10-15, 2026-11-03) the weeks above the top
-      // are not built — see docs/design-system.md §12.
       await pumpMonth(tester, focus: DateTime(2026, 7, 1));
       const listTop = 62 + monthChrome;
       final month = tester.state<MonthCalendarState>(
@@ -195,15 +193,12 @@ void main() {
           tester.getRect(find.byWidget(element.widget)).top,
       ];
       expect(tops.any((top) => top < listTop), isTrue);
-      // And painted there: the list does not clip them.
       expect(
         tester
             .widget<CustomScrollView>(find.byType(CustomScrollView))
             .clipBehavior,
         Clip.none,
       );
-      // A week wholly above the list is still painted until it has left
-      // the screen: the sliver does not drop it at its own edge.
       final sliver = tester.renderObject<RenderSliver>(
         find.byWidgetPredicate(
           (widget) => widget.runtimeType.toString() == '_MonthStripSliver',
@@ -260,7 +255,6 @@ void main() {
 
       expect(await fill(now), PillStyle.fill);
       expect(await fill(DateTime(now.year, now.month + 3, 15)), Colors.white);
-      // The same month, but today's week scrolled away: lit too.
       expect(
         await fill(now.add(const Duration(days: 21))),
         isNot(PillStyle.fill),
@@ -372,7 +366,6 @@ void main() {
     );
     await tester.pump();
 
-    // Grab the bar over Friday, its third day, and drop it on Saturday.
     final friday = tester.getCenter(
       find.byKey(const ValueKey('day-2026-10-16')),
     );
@@ -491,8 +484,6 @@ void main() {
       return tapped;
     }
 
-    /// Painted: no fully transparent [Opacity] above it. Hidden layers stay
-    /// mounted (so their state survives a swipe) but are not drawn.
     bool painted(WidgetTester tester, Element element) {
       var shown = true;
       element.visitAncestorElements((ancestor) {
@@ -548,7 +539,6 @@ void main() {
         mode.value = value;
         await tester.pump();
       }
-      // The very first frame back: an entrance would start from 0.
       final chip = find.byWidgetPredicate(
         (widget) =>
             widget is DecoratedBox &&
@@ -619,7 +609,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(firstFrame, chip.evaluate().length);
 
-      // Coming out from behind "+N", chips just show: no entrance.
       height.value = tall;
       await tester.pump();
       expect(chip, findsNWidgets(5));
@@ -630,10 +619,8 @@ void main() {
     });
 
     test('the layers take turns: one folds, then the other unfolds', () {
-      // First half: only my chips move; friends' stay folded.
       expect(myFoldAt(0.25), 0.5);
       expect(friendsFoldAt(0.25), 1);
-      // Halfway both are folded; second half only friends' move.
       expect(myFoldAt(0.5), 1);
       expect(friendsFoldAt(0.5), 1);
       expect(myFoldAt(0.75), 1);
@@ -732,15 +719,13 @@ void main() {
         find.ancestor(of: finder, matching: find.byType(MonthWeekGrid)).first,
       );
 
-      // Nearly in friends' mode: my chip is folded under the top line (its
-      // title already gone, so it is found by colour).
       final myChip = find.byWidgetPredicate(
         (widget) =>
             widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
             isToneOf(
               (widget.decoration as BoxDecoration).color,
-              calendarEventColor,
+              defaultOwnColor,
             ),
       );
       expect(find.text('Моё'), findsNothing);
@@ -749,7 +734,6 @@ void main() {
         lessThan(chipFoldGap + 4),
       );
 
-      // Nearly in my mode: friends' chips sit on the bottom line.
       mode.value = 0.001;
       await tester.pump();
       final theirs = find.byWidgetPredicate(
@@ -807,7 +791,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(chipColours(tester), contains(mine));
-      // Apple's dark look: a deep fill, light text of the same hue.
       final ink = tester.widget<Text>(find.text('Моё')).style!.color!;
       expect(ink, gridTone(mine).ink);
       expect(gridTone(mine).fill.computeLuminance(), lessThan(0.1));
@@ -821,8 +804,6 @@ void main() {
       expect(textShown(tester, 'Моё'), isFalse);
       expect(chipColours(tester), contains(friendColour));
 
-      // My chip lies folded on the top line: a tap there brings my events
-      // back instead of opening the chip.
       await tester.tap(
         find
             .byWidgetPredicate(
@@ -831,7 +812,7 @@ void main() {
                   widget.decoration is BoxDecoration &&
                   isToneOf(
                     (widget.decoration as BoxDecoration).color,
-                    calendarEventColor,
+                    defaultOwnColor,
                   ),
             )
             .first,
@@ -849,14 +830,12 @@ void main() {
 
 void _ignoreTap(DateTime day, Rect weekRect) {}
 
-/// A chip's fill or ink is one of [base]'s grid tones ([gridTone]).
 bool isToneOf(Color? color, Color base) =>
     color == gridTone(base).fill || color == gridTone(base).ink;
 
-/// The colour a grid tone was made from, among the test's colours.
 Color baseOfTone(Color tone) {
   for (final base in [
-    calendarEventColor,
+    defaultOwnColor,
     const Color(0xFFFFD60A),
     const Color(0xFF34C759),
   ]) {
