@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/models/models.dart';
@@ -95,6 +97,9 @@ class FriendBar extends StatefulWidget {
 
 class _FriendBarState extends State<FriendBar> {
   final _scroll = ScrollController();
+
+  /// The corner with "Мои события": the arrow measures it to ride beside.
+  final _corner = GlobalKey();
 
   @override
   void dispose() {
@@ -339,6 +344,16 @@ double _offsetOf(ScrollController scroll) =>
 double friendBarFold(double mode) =>
     Curves.easeInOutCubic.transform(1 - mode.clamp(0.0, 1.0));
 
+/// [friendBarFold] for the avatar [k] places from the left of the screen:
+/// it sets off [FriendBarStyle.lag]·k of the way later and catches up, so
+/// the row comes in as a staircase and leaves as one, the right first.
+double friendBarFoldAt(double mode, double k) {
+  final lag =
+      FriendBarStyle.lag * k.clamp(0.0, FriendBarStyle.lagMax.toDouble());
+  final open = ((mode.clamp(0.0, 1.0) - lag) / (1 - lag)).clamp(0.0, 1.0);
+  return Curves.easeInOutCubic.transform(1 - open);
+}
+
 /// One friend. Its place in the row animates when the order changes; its
 /// way into the stack follows the mode directly. Per frame only a position
 /// and a scale change: no opacity, no relayout of the avatar.
@@ -391,9 +406,12 @@ class _FriendSlot extends StatelessWidget {
         animation: motion,
         child: child,
         builder: (context, child) {
-          final fold = friendBarFold(mode.value);
           final offset = _offsetOf(scroll);
           final rowLeft = FriendBarStyle.gutter + slot * FriendBarStyle.step;
+          final fold = friendBarFoldAt(
+            mode.value,
+            (rowLeft - FriendBarStyle.gutter - offset) / FriendBarStyle.step,
+          );
           final stack = stackIndex;
           // Picked friends glide into the stack; the rest always slide off
           // to the right, under the stack (they are painted below it).
@@ -415,9 +433,14 @@ class _FriendSlot extends StatelessWidget {
             foldedScale = 0;
             hidden = true;
           } else {
-            // Past the right edge of the screen, keeping their order.
+            // Past the right edge of the screen, keeping their order and
+            // their spacing: the row slides out, it does not fold to a
+            // point.
             foldedLeft =
-                geometry.width + FriendBarStyle.gutter + slot * 12 + offset;
+                offset +
+                geometry.width +
+                FriendBarStyle.gutter +
+                math.max(0.0, rowLeft - FriendBarStyle.gutter - offset);
             foldedScale = FriendBarStyle.stackAvatar / avatar;
             hidden = true;
           }
@@ -602,25 +625,38 @@ class _Placeholder extends StatelessWidget {
   }
 }
 
+/// No friends yet: the button stands where the row would and leaves the
+/// way the row does — to the right, after the finger, no fade.
 class _AddFriends extends StatelessWidget {
-  const _AddFriends({required this.visible, required this.onTap});
+  const _AddFriends({
+    required this.visible,
+    required this.mode,
+    required this.width,
+    required this.onTap,
+  });
 
   final bool visible;
+  final ValueListenable<double> mode;
+  final double width;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       ignoring: !visible,
-      child: AnimatedOpacity(
-        duration: FriendBarStyle.select,
-        opacity: visible ? 1 : 0,
+      child: ValueListenableBuilder<double>(
+        valueListenable: mode,
         child: Center(
           child: PillButton(
+            key: const ValueKey('add-friends'),
             icon: CupertinoIcons.person_add,
             text: 'Добавить друзей',
             onPressed: onTap,
           ),
+        ),
+        builder: (context, t, button) => Transform.translate(
+          offset: Offset(width * friendBarFold(t), 0),
+          child: button,
         ),
       ),
     );

@@ -317,7 +317,9 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
     final own = slot == null ? widget.own : avatarPalette[slot];
     final name = profile == null
         ? ''
-        : (profile.name.isEmpty ? profile.username : profile.name);
+        : (typed.isNotEmpty
+              ? typed
+              : (profile.name.isEmpty ? profile.username : profile.name));
     const outer = _avatar + (_ring + _ringGap) * 2;
     return Padding(
       padding: const EdgeInsets.only(top: 24),
@@ -357,10 +359,19 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
               },
             )
           else ...[
-            _NameField(
-              key: ValueKey('profile-name-${profile.id}'),
-              session: session,
-              name: profile.name,
+            PillField(
+              fieldKey: const ValueKey('profile-name-field'),
+              controller: _name,
+              focusNode: _nameFocus,
+              hint: 'ИМЯ',
+              width: null,
+              style: PillFieldStyle.name,
+              hintStyle: PillFieldStyle.nameHint,
+              keyboardType: TextInputType.name,
+              textCapitalization: TextCapitalization.words,
+              autofillHints: const [AutofillHints.givenName],
+              textInputAction: TextInputAction.done,
+              keepFocus: false,
             ),
             const SizedBox(height: 8),
             Text(
@@ -413,115 +424,6 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
       ),
     );
   }
-}
-
-/// The name in the app's field: bold, drawn in capitals. A change shows ✓
-/// at the right; it, or the keyboard's return, saves through the server
-/// (`PATCH /users/me`) or, without one, on the device.
-class _NameField extends StatefulWidget {
-  const _NameField({required this.session, required this.name, super.key});
-
-  final SessionController session;
-  final String name;
-
-  @override
-  State<_NameField> createState() => _NameFieldState();
-}
-
-class _NameFieldState extends State<_NameField> {
-  late final _name = UpperCaseNameController(text: widget.name);
-  final _focus = FocusNode();
-  var _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _name.addListener(() => setState(() {}));
-    _focus.addListener(() => setState(() {}));
-  }
-
-  @override
-  void didUpdateWidget(covariant _NameField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Renamed elsewhere (a refresh): show it unless the user is typing.
-    if (oldWidget.name != widget.name && !_focus.hasFocus) {
-      _name.text = widget.name;
-    }
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  bool get _changed => _name.text.trim() != widget.name.trim();
-
-  /// ✓ or «готово»: saves a change; with none, just ends the editing.
-  Future<void> _save() async {
-    if (_busy) return;
-    if (!_changed) {
-      _focus.unfocus();
-      return;
-    }
-    final problem = nameError(_name.text);
-    if (problem != null) {
-      showToast(context, problem, error: true);
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await widget.session.rename(_name.text);
-      if (!mounted) return;
-      HapticFeedback.selectionClick();
-      _focus.unfocus();
-      showToast(context, 'Имя сохранено');
-    } catch (error) {
-      if (mounted) showToast(context, _errorText(error), error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => PillField(
-    fieldKey: const ValueKey('profile-name-field'),
-    controller: _name,
-    focusNode: _focus,
-    hint: 'ИМЯ',
-    width: null,
-    style: PillFieldStyle.name,
-    hintStyle: PillFieldStyle.nameHint,
-    keyboardType: TextInputType.name,
-    textCapitalization: TextCapitalization.words,
-    autofillHints: const [AutofillHints.givenName],
-    textInputAction: TextInputAction.done,
-    keepFocus: false,
-    onSubmitted: _save,
-    trailing: _busy
-        ? const CupertinoActivityIndicator(color: Colors.white)
-        : _changed || _focus.hasFocus
-        ? Semantics(
-            button: true,
-            label: _changed ? 'Сохранить имя' : 'Готово',
-            excludeSemantics: true,
-            child: GestureDetector(
-              key: const ValueKey('profile-name-save'),
-              behavior: HitTestBehavior.opaque,
-              onTap: _save,
-              child: const SizedBox.square(
-                dimension: 44,
-                child: Icon(
-                  CupertinoIcons.checkmark_alt,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ),
-          )
-        : null,
-  );
 }
 
 class _LogoutBlock extends StatelessWidget {
