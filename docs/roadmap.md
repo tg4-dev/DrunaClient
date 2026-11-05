@@ -61,7 +61,8 @@
 - bundle/application IDs и display metadata финализированы;
 - иконки, splash, privacy descriptions и store assets готовы;
 - Apple/Google signing хранится вне репозитория;
-- версия/build number обновлены;
+- версия и номер сборки подняты, `CHANGELOG.md` дополнен, тег поставлен
+  (`docs/versioning.md`);
 - unit, widget, integration и device smoke tests проходят;
 - проверены logout, истёкший access token, невалидный refresh token, offline,
   timeout, пустые списки и destructive confirmations;
