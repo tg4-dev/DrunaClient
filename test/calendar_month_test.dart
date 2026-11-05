@@ -1,4 +1,5 @@
 import 'package:druna_app/features/calendar/calendar_event.dart';
+import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/day_timeline.dart';
 import 'package:druna_app/features/calendar/event_layout.dart';
 import 'package:druna_app/features/calendar/month_calendar.dart';
@@ -627,6 +628,17 @@ void main() {
       expect(friendsFoldAt(0.75), 0.5);
       expect(myFoldAt(0), 0);
       expect(friendsFoldAt(1), 0);
+    });
+
+    test('one layer hands over to the other without a pause', () {
+      double mine(double t) => chipShownAt(myFoldAt(t));
+      double friends(double t) => chipShownAt(friendsFoldAt(t));
+      expect(mine(0.5), 0);
+      expect(friends(0.5), 0);
+      expect(mine(0.45), closeTo(0.1, 1e-9));
+      expect(friends(0.55), closeTo(0.1, 1e-9));
+      expect(mine(0.05), closeTo(0.9, 1e-9));
+      expect(friends(0.95), closeTo(0.9, 1e-9));
     });
 
     test('thin month chips are pills, the title-and-time one is not', () {

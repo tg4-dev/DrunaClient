@@ -1,12 +1,10 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 abstract final class Brand {
   static const accent = Color(0xFF970AB6);
 
   static const logoAsset = 'assets/branding/druna_logo.svg';
-  static const arrowAsset = 'assets/branding/arrow_right.svg';
-  static const chevronAsset = 'assets/branding/Chevron_Left.svg';
 
   static const logoAspect = 527.13 / 90.29;
 }
@@ -49,16 +47,11 @@ class ArrowIcon extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) {
-    final arrow = SvgPicture.asset(
-      Brand.arrowAsset,
-      width: size,
-      height: size * 24 / 30,
-      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-    );
-    if (!back) return arrow;
-    return Transform.flip(flipX: true, child: arrow);
-  }
+  Widget build(BuildContext context) => Icon(
+    back ? CupertinoIcons.arrow_left : CupertinoIcons.arrow_right,
+    color: color,
+    size: size,
+  );
 }
 
 class ChevronIcon extends StatelessWidget {
@@ -74,14 +67,8 @@ class ChevronIcon extends StatelessWidget {
   final int quarterTurns;
 
   @override
-  Widget build(BuildContext context) {
-    final chevron = SvgPicture.asset(
-      Brand.chevronAsset,
-      width: size,
-      height: size,
-      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-    );
-    if (quarterTurns % 4 == 0) return chevron;
-    return RotatedBox(quarterTurns: quarterTurns, child: chevron);
-  }
+  Widget build(BuildContext context) => RotatedBox(
+    quarterTurns: quarterTurns,
+    child: Icon(CupertinoIcons.chevron_left, color: color, size: size),
+  );
 }

@@ -218,13 +218,13 @@ void main() {
       find.byKey(ValueKey('day-${today.year}-${today.month}-${today.day}')),
     );
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-back')), findsOneWidget);
 
     await swipe(tester, 300);
-    expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-back')), findsOneWidget);
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
 
-    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.tap(find.byKey(const ValueKey('day-back')));
     await tester.pumpAndSettle();
     await swipe(tester, 300);
     await swipe(tester, 300);

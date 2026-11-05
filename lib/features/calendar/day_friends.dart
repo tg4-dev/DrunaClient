@@ -469,7 +469,10 @@ class MyBandTitles extends StatelessWidget {
                   if (run.more > 0)
                     TextSpan(
                       text: ' +${run.more}',
-                      style: TextStyle(color: ink.withValues(alpha: 0.7)),
+                      style: TextStyle(
+                        fontFamily: 'Onest',
+                        color: ink.withValues(alpha: 0.7),
+                      ),
                     ),
                 ],
               ),
@@ -479,6 +482,7 @@ class MyBandTitles extends StatelessWidget {
               style: timelineTitleStyle.copyWith(
                 color: ink,
                 fontWeight: FontWeight.w500,
+                fontVariations: const [FontVariation('wght', 500)],
               ),
             ),
           ),

@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'dart:math' as math;
 
 import 'package:druna_app/features/event_page/event_gradient.dart';
@@ -120,7 +121,7 @@ class _ErrorShakeState extends State<ErrorShake>
     with SingleTickerProviderStateMixin {
   late final _shake = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 420),
+    duration: Motion.long,
     value: 1,
   );
 

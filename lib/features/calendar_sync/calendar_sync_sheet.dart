@@ -44,7 +44,7 @@ class _CalendarSyncSheetState extends State<CalendarSyncSheet>
   );
   late final _rise = CurvedAnimation(
     parent: _motion,
-    curve: Curves.easeOutQuart,
+    curve: Curves.easeOutCubic,
     reverseCurve: Curves.easeInCubic,
   );
   late final _settle = AnimationController(
@@ -114,7 +114,7 @@ class _CalendarSyncSheetState extends State<CalendarSyncSheet>
     );
     exit.addListener(() {
       _drag.value =
-          from + (height - from) * Curves.easeIn.transform(exit.value);
+          from + (height - from) * Curves.easeInCubic.transform(exit.value);
     });
     exit.forward().whenComplete(() {
       exit.dispose();

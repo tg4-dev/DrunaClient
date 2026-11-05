@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'dart:async';
 
 import 'package:druna_app/shared/ui/pill_button.dart';
@@ -35,6 +36,8 @@ abstract final class ToastStyle {
   static const icon = 18.0;
   static const danger = Color(0xFFFF3B30);
   static const text = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 600)],
     color: Colors.white,
     fontSize: 15,
     fontWeight: FontWeight.w600,
@@ -43,7 +46,7 @@ abstract final class ToastStyle {
   );
 
   static const enter = Duration(milliseconds: 260);
-  static const leave = Duration(milliseconds: 200);
+  static const leave = Motion.medium;
   static const hold = Duration(milliseconds: 2400);
 }
 

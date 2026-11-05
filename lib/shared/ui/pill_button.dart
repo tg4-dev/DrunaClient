@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -20,17 +21,19 @@ abstract final class PillStyle {
   static const rimWidth = 1.0;
 
   static const pressedScale = 1.06;
-  static const press = Duration(milliseconds: 120);
+  static const press = Motion.fast;
 
   static const glow = Color(0x52FFFFFF);
 
   static const glowOnLight = Color(0x1A000000);
-  static const glowIn = Duration(milliseconds: 140);
-  static const glowOut = Duration(milliseconds: 450);
-  static const resize = Duration(milliseconds: 200);
-  static const fade = Duration(milliseconds: 180);
+  static const glowIn = Motion.short;
+  static const glowOut = Motion.long;
+  static const resize = Motion.medium;
+  static const fade = Motion.short;
 
   static const title = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 600)],
     color: Colors.white,
     fontSize: 17,
     fontWeight: FontWeight.w600,
@@ -161,7 +164,7 @@ class _PillButtonState extends State<PillButton>
 
   late final _glowCurve = CurvedAnimation(
     parent: _glow,
-    curve: Curves.easeOut,
+    curve: Curves.easeOutCubic,
     reverseCurve: Curves.easeInCubic,
   );
 

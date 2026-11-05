@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:druna_app/app/app_settings.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/app/session_controller.dart';
@@ -45,7 +46,7 @@ class HomePager extends StatefulWidget {
 
   static const homeStop = friendsCalendarStop;
 
-  static const slide = Duration(milliseconds: 280);
+  static const slide = Motion.medium;
 
   @override
   State<HomePager> createState() => _HomePagerState();

@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:druna_app/shared/ui/onest.dart';
 import 'package:flutter/material.dart';
@@ -20,14 +21,14 @@ abstract final class EventPageStyle {
   static const dark = Color(0xFF0A0605);
 
   static const scrim = Color(0xD9000000);
-  static const enter = Duration(milliseconds: 380);
-  static const leave = Duration(milliseconds: 220);
+  static const enter = Motion.long;
+  static const leave = Motion.medium;
   static const fling = Duration(milliseconds: 160);
-  static const settle = Duration(milliseconds: 200);
+  static const settle = Motion.medium;
   static const dismissDistance = 110.0;
   static const dismissVelocity = 700.0;
 
-  static const fade = Duration(milliseconds: 180);
+  static const fade = Motion.short;
   static const motion = Duration(milliseconds: 260);
 
   static const titleSize = 46.0;
@@ -48,10 +49,10 @@ abstract final class EventPageStyle {
     color: Colors.white,
   );
 
-  static final status = onest(18, color: const Color(0xD9FFFFFF));
+  static final status = onest(17, color: const Color(0xD9FFFFFF));
   static final description = onest(17, color: const Color(0xCCFFFFFF));
 
-  static final label = onest(19, weight: FontWeight.w600);
+  static final label = onest(20, weight: FontWeight.w600);
   static final caption = onest(15, color: const Color(0x99FFFFFF));
 
   static const block = BoxDecoration(

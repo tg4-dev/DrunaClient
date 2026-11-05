@@ -4,8 +4,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 abstract final class SettingRowStyle {
-  static const title = TextStyle(color: Colors.white, fontSize: 17);
-  static const subtitle = TextStyle(color: SheetStyle.muted, fontSize: 13);
+  static const title = TextStyle(
+    fontFamily: 'Onest',
+    color: Colors.white,
+    fontSize: 17,
+  );
+  static const subtitle = TextStyle(
+    fontFamily: 'Onest',
+    color: SheetStyle.muted,
+    fontSize: 13,
+  );
   static const success = Color(0xFF34C759);
 }
 

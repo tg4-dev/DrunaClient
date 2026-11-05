@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 enum SocialProvider {
-  apple('Войти с Apple', _appleLogo),
+  apple('Продолжить с Apple', _appleLogo),
 
   google('Войти с Google', _googleLogo);
 

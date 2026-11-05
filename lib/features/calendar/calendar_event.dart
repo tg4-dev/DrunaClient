@@ -90,13 +90,6 @@ BoxDecoration liftedEventDecoration(
       color: Color.lerp(base, Colors.white, 0.28)!,
       width: 1.5,
     ),
-    boxShadow: [
-      BoxShadow(
-        color: base.withValues(alpha: 0.55),
-        blurRadius: 18,
-        spreadRadius: 1,
-      ),
-    ],
   );
 }
 

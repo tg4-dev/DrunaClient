@@ -109,7 +109,11 @@ class _AvatarTuningPageState extends State<AvatarTuningPage> {
             'Буквы в сетке — как есть, в обоих регистрах; большой круг — в '
             'регистре шрифта.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: SheetStyle.muted, fontSize: 13),
+            style: TextStyle(
+              fontFamily: 'Onest',
+              color: SheetStyle.muted,
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 16),
           _Slider(
@@ -137,7 +141,11 @@ class _AvatarTuningPageState extends State<AvatarTuningPage> {
             children: [
               const Text(
                 'Направляющие',
-                style: TextStyle(color: Colors.white, fontSize: 17),
+                style: TextStyle(
+                  fontFamily: 'Onest',
+                  color: Colors.white,
+                  fontSize: 17,
+                ),
               ),
               const Spacer(),
               CupertinoSwitch(
@@ -224,7 +232,11 @@ class _Slider extends StatelessWidget {
         width: 52,
         child: Text(
           label,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: const TextStyle(
+            fontFamily: 'Onest',
+            color: Colors.white,
+            fontSize: 15,
+          ),
         ),
       ),
       Expanded(
@@ -240,7 +252,11 @@ class _Slider extends StatelessWidget {
         child: Text(
           value.toStringAsFixed(3),
           textAlign: TextAlign.right,
-          style: const TextStyle(color: SheetStyle.muted, fontSize: 13),
+          style: const TextStyle(
+            fontFamily: 'Onest',
+            color: SheetStyle.muted,
+            fontSize: 13,
+          ),
         ),
       ),
     ],

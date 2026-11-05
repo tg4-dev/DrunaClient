@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'dart:math' as math;
 
 import 'package:druna_app/features/calendar/sheet_style.dart';
@@ -26,6 +27,8 @@ abstract final class FriendBarStyle {
 
   static const mineGap = 10.0;
   static const mineCaption = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 600)],
     fontSize: 15,
     fontWeight: FontWeight.w600,
     height: 1,
@@ -44,7 +47,7 @@ abstract final class FriendBarStyle {
   static const ring = 3.0;
   static const ringGap = 3.0;
 
-  static const reorder = Duration(milliseconds: 200);
+  static const reorder = Motion.medium;
   static const select = Duration(milliseconds: 160);
 }
 
@@ -544,6 +547,7 @@ class _Hint extends StatelessWidget {
                     child: Text(
                       message,
                       style: const TextStyle(
+                        fontFamily: 'Onest',
                         color: SheetStyle.muted,
                         fontSize: 15,
                       ),

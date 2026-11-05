@@ -68,7 +68,7 @@ class _EventPageState extends State<EventPage> with TickerProviderStateMixin {
   );
   late final CurvedAnimation _rise = CurvedAnimation(
     parent: _motion,
-    curve: Curves.easeOutQuart,
+    curve: Curves.easeOutCubic,
     reverseCurve: Curves.easeInCubic,
   );
   late final AnimationController _settle = AnimationController(

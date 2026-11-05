@@ -169,7 +169,10 @@ class _Cell extends StatelessWidget {
               duration: const Duration(milliseconds: 160),
               transitionBuilder: (child, animation) => ScaleTransition(
                 scale: Tween(begin: 0.6, end: 1.0).animate(
-                  CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
                 ),
                 child: FadeTransition(opacity: animation, child: child),
               ),

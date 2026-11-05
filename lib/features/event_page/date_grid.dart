@@ -53,7 +53,7 @@ class _DateGridState extends State<DateGrid> {
                   Expanded(
                     child: Text(
                       '${monthNames[_month.month - 1]} ${_month.year} г.',
-                      style: onest(18, weight: FontWeight.w600),
+                      style: onest(17, weight: FontWeight.w600),
                     ),
                   ),
                   _Arrow(

@@ -308,7 +308,7 @@ class SharedCellFront extends StatelessWidget {
                       top: middle - size / 2,
                       height: size,
                       child: Transform.scale(
-                        scale: Curves.easeOut.transform(pending),
+                        scale: Curves.easeOutCubic.transform(pending),
                         child: const CustomPaint(
                           key: ValueKey('shared-plus'),
                           painter: _Plus(),
@@ -338,6 +338,8 @@ class SharedMoreCell extends StatelessWidget {
       child: Text(
         '+$count',
         style: const TextStyle(
+          fontFamily: 'Onest',
+          fontVariations: [FontVariation('wght', 600)],
           color: Color(0xFFAEAEB2),
           fontSize: 13,
           fontWeight: FontWeight.w600,

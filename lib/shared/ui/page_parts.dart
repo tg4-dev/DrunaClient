@@ -6,15 +6,23 @@ abstract final class PageStyle {
   static const gutter = 20.0;
 
   static const title = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 700)],
     color: Colors.white,
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: FontWeight.w700,
     letterSpacing: -0.6,
   );
 
-  static const body = TextStyle(color: Colors.white, fontSize: 17);
+  static const body = TextStyle(
+    fontFamily: 'Onest',
+    color: Colors.white,
+    fontSize: 17,
+  );
 
   static const action = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 600)],
     color: SheetStyle.accent,
     fontSize: 17,
     fontWeight: FontWeight.w600,

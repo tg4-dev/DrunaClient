@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -13,10 +14,12 @@ abstract final class SheetStyle {
   static const divider = Color(0x1FFFFFFF);
   static const pickerHeight = 180.0;
 
-  static const fade = Duration(milliseconds: 180);
+  static const fade = Motion.short;
   static const motion = Duration(milliseconds: 260);
 
   static const title = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 600)],
     color: Colors.white,
     fontSize: 17,
     fontWeight: FontWeight.w600,
@@ -24,18 +27,24 @@ abstract final class SheetStyle {
   );
 
   static const row = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 400)],
     color: secondary,
     fontSize: 16,
     fontWeight: FontWeight.w400,
   );
 
   static const value = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 500)],
     color: muted,
     fontSize: 16,
     fontWeight: FontWeight.w500,
   );
 
   static const caption = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 600)],
     color: muted,
     fontSize: 13,
     fontWeight: FontWeight.w600,
@@ -50,8 +59,16 @@ abstract final class SheetStyle {
   static CupertinoThemeData get pickerTheme => const CupertinoThemeData(
     brightness: Brightness.dark,
     textTheme: CupertinoTextThemeData(
-      dateTimePickerTextStyle: TextStyle(color: Colors.white, fontSize: 22),
-      pickerTextStyle: TextStyle(color: Colors.white, fontSize: 22),
+      dateTimePickerTextStyle: TextStyle(
+        fontFamily: 'Onest',
+        color: Colors.white,
+        fontSize: 22,
+      ),
+      pickerTextStyle: TextStyle(
+        fontFamily: 'Onest',
+        color: Colors.white,
+        fontSize: 22,
+      ),
     ),
   );
 }
@@ -77,8 +94,8 @@ class Reveal extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: AnimatedSwitcher(
         duration: SheetStyle.fade,
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
         layoutBuilder: (current, previous) => Stack(
           alignment: Alignment.topCenter,
           children: [...previous, ?current],

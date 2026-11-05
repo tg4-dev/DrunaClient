@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:druna_app/shared/ui/onest.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
@@ -10,7 +11,7 @@ abstract final class PillFieldStyle {
   static const fitMinSize = 12.0;
 
   static const nameWidth = 178.0;
-  static const fade = Duration(milliseconds: 180);
+  static const fade = Motion.short;
 
   static final field = onest(20, weight: FontWeight.w500, height: 1.2);
   static final fieldHint = onest(
@@ -44,6 +45,7 @@ class PillField extends StatelessWidget {
     this.focusNode,
     this.width = PillFieldStyle.fieldWidth,
     this.onSubmitted,
+    this.onChanged,
     this.fieldKey,
     this.style,
     this.hintStyle,
@@ -66,6 +68,7 @@ class PillField extends StatelessWidget {
 
   final double? width;
   final VoidCallback? onSubmitted;
+  final ValueChanged<String>? onChanged;
   final Key? fieldKey;
 
   final TextStyle? style;
@@ -125,6 +128,7 @@ class PillField extends StatelessWidget {
       cursorColor: Colors.white,
       keyboardAppearance: Brightness.dark,
       onSubmitted: (_) => onSubmitted?.call(),
+      onChanged: onChanged,
       onEditingComplete: keepFocus ? () {} : null,
       onTapOutside: keepFocus
           ? (_) {}
@@ -190,7 +194,7 @@ class PillField extends StatelessWidget {
         );
         painter.dispose();
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: Motion.medium,
           curve: Curves.easeOutCubic,
           width: wide,
           child: child,
