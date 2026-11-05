@@ -128,6 +128,8 @@ class AvatarOverflow extends StatelessWidget {
           textScaler: TextScaler.noScaling,
           maxLines: 1,
           style: TextStyle(
+            fontFamily: 'Onest',
+            fontVariations: [FontVariation('wght', 700)],
             color: Colors.white,
             fontSize: size * 0.36,
             fontWeight: FontWeight.w700,

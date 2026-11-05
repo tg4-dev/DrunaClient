@@ -603,7 +603,7 @@ class ProfileAvatar extends StatelessWidget {
         child: AnimatedOpacity(
           opacity: shown ? 1 : 0,
           duration: reduce ? Duration.zero : OnboardingStyle.move,
-          curve: Curves.easeOut,
+          curve: Curves.easeOutCubic,
           child: AnimatedScale(
             scale: shown ? 1 : 0.85,
             duration: reduce ? Duration.zero : OnboardingStyle.move,

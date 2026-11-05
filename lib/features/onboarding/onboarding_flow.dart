@@ -151,8 +151,8 @@ class _OnboardingFlowState extends State<OnboardingFlow>
           final dir = _flow.back ? -1 : 1;
           final v = animation.value;
           final opacity = leaving
-              ? const Interval(0.45, 1, curve: Curves.easeIn).transform(v)
-              : const Interval(0.3, 1, curve: Curves.easeOut).transform(v);
+              ? const Interval(0.45, 1, curve: Curves.easeInCubic).transform(v)
+              : const Interval(0.3, 1, curve: Curves.easeOutCubic).transform(v);
           final rest = 1 - Curves.easeInOutCubic.transform(v);
           final dx = (leaving ? -dir : dir) * OnboardingStyle.slide * rest;
           return Opacity(

@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -140,10 +141,8 @@ class MonthCalendarState extends State<MonthCalendar>
     )..addListener(_onScroll);
     _rows.addListener(_updateAway);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateAway());
-    _rowSnap = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    )..addListener(_onSnapTick);
+    _rowSnap = AnimationController(vsync: this, duration: Motion.medium)
+      ..addListener(_onSnapTick);
   }
 
   @override
@@ -596,6 +595,8 @@ class MonthCalendarState extends State<MonthCalendar>
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
+                  fontFamily: 'Onest',
+                  fontVariations: [FontVariation('wght', 600)],
                   color: eventInk(base),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -851,6 +852,8 @@ class _WeekdayHeader extends StatelessWidget {
                 child: Text(
                   label,
                   style: const TextStyle(
+                    fontFamily: 'Onest',
+                    fontVariations: [FontVariation('wght', 500)],
                     color: Color(0xFF8E8E93),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -1005,6 +1008,8 @@ class _MonthBand extends StatelessWidget {
                   label,
                   softWrap: false,
                   style: const TextStyle(
+                    fontFamily: 'Onest',
+                    fontVariations: [FontVariation('wght', 600)],
                     color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,

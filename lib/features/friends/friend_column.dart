@@ -285,7 +285,7 @@ class _ColumnSlot extends StatelessWidget {
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
 double _settling(double fold) =>
-    Curves.easeOut.transform(((fold - 0.6) / 0.4).clamp(0.0, 1.0));
+    Curves.easeOutCubic.transform(((fold - 0.6) / 0.4).clamp(0.0, 1.0));
 
 class _ColumnMore extends StatelessWidget {
   const _ColumnMore({

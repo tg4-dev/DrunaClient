@@ -30,6 +30,7 @@ abstract final class InviteCardStyle {
 
   static const avatar = 28.0;
   static const avatarStep = 20.0;
+  static const pastAvatarsShown = 3;
   static const avatarsShown = 4;
 }
 
@@ -367,7 +368,14 @@ class _InviteCard extends StatelessWidget {
                   children: [
                     _Date(day: day, ink: ink, soft: soft, small: past),
                     const Spacer(),
-                    _Status(text: status, waiting: waiting, ink: ink),
+                    if (!past)
+                      _Status(text: status, waiting: waiting, ink: ink)
+                    else if (people.isNotEmpty)
+                      _Faces(
+                        people: people,
+                        ring: mixedColor(colors),
+                        max: InviteCardStyle.pastAvatarsShown,
+                      ),
                   ],
                 ),
                 const Spacer(),
@@ -376,38 +384,44 @@ class _InviteCard extends StatelessWidget {
                   maxLines: past ? 1 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
+                    fontFamily: 'Onest',
+                    fontVariations: [FontVariation('wght', 700)],
                     color: ink,
-                    fontSize: past ? 17 : 21,
+                    fontSize: past ? 17 : 22,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
                     height: 1.15,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    if (!past && people.isNotEmpty) ...[
-                      _Faces(people: people, ring: mixedColor(colors)),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: NameText(
-                        parts: [
-                          subtitle,
-                          if (names != null) ...[' · ', names!],
-                        ],
-                        names: const {2},
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: soft,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                if (!past) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (people.isNotEmpty) ...[
+                        _Faces(people: people, ring: mixedColor(colors)),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: NameText(
+                          parts: [
+                            subtitle,
+                            if (names != null) ...[' · ', names!],
+                          ],
+                          names: const {2},
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Onest',
+                            fontVariations: [FontVariation('wght', 500)],
+                            color: soft,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -438,6 +452,8 @@ class _Date extends StatelessWidget {
         Text(
           '${weekdayShort(day)} · ${monthShort(day)}'.toUpperCase(),
           style: TextStyle(
+            fontFamily: 'Onest',
+            fontVariations: [FontVariation('wght', 700)],
             color: soft,
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -447,8 +463,10 @@ class _Date extends StatelessWidget {
         Text(
           '${day.day}',
           style: TextStyle(
+            fontFamily: 'Onest',
+            fontVariations: [FontVariation('wght', 700)],
             color: ink,
-            fontSize: small ? 26 : 36,
+            fontSize: small ? 28 : 36,
             fontWeight: FontWeight.w700,
             height: 1.05,
           ),
@@ -477,6 +495,8 @@ class _Status extends StatelessWidget {
         child: Text(
           waiting ? 'Ответить' : text,
           style: TextStyle(
+            fontFamily: 'Onest',
+            fontVariations: [FontVariation('wght', 700)],
             color: waiting ? Colors.black : ink,
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -488,14 +508,19 @@ class _Status extends StatelessWidget {
 }
 
 class _Faces extends StatelessWidget {
-  const _Faces({required this.people, required this.ring});
+  const _Faces({
+    required this.people,
+    required this.ring,
+    this.max = InviteCardStyle.avatarsShown,
+  });
 
   final List<FriendInfo> people;
   final Color ring;
+  final int max;
 
   @override
   Widget build(BuildContext context) {
-    final shown = people.take(InviteCardStyle.avatarsShown).toList();
+    final shown = people.take(max).toList();
     const size = InviteCardStyle.avatar;
     return SizedBox(
       width: size + (shown.length - 1) * InviteCardStyle.avatarStep,

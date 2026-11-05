@@ -22,12 +22,12 @@ abstract final class WhenStyle {
     color: const Color(0xBFFFFFFF),
   );
   static final fullDate = onest(
-    18,
+    17,
     weight: FontWeight.w600,
     color: const Color(0xBFFFFFFF),
   );
   static final allDayDate = onest(28, weight: FontWeight.w700, height: 1.1);
-  static final pill = onest(18, weight: FontWeight.w600);
+  static final pill = onest(17, weight: FontWeight.w600);
   static const pillFill = Color(0x33FFFFFF);
   static const pillPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 8);
 

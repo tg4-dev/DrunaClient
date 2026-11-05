@@ -1,6 +1,8 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'dart:async';
 
 import 'package:druna_app/core/api/api_exception.dart';
+import 'package:druna_app/shared/ui/pill_field.dart';
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friends_source.dart';
 import 'package:druna_app/models/models.dart';
@@ -17,14 +19,16 @@ abstract final class FriendsStyle {
   static const avatar = 48.0;
   static const searchDebounce = Duration(milliseconds: 350);
 
-  static const leave = Duration(milliseconds: 180);
-  static const fade = Duration(milliseconds: 140);
+  static const leave = Motion.short;
+  static const fade = Motion.short;
 
   static final name = nameStyle(
-    const TextStyle(color: Colors.white, fontSize: 17),
+    const TextStyle(fontFamily: 'Onest', color: Colors.white, fontSize: 17),
   );
 
   static const username = TextStyle(
+    fontFamily: 'Onest',
+    fontVariations: [FontVariation('wght', 400)],
     color: SheetStyle.muted,
     fontSize: 15,
     fontWeight: FontWeight.w400,
@@ -332,7 +336,7 @@ class _FriendsPageState extends State<FriendsPage> {
                   child: _PersonRow(
                     person: friend,
                     trailing: ActionPill(
-                      icon: Icons.close_rounded,
+                      icon: CupertinoIcons.xmark,
                       label: 'Удалить ${_displayName(friend)} из друзей',
                       kind: ActionPillKind.cancel,
                       size: ActionPillSize.compact,
@@ -378,64 +382,42 @@ class _SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: SheetStyle.blockDecoration,
-      child: Row(
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(left: 20, right: 10),
-            child: Icon(
-              CupertinoIcons.search,
-              color: SheetStyle.muted,
-              size: 20,
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onChanged: onChanged,
-              autocorrect: false,
-              enableSuggestions: false,
-              textInputAction: TextInputAction.search,
-              cursorColor: SheetStyle.accent,
-              style: PageStyle.body,
-              decoration: const InputDecoration(
-                hintText: 'Найти по нику',
-                hintStyle: TextStyle(color: SheetStyle.muted, fontSize: 17),
-                filled: false,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 48,
-            child: AnimatedSwitcher(
-              duration: FriendsStyle.fade,
-              child: searching
-                  ? const CupertinoActivityIndicator(key: ValueKey('spin'))
-                  : ValueListenableBuilder(
-                      valueListenable: controller,
-                      builder: (context, value, _) => value.text.isEmpty
-                          ? const SizedBox.shrink()
-                          : IconButton(
-                              key: const ValueKey('clear'),
-                              tooltip: 'Очистить',
-                              onPressed: onClear,
-                              icon: const Icon(
-                                CupertinoIcons.xmark_circle_fill,
-                                color: SheetStyle.muted,
-                                size: 20,
-                              ),
-                            ),
+    return PillField(
+      controller: controller,
+      hint: 'Найти по нику',
+      width: double.infinity,
+      textInputAction: TextInputAction.search,
+      keepFocus: false,
+      onChanged: onChanged,
+      leading: const Icon(
+        CupertinoIcons.search,
+        color: SheetStyle.muted,
+        size: 20,
+      ),
+      trailing: searching
+          ? const CupertinoActivityIndicator(key: ValueKey('spin'))
+          : ValueListenableBuilder(
+              key: const ValueKey('clear-slot'),
+              valueListenable: controller,
+              builder: (context, value, _) => value.text.isEmpty
+                  ? const SizedBox.shrink()
+                  : Semantics(
+                      key: const ValueKey('clear'),
+                      button: true,
+                      label: 'Очистить',
+                      excludeSemantics: true,
+                      child: CupertinoButton(
+                        onPressed: onClear,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(44, 44),
+                        child: const Icon(
+                          CupertinoIcons.xmark_circle_fill,
+                          color: SheetStyle.muted,
+                          size: 20,
+                        ),
+                      ),
                     ),
             ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -481,7 +463,7 @@ class _SearchResults extends StatelessWidget {
                 : isIncoming(person)
                 ? const _Status('Ждёт ответа')
                 : ActionPill(
-                    icon: Icons.add_rounded,
+                    icon: CupertinoIcons.add,
                     label: 'Добавить ${_displayName(person)} в друзья',
                     kind: ActionPillKind.add,
                     size: ActionPillSize.compact,
@@ -563,7 +545,7 @@ class _RequestButtons extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ActionPill(
-          icon: Icons.close_rounded,
+          icon: CupertinoIcons.xmark,
           label: 'Отклонить заявку от $name',
           kind: ActionPillKind.cancel,
           size: ActionPillSize.compact,
@@ -571,7 +553,7 @@ class _RequestButtons extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         ActionPill(
-          icon: Icons.check_rounded,
+          icon: CupertinoIcons.checkmark_alt,
           label: 'Принять заявку от $name',
           size: ActionPillSize.compact,
           filled: true,
@@ -632,7 +614,7 @@ class _FadeIn extends StatelessWidget {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: FriendsStyle.fade,
-      curve: Curves.easeOut,
+      curve: Curves.easeOutCubic,
       builder: (context, value, child) => Opacity(opacity: value, child: child),
       child: child,
     );

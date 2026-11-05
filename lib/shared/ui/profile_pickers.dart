@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:druna_app/shared/ui/avatar_style.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
@@ -20,8 +21,8 @@ abstract final class ProfilePickerStyle {
   static const picked = Color(0x2EFFFFFF);
 
   static const move = Duration(milliseconds: 260);
-  static const recolor = Duration(milliseconds: 300);
-  static const swap = Duration(milliseconds: 220);
+  static const recolor = Motion.medium;
+  static const swap = Motion.medium;
 }
 
 class AvatarPreview extends StatelessWidget {

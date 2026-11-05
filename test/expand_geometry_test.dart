@@ -80,13 +80,13 @@ void main() {
     await tester.tap(day);
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-back')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.tap(find.byKey(const ValueKey('day-back')));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.chevron_left), findsNothing);
+    expect(find.byKey(const ValueKey('day-back')), findsNothing);
     expect(find.byKey(const ValueKey('weekday-header')), findsOneWidget);
     expect(month.scrollOffset, closeTo(offset, 0.5));
     expect(tester.takeException(), isNull);
@@ -104,7 +104,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final icon = find.byIcon(Icons.chevron_left);
+    final icon = find.byKey(const ValueKey('day-back'));
     final gesture = await tester.startGesture(tester.getCenter(icon));
     await gesture.moveBy(const Offset(0, 24));
     await tester.pump();
@@ -125,7 +125,7 @@ void main() {
     await close.up();
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.chevron_left), findsNothing);
+    expect(find.byKey(const ValueKey('day-back')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -141,7 +141,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final icon = find.byIcon(Icons.chevron_left);
+    final icon = find.byKey(const ValueKey('day-back'));
     final close = await tester.startGesture(tester.getCenter(icon));
     await close.moveBy(const Offset(0, 30));
     await tester.pump();
@@ -160,7 +160,7 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 170));
-    expect(find.byIcon(Icons.chevron_left), findsNothing);
+    expect(find.byKey(const ValueKey('day-back')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

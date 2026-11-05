@@ -11,6 +11,8 @@ const timelineTitlePadding = 12.0;
 const timelineEventRadius = Radius.circular(16);
 
 const timelineTitleStyle = TextStyle(
+  fontFamily: 'Onest',
+  fontVariations: [FontVariation('wght', 600)],
   color: Colors.white,
   fontSize: 17,
   fontWeight: FontWeight.w600,
@@ -269,6 +271,8 @@ double timelineX(DateTime time, double pixelsPerHour) {
 final dayTimelineOrigin = DateTime(1970, 1, 1);
 
 const timelineDatesStyle = TextStyle(
+  fontFamily: 'Onest',
+  fontVariations: [FontVariation('wght', 600)],
   color: Color(0x99000000),
   fontSize: 13,
   fontWeight: FontWeight.w600,

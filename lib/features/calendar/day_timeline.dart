@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/chip_motion.dart';
 import 'package:druna_app/features/calendar/day_events.dart';
@@ -205,10 +206,8 @@ class DayTimelineState extends State<DayTimeline>
       ..addListener(_publish);
     widget.metrics?.seed(initial, _pixels);
     _reportedDay = day;
-    _snap = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    )..addListener(_onSnapTick);
+    _snap = AnimationController(vsync: this, duration: Motion.medium)
+      ..addListener(_onSnapTick);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _publish();
     });
@@ -871,6 +870,8 @@ class _HourGridPainter extends CustomPainter {
         text: TextSpan(
           text: hour.toString().padLeft(2, '0'),
           style: TextStyle(
+            fontFamily: 'Onest',
+            fontVariations: [FontVariation('wght', 500)],
             color: const Color(0xFF8E8E93).withValues(alpha: step / 20),
             fontSize: 12,
             fontWeight: FontWeight.w500,
@@ -898,13 +899,14 @@ class _TimeBubble extends StatelessWidget {
       decoration: const BoxDecoration(
         color: Color(0xF0222225),
         borderRadius: BorderRadius.all(Radius.circular(10)),
-        boxShadow: [BoxShadow(color: Color(0x80000000), blurRadius: 10)],
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Text(
           label,
           style: const TextStyle(
+            fontFamily: 'Onest',
+            fontVariations: [FontVariation('wght', 600)],
             color: Colors.white,
             fontSize: 15,
             fontWeight: FontWeight.w600,

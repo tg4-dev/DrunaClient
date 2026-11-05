@@ -377,11 +377,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Найдем время'), findsOneWidget);
-      expect(find.text('Войти с Apple'), findsOneWidget);
+      expect(find.text('Продолжить с Apple'), findsOneWidget);
       expect(find.text('Войти с Google'), findsOneWidget);
       expect(find.text('Вход по нику'), findsOneWidget);
 
-      await tester.tap(find.text('Войти с Apple'));
+      await tester.tap(find.text('Продолжить с Apple'));
       await tester.pump();
       expect(find.text('Вход через Apple скоро появится'), findsOneWidget);
 
@@ -400,6 +400,22 @@ void main() {
         return link == null;
       });
       link!.onTap!();
+      await tester.pumpAndSettle();
+      expect(find.text('Политика конфиденциальности'), findsOneWidget);
+
+      await tester.drag(
+        find.byKey(const ValueKey('policy-handle')),
+        const Offset(0, 200),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Политика конфиденциальности'), findsNothing);
+
+      link!.onTap!();
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const ValueKey('policy-handle')),
+        const Offset(0, 40),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Политика конфиденциальности'), findsOneWidget);
     });

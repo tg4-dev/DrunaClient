@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'dart:math' as math;
 
 import 'package:druna_app/features/calendar/band_paint.dart';
@@ -25,6 +26,8 @@ const monthChipMaxRadius = 14.0;
 const monthChipDetailRadius = 8.0;
 
 const monthChipTitleStyle = TextStyle(
+  fontFamily: 'Onest',
+  fontVariations: [FontVariation('wght', 600)],
   fontSize: 11,
   fontWeight: FontWeight.w600,
   height: 1.1,
@@ -822,6 +825,8 @@ class _OverflowLabel extends StatelessWidget {
     child: Text(
       '+$count',
       style: const TextStyle(
+        fontFamily: 'Onest',
+        fontVariations: [FontVariation('wght', 600)],
         color: Color(0xFFAEAEB2),
         fontSize: 10,
         fontWeight: FontWeight.w600,
@@ -833,8 +838,8 @@ class _OverflowLabel extends StatelessWidget {
 
 abstract final class FriendChipMotion {
   static const appear = Duration(milliseconds: 160);
-  static const leave = Duration(milliseconds: 140);
-  static const move = Duration(milliseconds: 180);
+  static const leave = Motion.short;
+  static const move = Motion.short;
 }
 
 class _FriendChips extends StatefulWidget {
@@ -954,7 +959,7 @@ class _FriendChipsState extends State<_FriendChips> {
             : leaving
             ? FriendChipMotion.leave
             : FriendChipMotion.appear,
-        curve: Curves.easeOut,
+        curve: Curves.easeOutCubic,
         builder: (context, value, child) => Opacity(
           opacity: value,
           child: Transform.scale(
@@ -1060,9 +1065,11 @@ class _DayNumber extends StatelessWidget {
         '${day.day}',
         key: ValueKey('day-${day.year}-${day.month}-${day.day}'),
         style: TextStyle(
+          fontFamily: 'Onest',
           color: color,
           fontSize: 17,
           fontWeight: today ? FontWeight.w700 : FontWeight.w400,
+          fontVariations: [FontVariation('wght', today ? 700 : 400)],
         ),
       ),
     );
@@ -1167,8 +1174,9 @@ class _MonthEventBlock extends StatelessWidget {
                   overflow: TextOverflow.clip,
                   style: title.copyWith(
                     color: ink.withValues(alpha: ink.a * 0.8),
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w500,
+                    fontVariations: const [FontVariation('wght', 500)],
                   ),
                 ),
               ],
@@ -1295,6 +1303,8 @@ class _TallChipText extends StatelessWidget {
                 maxLines: density.titleLines,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
+                  fontFamily: 'Onest',
+                  fontVariations: [FontVariation('wght', 600)],
                   color: ink,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -1306,8 +1316,10 @@ class _TallChipText extends StatelessWidget {
                   clockLabel(event.start),
                   maxLines: 1,
                   style: TextStyle(
+                    fontFamily: 'Onest',
+                    fontVariations: [FontVariation('wght', 500)],
                     color: ink.withValues(alpha: 0.8),
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w500,
                     height: 1.15,
                   ),

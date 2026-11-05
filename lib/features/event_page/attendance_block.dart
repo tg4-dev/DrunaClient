@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'dart:math' as math;
 
 import 'package:druna_app/features/calendar/calendar_event.dart';
@@ -43,10 +44,7 @@ class AttendanceBlock extends StatefulWidget {
 
 class _AttendanceBlockState extends State<AttendanceBlock>
     with SingleTickerProviderStateMixin {
-  late final _shake = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 420),
-  );
+  late final _shake = AnimationController(vsync: this, duration: Motion.long);
   DateTime? _lastNo;
 
   @override
@@ -300,8 +298,8 @@ class _Land extends StatelessWidget {
     if (!play) return child;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 520),
-      curve: Curves.easeOutBack,
+      duration: Motion.long,
+      curve: Curves.easeOutCubic,
       child: child,
       builder: (context, t, child) => Opacity(
         opacity: t.clamp(0.0, 1.0),

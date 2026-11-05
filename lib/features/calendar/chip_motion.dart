@@ -13,7 +13,7 @@ const chipTitleFade = 0.25;
 double chipShownAt(double away, {bool reduce = false}) {
   final a = away.clamp(0.0, 1.0);
   if (reduce) return a < 0.5 ? 1 : 0;
-  return Curves.easeInOutCubic.transform(1 - a);
+  return 1 - a;
 }
 
 double chipTitleAlpha(double shown) =>

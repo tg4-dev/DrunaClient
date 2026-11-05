@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/motion.dart';
 import 'package:druna_app/features/event_page/event_style.dart';
 import 'package:druna_app/shared/ui/pill_field.dart';
 import 'package:flutter/material.dart';
@@ -42,16 +43,16 @@ abstract final class OnboardingStyle {
     letterSpacing: -0.4,
   );
   static final subtitle = onest(
-    19,
+    20,
     weight: FontWeight.w600,
     color: Colors.white.withValues(alpha: 0.6),
     height: 1.3,
   );
   static final field = PillFieldStyle.field;
 
-  static final emailField = onest(18, weight: FontWeight.w500, height: 1.2);
+  static final emailField = onest(17, weight: FontWeight.w500, height: 1.2);
   static final emailHint = onest(
-    18,
+    17,
     weight: FontWeight.w500,
     color: Colors.white.withValues(alpha: 0.45),
     height: 1.2,
@@ -59,7 +60,7 @@ abstract final class OnboardingStyle {
 
   static final nameField = PillFieldStyle.name;
   static final nameHint = PillFieldStyle.nameHint;
-  static final digit = onest(26, weight: FontWeight.w600, height: 1);
+  static final digit = onest(28, weight: FontWeight.w600, height: 1);
   static final error = onest(16, weight: FontWeight.w500, color: danger);
   static final hint = onest(
     15,
@@ -99,6 +100,6 @@ abstract final class OnboardingStyle {
   );
 
   static const move = Duration(milliseconds: 360);
-  static const fade = Duration(milliseconds: 180);
+  static const fade = Motion.short;
   static const slide = 24.0;
 }

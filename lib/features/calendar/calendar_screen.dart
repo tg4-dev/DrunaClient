@@ -811,19 +811,21 @@ class _ExpandedDay extends StatelessWidget {
                           Positioned(
                             left: 0,
                             bottom: 0,
-                            child: IconButton(
-                              onPressed: onClose,
-                              tooltip: 'Назад к месяцу',
-                              padding: EdgeInsets.zero,
-                              alignment: Alignment.bottomLeft,
-                              constraints: const BoxConstraints(
-                                minWidth: 44,
-                                minHeight: 36,
-                              ),
-                              icon: const Icon(
-                                Icons.chevron_left,
-                                color: Colors.white,
-                                size: 28,
+                            child: Semantics(
+                              key: const ValueKey('day-back'),
+                              button: true,
+                              label: 'Назад к месяцу',
+                              excludeSemantics: true,
+                              child: CupertinoButton(
+                                onPressed: onClose,
+                                padding: EdgeInsets.zero,
+                                alignment: Alignment.bottomLeft,
+                                minimumSize: const Size(44, 36),
+                                child: const Icon(
+                                  CupertinoIcons.chevron_left,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
                               ),
                             ),
                           ),
@@ -876,9 +878,11 @@ TextStyle _dayTitleStyle(
   FontWeight weight = FontWeight.w700,
   double letterSpacing = -0.6,
 ]) => TextStyle(
+  fontFamily: 'Onest',
   color: Colors.white.withValues(alpha: opacity.clamp(0, 1)),
   fontSize: size,
   fontWeight: weight,
+  fontVariations: [FontVariation('wght', weight.value.toDouble())],
   letterSpacing: letterSpacing,
   height: 1,
 );

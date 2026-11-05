@@ -456,7 +456,7 @@ class _WeekdayChip extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: SheetStyle.fade,
-          curve: Curves.easeOut,
+          curve: Curves.easeOutCubic,
           width: 36,
           height: 36,
           alignment: Alignment.center,
@@ -467,6 +467,8 @@ class _WeekdayChip extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
+              fontFamily: 'Onest',
+              fontVariations: [FontVariation('wght', 600)],
               color: selected ? pickedInk : Colors.white,
               fontSize: 13,
               fontWeight: FontWeight.w600,
