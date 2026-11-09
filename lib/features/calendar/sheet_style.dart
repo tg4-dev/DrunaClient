@@ -78,22 +78,26 @@ class Reveal extends StatelessWidget {
     required this.open,
     required this.child,
     this.contentKey,
+    this.duration = SheetStyle.motion,
+    this.fade = SheetStyle.fade,
     super.key,
   });
 
   final bool open;
   final Widget child;
+  final Duration duration;
+  final Duration fade;
 
   final Object? contentKey;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedSize(
-      duration: SheetStyle.motion,
+      duration: duration,
       curve: Curves.easeOutCubic,
       alignment: Alignment.topCenter,
       child: AnimatedSwitcher(
-        duration: SheetStyle.fade,
+        duration: fade,
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         layoutBuilder: (current, previous) => Stack(

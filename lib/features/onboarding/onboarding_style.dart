@@ -1,3 +1,4 @@
+import 'package:druna_app/shared/ui/brand.dart';
 import 'package:druna_app/shared/ui/motion.dart';
 import 'package:druna_app/features/event_page/event_style.dart';
 import 'package:druna_app/shared/ui/pill_field.dart';
@@ -9,7 +10,7 @@ abstract final class OnboardingStyle {
 
   static const emailWidth = 300.0;
 
-  static const arrowWidth = 72.0;
+  static const arrowWidth = ArrowPillStyle.width;
   static const arrowGap = 10.0;
   static const buttonGap = 14.0;
 

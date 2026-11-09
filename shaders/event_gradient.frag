@@ -64,27 +64,16 @@ void main() {
     float span = max(total - 1.0, 0.5) / total;
     float s = fract(r * span - uPhase * 0.25) * total;
     float start = 0.0;
-    int at = -1;
-    float f = 0.0;
+    float sum = 0.0;
     for (int i = 0; i < 6; i++) {
-      float w = stop(i).w;
-      if (w <= 0.001) continue;
-      if (at < 0 && s < start + w) {
-        at = i;
-        f = (s - start) / w;
-      }
-      start += w;
+      vec4 c = stop(i);
+      float d = mod(s - start + 0.5 * total, total) - 0.5 * total;
+      float k = c.w * exp(-3.0 * d * d);
+      lab += k * c.xyz;
+      sum += k;
+      start += c.w;
     }
-    if (at < 0) at = 0;
-    int next = at;
-    for (int k = 1; k <= 6; k++) {
-      int j = int(mod(float(at + k), 6.0));
-      if (stop(j).w > 0.001) {
-        next = j;
-        break;
-      }
-    }
-    lab = mix(stop(at).xyz, stop(next).xyz, smoothstep(0.0, 1.0, f));
+    lab = sum > 1e-4 ? lab / sum : vec3(0.0);
   }
   float y = frag.y / uSize.y;
   lab = mix(lab, uDark, 0.8 * smoothstep(0.38, 1.0, y));

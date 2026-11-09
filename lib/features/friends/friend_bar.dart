@@ -3,9 +3,12 @@ import 'dart:math' as math;
 
 import 'package:druna_app/features/calendar/sheet_style.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
+import 'package:druna_app/features/friends/group_chip.dart';
+import 'package:druna_app/features/groups/group.dart';
 import 'package:druna_app/models/models.dart';
 import 'package:druna_app/shared/ui/brand.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
+import 'package:druna_app/shared/ui/person_name.dart';
 import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -35,6 +38,9 @@ abstract final class FriendBarStyle {
   );
   static const arrow = Color(0xB3FFFFFF);
   static const arrowSize = 24.0;
+  static const arrowDrift = 6.0;
+  static const arrowCycle = Duration(milliseconds: 2400);
+  static const arrowHidden = 0.6;
 
   static const flyOver = 48.0;
 
@@ -48,6 +54,7 @@ abstract final class FriendBarStyle {
   static const ringGap = 3.0;
 
   static const reorder = Motion.medium;
+  static const groupMorph = reorder;
   static const select = Duration(milliseconds: 160);
 }
 
@@ -62,6 +69,7 @@ class FriendBar extends StatefulWidget {
     required this.onShowFriends,
     required this.onAddFriends,
     this.schedulesAvailable = true,
+    this.groups = const [],
     this.me,
     this.onOpenMine,
     super.key,
@@ -77,9 +85,13 @@ class FriendBar extends StatefulWidget {
 
   final bool schedulesAvailable;
 
+  final List<Group> groups;
+
   final Widget? me;
 
   final VoidCallback? onOpenMine;
+
+  static var arrowDrifts = true;
 
   @override
   State<FriendBar> createState() => _FriendBarState();
@@ -89,6 +101,8 @@ class _FriendBarState extends State<FriendBar> {
   final _scroll = ScrollController();
 
   final _corner = GlobalKey();
+
+  final _opening = <String>{};
 
   @override
   void dispose() {
@@ -130,7 +144,7 @@ class _FriendBarState extends State<FriendBar> {
                         onTap: widget.onAddFriends,
                       )
                     else
-                      _row(friends, constraints.maxWidth, expanded),
+                      _row(context, friends, constraints.maxWidth, expanded),
                     if (widget.me case final me?)
                       _MineCorner(
                         boxKey: _corner,
@@ -140,14 +154,14 @@ class _FriendBarState extends State<FriendBar> {
                         width: constraints.maxWidth,
                         onTap: widget.onOpenMine,
                       ),
-                    if (widget.selection.selected.isEmpty)
-                      _SwipeHint(
-                        corner: widget.me == null ? null : _corner,
-                        mode: widget.mode,
-                        expanded: expanded,
-                        width: constraints.maxWidth,
-                        onTap: widget.onShowFriends,
-                      ),
+                    _SwipeHint(
+                      shown: widget.selection.selected.isEmpty,
+                      corner: widget.me == null ? null : _corner,
+                      mode: widget.mode,
+                      expanded: expanded,
+                      width: constraints.maxWidth,
+                      onTap: widget.onShowFriends,
+                    ),
                   ],
                 ),
               ),
@@ -169,17 +183,149 @@ class _FriendBarState extends State<FriendBar> {
     return null;
   }
 
-  Widget _row(List<FriendInfo> friends, double width, bool expanded) {
-    final ordered = widget.selection.ordered(friends);
-    final selectedCount = ordered
-        .where((friend) => widget.selection.isSelected(friend.id))
-        .length;
-    final contentWidth =
-        FriendBarStyle.gutter * 2 +
-        ordered.length * FriendBarStyle.step -
-        (FriendBarStyle.step - FriendBarStyle.avatar);
-    final geometry = _StackGeometry(width: width, selected: selectedCount);
+  void _openGroup(Group group, List<FriendInfo> members) {
+    HapticFeedback.selectionClick();
+    _opening.add(group.id);
+    Future<void>.delayed(
+      FriendBarStyle.groupMorph,
+      () => _opening.remove(group.id),
+    );
+    widget.selection.openGroup(group.id, [
+      for (final member in members) member.id,
+    ]);
+  }
+
+  void _closeGroup(Group group, List<FriendInfo> members) {
+    HapticFeedback.selectionClick();
+    final keep = <int>{
+      for (final other in widget.groups)
+        if (other.id != group.id && widget.selection.isOpen(other.id))
+          ...other.memberIds,
+    };
+    widget.selection.closeGroup(group.id, [
+      for (final member in members) member.id,
+    ], keep: keep);
+  }
+
+  Widget _row(
+    BuildContext context,
+    List<FriendInfo> friends,
+    double width,
+    bool expanded,
+  ) {
+    final selection = widget.selection;
+    final byId = {for (final friend in friends) friend.id: friend};
+    final picked = [
+      for (final id in selection.selected)
+        if (byId.containsKey(id)) id,
+    ];
+    final geometry = _StackGeometry(width: width, selected: picked.length);
     final motion = Listenable.merge([widget.mode, _scroll]);
+    const gap = FriendBarStyle.step - FriendBarStyle.avatar;
+
+    final groupSlots = <Widget>[];
+    final people = <_Seat>[];
+    final groupsById = {for (final group in widget.groups) group.id: group};
+    List<FriendInfo> membersOf(Group group) => [
+      for (final member in group.members)
+        if (byId[member.id] case final friend?) friend,
+    ];
+    final inside = <int>{};
+    final order = selection.barOrder(friends, [
+      for (final group in widget.groups)
+        if (membersOf(group).isNotEmpty) (id: group.id, name: group.name),
+    ]);
+    for (final item in order) {
+      if (item case BarGroup(:final id) when selection.isOpen(id)) {
+        inside.addAll(membersOf(groupsById[id]!).map((member) => member.id));
+      }
+    }
+    final seated = <int>{};
+    var left = FriendBarStyle.gutter;
+    for (final item in order) {
+      switch (item) {
+        case BarFriend(:final friend):
+          if (inside.contains(friend.id)) continue;
+          people.add(_Seat(friend, left, 1, ValueKey(friend.id), false));
+          left += FriendBarStyle.step;
+        case BarGroup(:final id):
+          final group = groupsById[id]!;
+          final members = membersOf(group);
+          final open = selection.isOpen(group.id);
+          final closedWidth = closedGroupChipWidth(
+            nameWidth: groupNameWidth(context, group.name, group.font),
+            people: members.length,
+          );
+          final chip = open ? openGroupChipWidth(members.length) : closedWidth;
+          groupSlots.add(
+            _GroupSlot(
+              key: ValueKey('group-${group.id}'),
+              group: group,
+              members: members,
+              left: left,
+              closedWidth: closedWidth,
+              openWidth: openGroupChipWidth(members.length),
+              open: open,
+              geometry: geometry,
+              motion: motion,
+              mode: widget.mode,
+              scroll: _scroll,
+              onOpen: () => _openGroup(group, members),
+              onClose: () => _closeGroup(group, members),
+            ),
+          );
+          if (open) {
+            for (var j = 0; j < members.length; j++) {
+              if (!seated.add(members[j].id)) continue;
+              people.add(
+                _Seat(
+                  members[j],
+                  openGroupMemberLeft(left, j) -
+                      (FriendBarStyle.avatar - GroupChipStyle.openAvatar) / 2,
+                  GroupChipStyle.openAvatar / FriendBarStyle.avatar,
+                  ValueKey(('in-group', group.id, members[j].id)),
+                  _opening.contains(group.id),
+                ),
+              );
+            }
+          }
+          left += chip + gap;
+      }
+    }
+    final contentWidth = left - gap + FriendBarStyle.gutter;
+    final unpicked = [
+      for (final person in people)
+        if (!picked.contains(person.friend.id)) person,
+    ];
+    final pickedSlots =
+        [
+          for (final person in people)
+            if (picked.contains(person.friend.id)) person,
+        ]..sort(
+          (a, b) => picked
+              .indexOf(a.friend.id)
+              .compareTo(picked.indexOf(b.friend.id)),
+        );
+
+    Widget slot(_Seat person) {
+      final friend = person.friend;
+      final stack = picked.indexOf(friend.id);
+      return _FriendSlot(
+        key: person.key,
+        friend: friend,
+        left: person.left,
+        rowScale: person.scale,
+        enters: person.enters,
+        stackIndex: stack < 0 ? null : stack,
+        geometry: geometry,
+        motion: motion,
+        mode: widget.mode,
+        scroll: _scroll,
+        selected: stack >= 0,
+        onTap: () => _toggle(friend),
+      );
+    }
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -198,22 +344,9 @@ class _FriendBarState extends State<FriendBar> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  for (final i in [
-                    for (var k = selectedCount; k < ordered.length; k++) k,
-                    for (var k = 0; k < selectedCount; k++) k,
-                  ])
-                    _FriendSlot(
-                      key: ValueKey(ordered[i].id),
-                      friend: ordered[i],
-                      index: i,
-                      stackIndex: i < selectedCount ? i : null,
-                      geometry: geometry,
-                      motion: motion,
-                      mode: widget.mode,
-                      scroll: _scroll,
-                      selected: widget.selection.isSelected(ordered[i].id),
-                      onTap: () => _toggle(ordered[i]),
-                    ),
+                  ...groupSlots,
+                  for (final person in unpicked) slot(person),
+                  for (final person in pickedSlots) slot(person),
                   if (geometry.extra > 0)
                     _MoreSlot(
                       count: geometry.extra,
@@ -227,7 +360,7 @@ class _FriendBarState extends State<FriendBar> {
             ),
           ),
         ),
-        if (!expanded && selectedCount > 0)
+        if (!expanded && picked.isNotEmpty)
           Positioned(
             left: geometry.slotLeft(0) - 8,
             right: 0,
@@ -319,6 +452,16 @@ class _StackGeometry {
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
+class _Seat {
+  const _Seat(this.friend, this.left, this.scale, this.key, this.enters);
+
+  final FriendInfo friend;
+  final double left;
+  final double scale;
+  final Key key;
+  final bool enters;
+}
+
 double _offsetOf(ScrollController scroll) =>
     scroll.hasClients ? scroll.positions.last.pixels : 0.0;
 
@@ -335,19 +478,23 @@ double friendBarFoldAt(double mode, double k) {
 class _FriendSlot extends StatelessWidget {
   const _FriendSlot({
     required this.friend,
-    required this.index,
+    required this.left,
     required this.stackIndex,
+    this.rowScale = 1,
     required this.geometry,
     required this.motion,
     required this.mode,
     required this.scroll,
     required this.selected,
     required this.onTap,
+    this.enters = false,
     super.key,
   });
 
   final FriendInfo friend;
-  final int index;
+  final double left;
+  final double rowScale;
+  final bool enters;
 
   final int? stackIndex;
   final _StackGeometry geometry;
@@ -362,7 +509,7 @@ class _FriendSlot extends StatelessWidget {
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     const avatar = FriendBarStyle.avatar;
     return TweenAnimationBuilder<double>(
-      tween: Tween(end: index.toDouble()),
+      tween: Tween(end: left),
       duration: reduce ? Duration.zero : FriendBarStyle.reorder,
       curve: Curves.easeOutCubic,
       child: Semantics(
@@ -373,15 +520,20 @@ class _FriendSlot extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: RingedAvatar(friend: friend, selected: selected),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: enters && !reduce ? 0 : 1, end: 1),
+            duration: FriendBarStyle.groupMorph,
+            child: RingedAvatar(friend: friend, selected: selected),
+            builder: (context, shown, avatar) =>
+                Opacity(opacity: shown >= 1 ? 1 : 0, child: avatar),
+          ),
         ),
       ),
-      builder: (context, slot, child) => AnimatedBuilder(
+      builder: (context, rowLeft, child) => AnimatedBuilder(
         animation: motion,
         child: child,
         builder: (context, child) {
           final offset = _offsetOf(scroll);
-          final rowLeft = FriendBarStyle.gutter + slot * FriendBarStyle.step;
           final fold = friendBarFoldAt(
             mode.value,
             (rowLeft - FriendBarStyle.gutter - offset) / FriendBarStyle.step,
@@ -420,7 +572,7 @@ class _FriendSlot extends StatelessWidget {
             child: ExcludeSemantics(
               excluding: hidden && fold > 0.5,
               child: Transform.scale(
-                scale: _lerp(1, foldedScale, fold),
+                scale: _lerp(rowScale, foldedScale, fold),
                 child: child,
               ),
             ),
@@ -534,24 +686,12 @@ class _Hint extends StatelessWidget {
           opacity: message != null && visible ? 1 : 0,
           child: message == null
               ? const SizedBox.shrink()
-              : DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: SheetStyle.block.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
-                    ),
-                    child: Text(
-                      message,
-                      style: const TextStyle(
-                        fontFamily: 'Onest',
-                        color: SheetStyle.muted,
-                        fontSize: 15,
-                      ),
-                    ),
+              : Text(
+                  message,
+                  style: const TextStyle(
+                    fontFamily: 'Onest',
+                    color: SheetStyle.muted,
+                    fontSize: 15,
                   ),
                 ),
         ),
@@ -693,8 +833,9 @@ class _MineCorner extends StatelessWidget {
   );
 }
 
-class _SwipeHint extends StatelessWidget {
+class _SwipeHint extends StatefulWidget {
   const _SwipeHint({
+    required this.shown,
     required this.corner,
     required this.mode,
     required this.expanded,
@@ -702,56 +843,232 @@ class _SwipeHint extends StatelessWidget {
     required this.onTap,
   });
 
+  final bool shown;
   final GlobalKey? corner;
   final ValueListenable<double> mode;
   final bool expanded;
   final double width;
   final VoidCallback onTap;
 
+  @override
+  State<_SwipeHint> createState() => _SwipeHintState();
+}
+
+class _SwipeHintState extends State<_SwipeHint>
+    with SingleTickerProviderStateMixin {
+  late final _drift = AnimationController(
+    vsync: this,
+    duration: FriendBarStyle.arrowCycle,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncDrift();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SwipeHint oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncDrift();
+  }
+
+  @override
+  void dispose() {
+    _drift.dispose();
+    super.dispose();
+  }
+
+  void _syncDrift() {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final on =
+        widget.shown && !widget.expanded && !reduce && FriendBar.arrowDrifts;
+    if (on && !_drift.isAnimating) {
+      _drift.repeat();
+    } else if (!on && _drift.isAnimating) {
+      _drift
+        ..stop()
+        ..value = 0;
+    }
+  }
+
   double _shift(double t) {
-    final fly = _flyIn(friendBarFold(t), width).dx;
-    final box = corner?.currentContext?.findRenderObject();
+    final fly = _flyIn(friendBarFold(t), widget.width).dx;
+    final box = widget.corner?.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return fly;
     final beside =
         FriendBarStyle.gutter + box.size.width + FriendBarStyle.followGap;
-    final place = width - FriendBarStyle.gutter - FriendBarStyle.arrowSize;
+    final place =
+        widget.width - FriendBarStyle.gutter - FriendBarStyle.arrowSize;
     const from = FriendBarStyle.followFrom;
     final away = ((1 - t.clamp(0.0, 1.0) - from) / (1 - from)).clamp(0.0, 1.0);
     return (fly + beside - place) * (1 - Curves.easeInOutCubic.transform(away));
   }
 
   @override
-  Widget build(BuildContext context) => Positioned(
-    right: FriendBarStyle.gutter - 8,
-    top: 0,
-    bottom: 0,
-    child: IgnorePointer(
-      ignoring: expanded,
-      child: Semantics(
-        button: true,
-        label: 'Показать календарь друзей',
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Center(
-              child: ValueListenableBuilder<double>(
-                valueListenable: mode,
-                child: const ChevronIcon(
-                  key: ValueKey('swipe-hint'),
-                  color: FriendBarStyle.arrow,
-                  size: FriendBarStyle.arrowSize,
-                ),
-                builder: (context, t, arrow) => Transform.translate(
-                  offset: Offset(_shift(t), 0),
-                  child: arrow,
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return Positioned(
+      right: FriendBarStyle.gutter - 8,
+      top: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        ignoring: widget.expanded || !widget.shown,
+        child: Semantics(
+          button: true,
+          label: 'Показать календарь друзей',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Center(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(end: widget.shown ? 1 : 0),
+                  duration: reduce ? Duration.zero : Motion.short,
+                  curve: widget.shown ? Motion.enter : Motion.exit,
+                  child: const ArrowIcon(
+                    key: ValueKey('swipe-hint'),
+                    color: FriendBarStyle.arrow,
+                    back: true,
+                    size: FriendBarStyle.arrowSize,
+                  ),
+                  builder: (context, shown, arrow) => AnimatedBuilder(
+                    animation: Listenable.merge([widget.mode, _drift]),
+                    child: arrow,
+                    builder: (context, arrow) {
+                      final visible = shown * friendBarFold(widget.mode.value);
+                      const hidden = FriendBarStyle.arrowHidden;
+                      return Transform.translate(
+                        offset: Offset(
+                          _shift(widget.mode.value) -
+                              FriendBarStyle.arrowDrift *
+                                  arrowDrift(_drift.value),
+                          0,
+                        ),
+                        child: Transform.scale(
+                          scale: hidden + (1 - hidden) * visible,
+                          child: Opacity(opacity: visible, child: arrow),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+double arrowDrift(double t) {
+  if (t < 0.5) return Curves.easeInOut.transform(t / 0.5);
+  if (t < 0.8) return 1 - Curves.easeInOut.transform((t - 0.5) / 0.3);
+  return 0;
+}
+
+class _GroupSlot extends StatelessWidget {
+  const _GroupSlot({
+    required this.group,
+    required this.members,
+    required this.left,
+    required this.closedWidth,
+    required this.openWidth,
+    required this.open,
+    required this.geometry,
+    required this.motion,
+    required this.mode,
+    required this.scroll,
+    required this.onOpen,
+    required this.onClose,
+    super.key,
+  });
+
+  final Group group;
+  final List<FriendInfo> members;
+  final double left;
+  final double closedWidth;
+  final double openWidth;
+  final bool open;
+  final _StackGeometry geometry;
+  final Listenable motion;
+  final ValueListenable<double> mode;
+  final ScrollController scroll;
+  final VoidCallback onOpen;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final duration = reduce ? Duration.zero : FriendBarStyle.groupMorph;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: left),
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      builder: (context, boxLeft, _) => TweenAnimationBuilder<double>(
+        tween: Tween(end: open ? 1 : 0),
+        duration: duration,
+        curve: Curves.easeOutCubic,
+        builder: (context, t, _) => AnimatedBuilder(
+          animation: motion,
+          builder: (context, _) {
+            final width = _lerp(closedWidth, openWidth, t);
+            final height = _lerp(
+              GroupChipStyle.height,
+              GroupChipStyle.openHeight,
+              t,
+            );
+            final offset = _offsetOf(scroll);
+            final fold = friendBarFoldAt(
+              mode.value,
+              (boxLeft - FriendBarStyle.gutter - offset) / FriendBarStyle.step,
+            );
+            final foldedLeft =
+                offset +
+                geometry.width +
+                FriendBarStyle.gutter +
+                math.max(0.0, boxLeft - FriendBarStyle.gutter - offset);
+            final face = GroupChipFace(
+              key: ValueKey('group-face-${group.id}'),
+              name: group.name,
+              font: group.font,
+              people: members,
+              morph: t,
+              closedWidth: closedWidth,
+              captionFade: 1 - fold,
+              onClose: onClose,
+            );
+            return Positioned(
+              left: _lerp(boxLeft, foldedLeft, fold),
+              top: (FriendBarStyle.height - height) / 2,
+              width: width,
+              height: height,
+              child: ExcludeSemantics(
+                excluding: fold > 0.5,
+                child: open
+                    ? Semantics(
+                        label: shownName(group.name),
+                        key: ValueKey('group-caption-${group.id}'),
+                        child: face,
+                      )
+                    : Semantics(
+                        button: true,
+                        label: 'Группа ${shownName(group.name)}',
+                        excludeSemantics: true,
+                        child: GestureDetector(
+                          key: ValueKey('group-chip-${group.id}'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: onOpen,
+                          child: face,
+                        ),
+                      ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 }

@@ -179,20 +179,11 @@ class PillField extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, child) {
-        final text = controller.text.isEmpty ? hint : controller.text;
-        final painter = TextPainter(
-          text: TextSpan(
-            text: text.toUpperCase(),
-            style: style ?? PillFieldStyle.field,
-          ),
-          textDirection: TextDirection.ltr,
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout();
-        final wide = (painter.width + 2 * _slot + 8).clamp(
-          PillFieldStyle.nameWidth,
-          PillFieldStyle.fieldWidth,
+        final wide = pillFieldWidth(
+          context,
+          controller.text.isEmpty ? hint : controller.text,
+          style,
         );
-        painter.dispose();
         return AnimatedContainer(
           duration: Motion.medium,
           curve: Curves.easeOutCubic,
@@ -201,6 +192,76 @@ class PillField extends StatelessWidget {
         );
       },
       child: body,
+    );
+  }
+}
+
+double pillFieldWidth(BuildContext context, String text, TextStyle? style) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text.toUpperCase(),
+      style: style ?? PillFieldStyle.field,
+    ),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return (width + 2 * PillField._slot + 8).clamp(
+    PillFieldStyle.nameWidth,
+    PillFieldStyle.fieldWidth,
+  );
+}
+
+class GrowingField extends StatelessWidget {
+  const GrowingField({
+    required this.progress,
+    required this.from,
+    required this.to,
+    required this.labelScale,
+    required this.label,
+    required this.field,
+    super.key,
+  });
+
+  final double progress;
+  final Size from;
+  final Size to;
+  final double labelScale;
+  final Widget label;
+  final Widget field;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = progress;
+    if (t >= 1) return field;
+    final size = Size.lerp(from, to, t)!;
+    return SizedBox(
+      width: to.width > from.width ? to.width : from.width,
+      height: to.height > from.height ? to.height : from.height,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Opacity(
+            opacity: t,
+            child: SizedBox.fromSize(
+              size: size,
+              child: const PillSurface(child: SizedBox.expand()),
+            ),
+          ),
+          IgnorePointer(
+            child: Transform.scale(
+              scale: 1 + (labelScale - 1) * t,
+              child: OverflowBox(
+                maxWidth: double.infinity,
+                maxHeight: double.infinity,
+                child: label,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

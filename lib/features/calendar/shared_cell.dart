@@ -433,20 +433,26 @@ class _RisingEdge extends CustomClipper<Rect> {
 }
 
 class FaceStack extends StatelessWidget {
-  const FaceStack({required this.people, required this.size, super.key});
+  const FaceStack({
+    required this.people,
+    required this.size,
+    this.max = 3,
+    this.step,
+    super.key,
+  });
 
   final List<FriendInfo> people;
   final double size;
-
-  static const _max = 3;
+  final int max;
+  final double? step;
 
   @override
   Widget build(BuildContext context) {
-    final crowded = people.length > _max;
-    final shown = people.take(crowded ? _max - 1 : _max).toList();
+    final crowded = people.length > max;
+    final shown = people.take(crowded ? max - 1 : max).toList();
     final count = shown.length + (crowded ? 1 : 0);
     if (count == 0) return const SizedBox.shrink();
-    final step = size * 0.6;
+    final step = this.step ?? size * 0.6;
     return SizedBox(
       width: size + step * (count - 1),
       height: size,
