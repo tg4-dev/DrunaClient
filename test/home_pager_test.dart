@@ -9,7 +9,8 @@ import 'package:druna_app/features/calendar/calendar_event.dart';
 import 'package:druna_app/features/calendar/calendar_screen.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friends_page.dart';
-import 'package:druna_app/features/settings/settings_page.dart';
+import 'package:druna_app/features/profile/profile_page.dart';
+import 'package:druna_app/features/settings/settings_sheet.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
 import 'package:druna_app/features/calendar/day_detail.dart';
@@ -62,7 +63,7 @@ void main() {
 
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
     expect(find.text(hint), findsOneWidget);
-    expect(tester.getRect(alinaFinder()).left, lessThan(200));
+    expect(tester.getRect(alinaFinder()).left, lessThan(400));
   });
 
   testWidgets('left to right: my calendar, then the friends page', (
@@ -86,22 +87,41 @@ void main() {
 
     await swipe(tester, -300);
     await swipe(tester, -300);
-    expect(tester.getRect(alinaFinder()).left, lessThan(200));
+    expect(tester.getRect(alinaFinder()).left, lessThan(400));
   });
 
-  testWidgets('right to left from home, and the gear, open settings', (
+  testWidgets('right to left from home, and the gear, open the profile', (
     tester,
   ) async {
     await pumpPager(tester);
 
     await swipe(tester, -300);
-    expect(onScreen(tester, find.byType(SettingsPage)), isTrue);
+    expect(onScreen(tester, find.byType(ProfilePage)), isTrue);
 
     await swipe(tester, 300);
     await swipe(tester, 300);
     await tester.tap(find.byKey(const ValueKey('settings-button')));
     await tester.pumpAndSettle();
-    expect(onScreen(tester, find.byType(SettingsPage)), isTrue);
+    expect(onScreen(tester, find.byType(ProfilePage)), isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('profile-back')));
+    await tester.pumpAndSettle();
+    expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
+  });
+
+  testWidgets('the profile gear raises the settings sheet', (tester) async {
+    await pumpPager(tester);
+    await swipe(tester, -300);
+
+    await tester.tap(find.byKey(const ValueKey('profile-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsSheet), findsOneWidget);
+    expect(find.text('Выйти'), findsOneWidget);
+    expect(find.text('Для разработчика'), findsOneWidget);
+
+    await tester.tapAt(const Offset(200, 60));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsSheet), findsNothing);
   });
 
   testWidgets('the friends button opens the friends page', (tester) async {
@@ -129,7 +149,7 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Показать занятость друзей'));
     await tester.pumpAndSettle();
-    expect(tester.getRect(alinaFinder()).left, lessThan(200));
+    expect(tester.getRect(alinaFinder()).left, lessThan(400));
   });
 
   testWidgets('taps work while the mode is still settling', (tester) async {
@@ -179,7 +199,7 @@ void main() {
     await second.up();
     await tester.pumpAndSettle();
 
-    expect(tester.getRect(alinaFinder()).left, lessThan(200));
+    expect(tester.getRect(alinaFinder()).left, lessThan(400));
     expect(onScreen(tester, find.byType(CalendarScreen)), isTrue);
   });
 
@@ -188,6 +208,8 @@ void main() {
   ) async {
     final settings = await pumpPager(tester);
     await tester.tap(find.byKey(const ValueKey('settings-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit')));
     await tester.pumpAndSettle();
 
     final before = settings.ownColorSlot;
@@ -199,7 +221,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('profile-cancel')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('profile-save')), findsNothing);
+    expect(settings.ownColorSlot, before);
 
+    await tester.tap(find.byKey(const ValueKey('profile-edit')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('color-6')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-save')));

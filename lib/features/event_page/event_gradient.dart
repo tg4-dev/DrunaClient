@@ -122,6 +122,20 @@ class _EventGradientState extends State<EventGradient>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _syncTicker();
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    final program = EventGradient._program;
+    if (EventGradient.enabled && program != null) {
+      _shader ??= program.fragmentShader();
+    }
+    _syncTicker();
+  }
+
+  void _syncTicker() {
     if (_still) {
       _ticker.stop();
     } else if (!_ticker.isActive) {

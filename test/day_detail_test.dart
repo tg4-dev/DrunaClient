@@ -173,7 +173,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       for (var i = 0; i < 3; i++) {
-        await tester.tap(find.byType(RingedAvatar).at(i));
+        final avatar = find.byType(RingedAvatar).at(i);
+        await tester.ensureVisible(avatar);
+        await tester.pumpAndSettle();
+        await tester.tap(avatar);
         await tester.pumpAndSettle();
       }
       final day = busy ? await busiestDayThisWeek(tester) : DateTime.now();

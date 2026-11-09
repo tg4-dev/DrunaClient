@@ -12,6 +12,7 @@ import 'package:druna_app/features/calendar_sync/calendar_sync.dart';
 import 'package:druna_app/features/calendar_sync/calendar_sync_sheet.dart';
 import 'package:druna_app/features/event_page/event_page.dart';
 import 'package:druna_app/features/event_page/event_subject.dart';
+import 'package:druna_app/features/groups/group.dart';
 import 'package:druna_app/features/friends/friend_bar.dart';
 import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/features/friends/friends_store.dart';
@@ -40,7 +41,10 @@ class CalendarFriends {
     this.onOpenInvite,
     this.openInvite,
     this.onSendInvite,
+    this.groups,
   });
+
+  final ValueListenable<List<Group>>? groups;
 
   final FriendsStore store;
   final FriendSelection selection;
@@ -583,8 +587,12 @@ class _CalendarScreenState extends State<CalendarScreen>
                   ),
                 ),
                 child: ListenableBuilder(
-                  listenable: friends.store,
+                  listenable: Listenable.merge([
+                    friends.store,
+                    ?friends.groups,
+                  ]),
                   builder: (context, _) => FriendBar(
+                    groups: friends.groups?.value ?? const [],
                     friends: friends.store.friends,
                     selection: friends.selection,
                     mode: widget.mode,

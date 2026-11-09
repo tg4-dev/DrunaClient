@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 abstract final class PageStyle {
   static const gutter = 20.0;
+  static const actionsGap = 24.0;
 
   static const title = TextStyle(
     fontFamily: 'Onest',

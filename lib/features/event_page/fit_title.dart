@@ -40,6 +40,7 @@ TitleFit fitTitle(
   TextStyle style,
   double maxWidth, {
   TextScaler textScaler = TextScaler.noScaling,
+  int maxLines = titleMaxLines,
 }) {
   final base = style.fontSize!;
   double width(String line, double size, double spacing) =>
@@ -105,11 +106,7 @@ TitleFit fitTitle(
   final words = trimmed.split(RegExp(r'\s+'));
   final widths = {for (final word in words) word: width(word, base, 0)};
   final space = width('Ж Ж', base, 0) - 2 * width('Ж', base, 0);
-  for (
-    var count = 2;
-    count <= titleMaxLines && count <= words.length;
-    count++
-  ) {
+  for (var count = 2; count <= maxLines && count <= words.length; count++) {
     final lines = _balanced(words, count, widths, space);
     final widest = lines.reduce(
       (a, b) => width(a, base, 0) >= width(b, base, 0) ? a : b,
@@ -214,8 +211,11 @@ class FitTitle extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.placeholder = 'НАЗВАНИЕ',
+    this.maxLines = titleMaxLines,
     super.key,
   });
+
+  final int maxLines;
 
   final String text;
   final TextStyle style;
@@ -237,13 +237,14 @@ class _FitTitleState extends State<FitTitle> {
   Object? _fitFor;
 
   TitleFit _fitted(String text, double width, TextScaler scaler) {
-    final key = (text, widget.style, width, scaler);
+    final key = (text, widget.style, width, scaler, widget.maxLines);
     if (_fit == null || _fitFor != key) {
       _fit = fitTitle(
         text.toUpperCase(),
         widget.style,
         width,
         textScaler: scaler,
+        maxLines: widget.maxLines,
       );
       _fitFor = key;
     }
@@ -320,7 +321,9 @@ class _FitTitleState extends State<FitTitle> {
               if (caret && !caretFirst && last) caretSpan(),
             ],
           ),
-          maxLines: fit.overflows ? null : 1,
+          maxLines: fit.overflows
+              ? (widget.maxLines < titleMaxLines ? widget.maxLines : null)
+              : 1,
           softWrap: fit.overflows,
           textAlign: TextAlign.center,
           textScaler: scaler,

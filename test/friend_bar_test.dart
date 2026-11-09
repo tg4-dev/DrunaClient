@@ -165,6 +165,9 @@ void main() {
     selection.toggle(1);
     mode.value = 0;
     await tester.pumpAndSettle();
-    expect(arrow, findsNothing);
+    final opacity = tester.widget<Opacity>(
+      find.ancestor(of: arrow, matching: find.byType(Opacity)).first,
+    );
+    expect(opacity.opacity, 0);
   });
 }

@@ -9,7 +9,8 @@ import 'package:druna_app/core/api/api_client.dart';
 import 'package:druna_app/core/config/app_config.dart';
 import 'package:druna_app/core/storage/token_store.dart';
 import 'package:druna_app/features/event_page/event_page.dart';
-import 'package:druna_app/features/settings/settings_page.dart';
+import 'package:druna_app/features/profile/event_chip.dart';
+import 'package:druna_app/features/profile/profile_page.dart';
 import 'package:druna_app/repositories/druna_repository.dart';
 import 'package:druna_app/features/calendar/shared_cell.dart';
 import 'package:druna_app/shared/ui/person_avatar.dart';
@@ -75,6 +76,9 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
   }
+
+  Finder inProfile(Key key) =>
+      find.descendant(of: find.byType(ProfilePage), matching: find.byKey(key));
 
   Future<void> openProfile(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('settings-button')));
@@ -178,13 +182,18 @@ void main() {
     await pumpPager(tester);
     await openProfile(tester);
 
-    expect(find.byType(SettingsPage), findsOneWidget);
-    expect(find.text('Ждут ответа · 1'), findsOneWidget);
-    final dinner = find.byKey(const ValueKey('invite-row-demo-invite-dinner'));
+    expect(find.byType(ProfilePage), findsOneWidget);
+    expect(inProfile(const ValueKey('profile-label-0')), findsOneWidget);
     expect(
-      find.descendant(of: dinner, matching: find.text('Ответить')),
-      findsOneWidget,
+      tester.widget<Text>(inProfile(const ValueKey('profile-label-0'))).data,
+      'Ждёт ответа',
     );
+    expect(
+      tester.widget<Text>(inProfile(const ValueKey('profile-label-1'))).data,
+      'Предстоящие',
+    );
+    final dinner = inProfile(const ValueKey('profile-chip-demo-invite-dinner'));
+    expect(tester.widget<EventChip>(dinner).pending, isTrue);
 
     await tester.tap(dinner);
     await tester.pumpAndSettle();
@@ -219,14 +228,62 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(EventPage), findsNothing);
     expect(
-      find.descendant(of: dinner, matching: find.text('Иду')),
-      findsOneWidget,
+      tester.widget<Text>(inProfile(const ValueKey('profile-label-0'))).data,
+      'Предстоящие',
+    );
+    expect(tester.widget<EventChip>(dinner).pending, isFalse);
+  });
+
+  testWidgets('the archive slides in with past events and slides back', (
+    tester,
+  ) async {
+    await pumpPager(tester);
+    await openProfile(tester);
+
+    final link = inProfile(const ValueKey('profile-archive'));
+    await tester.ensureVisible(link);
+    await tester.pumpAndSettle();
+
+    await tester.tap(link);
+    await tester.pumpAndSettle();
+    final picnic = inProfile(const ValueKey('archive-chip-demo-invite-picnic'));
+    expect(picnic, findsOneWidget);
+    expect(tester.widget<EventChip>(picnic).dimmed, isTrue);
+    final nick = find.descendant(
+      of: find.byType(ProfilePage),
+      matching: find.text('@gleb'),
+    );
+    expect(tester.getRect(nick).bottom, lessThan(44.0 + 44.0));
+    expect(
+      tester
+          .getRect(
+            find.descendant(
+              of: find.byType(ProfilePage),
+              matching: find.byKey(const ValueKey('profile-edit')),
+            ),
+          )
+          .bottom,
+      lessThan(44.0 + 44.0),
+    );
+    expect(tester.getRect(picnic).left, lessThan(100));
+
+    await tester.tap(inProfile(const ValueKey('archive-back')));
+    await tester.pumpAndSettle();
+    expect(picnic, findsNothing);
+    expect(
+      tester.getRect(inProfile(const ValueKey('profile-archive'))).left,
+      lessThan(400),
     );
   });
 
   testWidgets('the profile header renames the user', (tester) async {
     final session = await pumpPager(tester);
     await openProfile(tester);
+    expect(find.text('ГЛЕБ'), findsOneWidget);
+    expect(find.text('@gleb'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-save')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('profile-edit')));
+    await tester.pumpAndSettle();
     final field = find.byKey(const ValueKey('profile-name-field'));
     EditableText editable() => tester.widget<EditableText>(
       find.descendant(of: field, matching: find.byType(EditableText)),
@@ -236,8 +293,6 @@ void main() {
         .toPlainText();
     expect(editable().controller.text, 'Глеб');
     expect(shown(), 'ГЛЕБ');
-    expect(find.text('@gleb'), findsOneWidget);
-    expect(find.byKey(const ValueKey('profile-save')), findsNothing);
 
     await tester.tap(field);
     await tester.pump();
@@ -251,21 +306,86 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('profile-cancel')));
     await tester.tap(find.byKey(const ValueKey('profile-cancel')));
     await tester.pumpAndSettle();
-    expect(editable().controller.text, 'Глеб');
+    expect(find.byKey(const ValueKey('profile-name-field')), findsNothing);
+    expect(find.text('ГЛЕБ'), findsOneWidget);
     expect(server.name, 'Глеб');
 
+    await tester.tap(find.byKey(const ValueKey('profile-edit')));
+    await tester.pumpAndSettle();
+    expect(editable().controller.text, 'Глеб');
     await tester.enterText(field, 'Глеб Я.');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-save')));
     await tester.tap(find.byKey(const ValueKey('profile-save')));
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(inProfile(const ValueKey('profile-label-0')), findsNothing);
+    }
     await tester.pumpAndSettle();
 
     expect(server.name, 'Глеб Я.');
     expect(session.profile?.name, 'Глеб Я.');
-    expect(shown(), 'ГЛЕБ Я.');
+    expect(find.text('ГЛЕБ Я.'), findsOneWidget);
     expect(find.text('Профиль сохранён'), findsOneWidget);
     expect(find.byKey(const ValueKey('profile-save')), findsNothing);
+    final label = inProfile(const ValueKey('profile-label-0'));
+    expect(tester.widget<Text>(label).data, 'Ждёт ответа');
+    final both = find.descendant(
+      of: find.byType(ProfilePage),
+      matching: find.text('Ждёт ответа'),
+    );
+    expect(both, findsNWidgets(2));
+    expect(
+      tester.getRect(both.first).top,
+      closeTo(tester.getRect(both.last).top, 0.5),
+    );
+    expect(
+      tester.getRect(label).top,
+      lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio),
+    );
+  });
+
+  testWidgets('leaving the profile scrolls it back to the top', (tester) async {
+    await pumpPager(tester);
+    await openProfile(tester);
+    final scrollable = find
+        .descendant(
+          of: find.byType(ProfilePage),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    double offset() =>
+        tester.state<ScrollableState>(scrollable).position.pixels;
+    await tester.drag(scrollable, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    expect(offset(), greaterThan(0));
+    await tester.flingFrom(const Offset(350, 600), const Offset(-300, 0), 1500);
+    await tester.pumpAndSettle();
+    await tester.flingFrom(const Offset(50, 600), const Offset(300, 0), 1500);
+    await tester.pumpAndSettle();
+    expect(offset(), 0);
+  });
+
+  testWidgets('section labels sit on their headings after editing', (
+    tester,
+  ) async {
+    await pumpPager(tester);
+    await openProfile(tester);
+    final both = find.descendant(
+      of: find.byType(ProfilePage),
+      matching: find.text('Ждёт ответа'),
+    );
+    double gap() =>
+        tester.getRect(both.first).top - tester.getRect(both.last).top;
+    expect(gap(), closeTo(0, 0.5));
+    await tester.tap(find.byKey(const ValueKey('profile-edit')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('profile-cancel')));
+    await tester.tap(find.byKey(const ValueKey('profile-cancel')));
+    await tester.pumpAndSettle();
+    expect(both, findsNWidgets(2));
+    expect(gap(), closeTo(0, 0.5));
   });
 
   testWidgets('the user\'s face on shared cells is theirs, also when the '

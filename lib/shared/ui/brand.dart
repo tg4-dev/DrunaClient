@@ -1,3 +1,5 @@
+import 'package:druna_app/shared/ui/pill_button.dart';
+import 'package:druna_app/shared/ui/pill_field.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -70,5 +72,38 @@ class ChevronIcon extends StatelessWidget {
   Widget build(BuildContext context) => RotatedBox(
     quarterTurns: quarterTurns,
     child: Icon(CupertinoIcons.chevron_left, color: color, size: size),
+  );
+}
+
+abstract final class ArrowPillStyle {
+  static const width = 72.0;
+  static const height = PillFieldStyle.height;
+  static const ink = Color(0xFF262626);
+}
+
+class BackArrowPill extends StatelessWidget {
+  const BackArrowPill({
+    required this.onPressed,
+    this.label = 'Назад',
+    this.width = ArrowPillStyle.width,
+    this.height = ArrowPillStyle.height,
+    this.iconSize = 30,
+    super.key,
+  });
+
+  final VoidCallback? onPressed;
+  final String label;
+  final double width;
+  final double height;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) => PillButton(
+    label: label,
+    width: width,
+    height: height,
+    fill: const Color(0xFFFFFFFF),
+    onPressed: onPressed,
+    child: ArrowIcon(color: ArrowPillStyle.ink, back: true, size: iconSize),
   );
 }

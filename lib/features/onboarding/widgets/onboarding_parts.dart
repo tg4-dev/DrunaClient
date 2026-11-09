@@ -64,14 +64,9 @@ class StepArrows extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        PillButton(
+        BackArrowPill(
           key: const ValueKey('onboarding-back'),
-          label: 'Назад',
-          width: OnboardingStyle.arrowWidth,
-          height: OnboardingStyle.height,
-          fill: Colors.white,
           onPressed: onBack,
-          child: const ArrowIcon(color: OnboardingStyle.ink, back: true),
         ),
         const SizedBox(width: OnboardingStyle.arrowGap),
         PillButton(

@@ -13,12 +13,21 @@ import 'package:druna_app/features/friends/friend_selection.dart';
 import 'package:druna_app/features/friends/friends_page.dart';
 import 'package:druna_app/features/friends/friends_source.dart';
 import 'package:druna_app/features/friends/friends_store.dart';
+import 'package:druna_app/features/groups/create_group_page.dart';
+import 'package:druna_app/features/groups/group.dart';
+import 'package:druna_app/features/groups/group_page.dart';
+import 'package:druna_app/features/groups/groups_source.dart';
+import 'package:druna_app/features/groups/groups_store.dart';
 import 'package:druna_app/features/invites/invite.dart';
 import 'package:druna_app/features/invites/invite_events.dart';
 import 'package:druna_app/features/invites/invites_source.dart';
 import 'package:druna_app/features/invites/invites_store.dart';
-import 'package:druna_app/features/settings/settings_page.dart';
+import 'package:druna_app/features/profile/profile_page.dart';
+import 'package:druna_app/features/settings/settings_sheet.dart';
 import 'package:druna_app/models/models.dart';
+import 'package:druna_app/shared/ui/page_indicator.dart';
+import 'package:druna_app/shared/ui/people_backdrop.dart';
+import 'package:druna_app/shared/ui/pill_button.dart';
 import 'package:flutter/material.dart';
 
 class HomePager extends StatefulWidget {
@@ -42,7 +51,9 @@ class HomePager extends StatefulWidget {
   static const friendsStop = 0;
   static const myCalendarStop = 1;
   static const friendsCalendarStop = 2;
-  static const settingsStop = 3;
+  static const profileStop = 3;
+
+  static const fixedPages = 4;
 
   static const homeStop = friendsCalendarStop;
 
@@ -57,6 +68,58 @@ class _HomePagerState extends State<HomePager> {
   double _width = 0;
   var _stop = HomePager.homeStop;
   var _calendarBusy = false;
+  var _pageBusy = false;
+  var _settingsShown = false;
+
+  final _profilePosition = ValueNotifier<double>(0);
+  late final _scene = BackdropScene(_profilePosition);
+
+  late final _groupFonts = GroupFonts(widget.settings.storage);
+  late final GroupsStore _groups = GroupsStore(_newGroupsSource())
+    ..addListener(_onGroups)
+    ..load();
+  DemoGroupsSource? _demoGroups;
+
+  List<Group> get _groupList => _groups.shown;
+
+  int get _pageCount => HomePager.fixedPages + _groupList.length + 1;
+
+  List<PageMark> get _marks => [
+    PageMark.dot,
+    for (final _ in _groupList) PageMark.dash,
+    PageMark.plus,
+  ];
+
+  GroupsSource _newGroupsSource() {
+    if (!widget.settings.demo) {
+      _demoGroups = null;
+      return ServerGroupsSource(
+        widget.session.repository,
+        _groupFonts,
+        meId: () => _me.id,
+      );
+    }
+    return _demoGroups = DemoGroupsSource(delay: widget.demoDelay)
+      ..offline = widget.settings.demoOffline;
+  }
+
+  final _groupsShown = ValueNotifier<List<Group>>(const []);
+
+  void _onGroups() {
+    if (!mounted) return;
+    _groupsShown.value = _groupList;
+    if (_groups.groups != null && _groups.error == null) {
+      _selection.keepOnlyGroups(_groupList.map((group) => group.id));
+    }
+    setState(() {});
+  }
+
+  void _openGroup(Group group) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final index = _groupList.indexWhere((item) => item.id == group.id);
+      if (index >= 0) _goTo(HomePager.profileStop + 1 + index);
+    });
+  }
 
   final _mode = ValueNotifier<double>(1);
 
@@ -133,6 +196,7 @@ class _HomePagerState extends State<HomePager> {
     widget.settings.addListener(_onSettings);
     widget.session.addListener(_onSession);
     _store.addListener(_dropMissingFriends);
+    _store.addListener(_onGroups);
     widget.sync?.drunaColor = _ownColor;
   }
 
@@ -143,6 +207,7 @@ class _HomePagerState extends State<HomePager> {
     if (meId != null && meId != _invitesMeId) {
       _invitesMeId = meId;
       _invites.load();
+      _groups.load();
     }
     _syncInvites();
     setState(() {});
@@ -155,8 +220,14 @@ class _HomePagerState extends State<HomePager> {
     widget.settings.removeListener(_onSettings);
     widget.session.removeListener(_onSession);
     _store.removeListener(_dropMissingFriends);
+    _store.removeListener(_onGroups);
     _plane?.dispose();
     _mode.dispose();
+    _groups.removeListener(_onGroups);
+    _groups.dispose();
+    _groupsShown.dispose();
+    _scene.dispose();
+    _profilePosition.dispose();
     _invites.dispose();
     _inviteEvents.dispose();
     _openInviteNow.dispose();
@@ -176,6 +247,12 @@ class _HomePagerState extends State<HomePager> {
     } else {
       demoInvites?.offline = widget.settings.demoOffline;
     }
+    final demoGroups = _demoGroups;
+    if ((demoGroups != null) != widget.settings.demo) {
+      _groups.source = _newGroupsSource();
+    } else {
+      demoGroups?.offline = widget.settings.demoOffline;
+    }
     _syncInvites();
     setState(() {});
   }
@@ -184,6 +261,28 @@ class _HomePagerState extends State<HomePager> {
     final friends = _store.friends;
     if (friends == null || _store.error != null) return;
     _selection.keepOnly(friends.map((friend) => friend.id));
+  }
+
+  var _folded = false;
+
+  late int _awakeFirst = _stop;
+  late int _awakeLast = _stop;
+
+  Widget _page(int first, int last, Widget child) => RepaintBoundary(
+    child: TickerMode(
+      enabled: last >= _awakeFirst && first <= _awakeLast,
+      child: child,
+    ),
+  );
+
+  void _setFolded(bool folded) {
+    if (folded == _folded) return;
+    setState(() => _folded = folded);
+  }
+
+  void _setPageBusy(bool busy) {
+    if (busy == _pageBusy) return;
+    setState(() => _pageBusy = busy);
   }
 
   void _resetDemo() {
@@ -212,7 +311,19 @@ class _HomePagerState extends State<HomePager> {
     if (plane == null || !plane.hasClients || _width == 0) return;
     final offset = plane.offset;
     _mode.value = ((offset - _width) / _width).clamp(0.0, 1.0);
-    final stop = (offset / _width).round().clamp(0, 3);
+    _profilePosition.value = (offset / _width - HomePager.profileStop).clamp(
+      0.0,
+      _marks.length - 1.0,
+    );
+    final first = (offset / _width).floor();
+    final last = ((offset + _width - 1) / _width).floor();
+    if (first != _awakeFirst || last != _awakeLast) {
+      setState(() {
+        _awakeFirst = first;
+        _awakeLast = last;
+      });
+    }
+    final stop = (offset / _width).round().clamp(0, _pageCount - 1);
     if (stop != _stop && (offset - stop * _width).abs() < 1) {
       FocusManager.instance.primaryFocus?.unfocus();
       setState(() => _stop = stop);
@@ -294,7 +405,7 @@ class _HomePagerState extends State<HomePager> {
                 mode: _mode,
                 sync: widget.sync,
                 onBusyChanged: (busy) => setState(() => _calendarBusy = busy),
-                onOpenSettings: () => _goTo(HomePager.settingsStop),
+                onOpenSettings: () => _goTo(HomePager.profileStop),
                 onOpenFriends: () => _goTo(HomePager.friendsStop),
                 friends: CalendarFriends(
                   store: _store,
@@ -311,50 +422,114 @@ class _HomePagerState extends State<HomePager> {
                   onOpenInvite: _showInvite,
                   openInvite: _openInviteNow,
                   onSendInvite: _sendInvite,
+                  groups: _groupsShown,
                 ),
               );
               final pages = SingleChildScrollView(
                 controller: plane,
                 scrollDirection: Axis.horizontal,
-                physics: _calendarBusy || _openInvite != null
+                physics:
+                    _calendarBusy ||
+                        _openInvite != null ||
+                        _pageBusy ||
+                        _settingsShown
                     ? const NeverScrollableScrollPhysics()
                     : const _SnappyPagePhysics(),
                 child: SizedBox(
-                  width: width * 4,
+                  width: width * _pageCount,
                   height: height,
                   child: Row(
                     children: [
                       SizedBox(
                         width: width,
-                        child: FriendsPage(
-                          key: ObjectKey(_friendsSource),
-                          source: _friendsSource,
-                          onChanged: _store.load,
+                        child: _page(
+                          HomePager.friendsStop,
+                          HomePager.friendsStop,
+                          FriendsPage(
+                            key: ObjectKey(_friendsSource),
+                            source: _friendsSource,
+                            onChanged: _store.load,
+                          ),
                         ),
                       ),
                       SizedBox(
                         width: width * 2,
-                        child: _StillCalendar(
-                          plane: plane,
-                          width: width,
-                          child: OwnEventColor(
-                            color: _ownColor,
-                            child: calendar,
+                        child: _page(
+                          HomePager.myCalendarStop,
+                          HomePager.friendsCalendarStop,
+                          _StillCalendar(
+                            plane: plane,
+                            width: width,
+                            child: OwnEventColor(
+                              color: _ownColor,
+                              child: calendar,
+                            ),
                           ),
                         ),
                       ),
                       SizedBox(
                         width: width,
-                        child: SettingsPage(
-                          session: widget.session,
-                          settings: widget.settings,
-                          config: widget.config,
-                          onResetDemo: _resetDemo,
-                          onResetFriends: _selection.clear,
-                          calendarSync: widget.sync,
-                          invites: _invites,
-                          onOpenInvite: _showInvite,
-                          onResetInvites: _resetInvites,
+                        child: _page(
+                          HomePager.profileStop,
+                          HomePager.profileStop,
+                          ProfilePage(
+                            session: widget.session,
+                            settings: widget.settings,
+                            onBack: () => _goTo(HomePager.homeStop),
+                            onOpenSettings: () =>
+                                setState(() => _settingsShown = true),
+                            invites: _invites,
+                            onOpenInvite: _showInvite,
+                            onBusyChanged: _setPageBusy,
+                            onFoldChanged: _setFolded,
+                            scene: _scene,
+                            active: _stop == HomePager.profileStop,
+                          ),
+                        ),
+                      ),
+                      for (final (index, group) in _groupList.indexed)
+                        SizedBox(
+                          key: ValueKey('group-page-${group.id}'),
+                          width: width,
+                          child: _page(
+                            HomePager.profileStop + 1 + index,
+                            HomePager.profileStop + 1 + index,
+                            GroupPage(
+                              group: group,
+                              store: _groups,
+                              friends: _store.friends,
+                              me: _me,
+                              own: _ownColor,
+                              invites: _invites,
+                              onOpenInvite: _showInvite,
+                              onBusyChanged: _setPageBusy,
+                              onFoldChanged: _setFolded,
+                              scene: _scene,
+                              sceneIndex: 1 + index,
+                              active:
+                                  _stop == HomePager.profileStop + 1 + index,
+                              onRemoved: () {
+                                _setPageBusy(false);
+                                _goTo(HomePager.profileStop);
+                              },
+                            ),
+                          ),
+                        ),
+                      SizedBox(
+                        width: width,
+                        child: _page(
+                          _pageCount - 1,
+                          _pageCount - 1,
+                          CreateGroupPage(
+                            store: _groups,
+                            friends: _store.friends,
+                            me: _me,
+                            own: _ownColor,
+                            onCreated: _openGroup,
+                            scene: _scene,
+                            sceneIndex: _pageCount - 1 - HomePager.profileStop,
+                            full: _groupList.length >= maxGroups,
+                          ),
                         ),
                       ),
                     ],
@@ -363,7 +538,82 @@ class _HomePagerState extends State<HomePager> {
               );
               return Stack(
                 children: [
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: plane,
+                      child: RepaintBoundary(
+                        child: ListenableBuilder(
+                          listenable: _scene,
+                          builder: (context, _) => PeopleBackdrop(
+                            colors: _scene.colors,
+                            anchor: _scene.anchor,
+                          ),
+                        ),
+                      ),
+                      builder: (context, child) {
+                        final offset = plane.hasClients
+                            ? plane.offset
+                            : _stop * width;
+                        final shift = HomePager.profileStop * width - offset;
+                        return TickerMode(
+                          enabled: shift < width,
+                          child: Offstage(
+                            offstage: shift >= width,
+                            child: Transform.translate(
+                              offset: Offset(shift > 0 ? shift : 0, 0),
+                              child: child,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                   pages,
+                  Positioned(
+                    top: MediaQuery.paddingOf(context).top,
+                    left: 0,
+                    right: 0,
+                    height: PillStyle.size,
+                    child: AnimatedBuilder(
+                      animation: plane,
+                      child: Center(
+                        child: PageIndicator(
+                          key: const ValueKey('page-indicator'),
+                          marks: _marks,
+                          position: _profilePosition,
+                          collapsed: _folded,
+                          onTap: _folded
+                              ? null
+                              : (index) => _goTo(HomePager.profileStop + index),
+                        ),
+                      ),
+                      builder: (context, child) {
+                        final offset = plane.hasClients
+                            ? plane.offset
+                            : _stop * width;
+                        final shift = HomePager.profileStop * width - offset;
+                        if (shift >= width) return const SizedBox.shrink();
+                        return Transform.translate(
+                          offset: Offset(shift > 0 ? shift : 0, 0),
+                          child: child,
+                        );
+                      },
+                    ),
+                  ),
+                  if (_settingsShown)
+                    Positioned.fill(
+                      child: SettingsSheet(
+                        session: widget.session,
+                        settings: widget.settings,
+                        config: widget.config,
+                        onResetDemo: _resetDemo,
+                        onResetFriends: _selection.clear,
+                        calendarSync: widget.sync,
+                        onResetInvites: _resetInvites,
+                        onClosing: () {},
+                        onGone: () => setState(() => _settingsShown = false),
+                      ),
+                    ),
                   if (_openInvite case final id?)
                     Positioned.fill(
                       child: OwnEventColor(
